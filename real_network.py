@@ -33,7 +33,7 @@ class RealNetwork(nn.Module):
         y = h.view(-1, x.size(2), x.size(1)).permute(0, 2, 1)
         return y
 
-def make_dataset(device):
+def make_dataset():
     np.random.seed(0)
     speaker_path = '/media/data/timit-wav/train'
     targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
@@ -42,7 +42,7 @@ def make_dataset(device):
                     'mwad0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers)
     train_inters, val_inters = get_speech_files(speaker_path, inter_speakers)
-    make_spectrogram = MakeSpectrogram(fft_size=1024, hop=256).to(device)
+    make_spectrogram = MakeSpectrogram(fft_size=1024, hop=256)
     trainset = TwoSourceMixtureDataset(train_speeches, train_inters,
         transform=make_spectrogram)
     valset = TwoSourceMixtureDataset(val_speeches, val_inters,
@@ -72,7 +72,7 @@ def main():
         device = torch.device('cpu')
         dtype = torch.FloatTensor
 
-    train_dl, val_dl = make_dataset(device)
+    train_dl, val_dl = make_dataset()
     real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
     print(real_net)
     loss = torch.nn.BCEWithLogitsLoss()
