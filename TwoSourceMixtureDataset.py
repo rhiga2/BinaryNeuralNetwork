@@ -57,14 +57,14 @@ class TwoSourceMixtureDataset(Dataset):
         sigf, interf = self.mixes[i] # get sig and interference file
         return self._getmix(sigf, interf)
 
-def collate_and_trim(batch, hop=256):
+def collate_and_trim(batch, hop=256, dim=0):
     outbatch = {'mixture': [], 'target': [], 'interference': []}
-    min_length = min([sample['mixture'].shape[0] for sample in batch])
+    min_length = min([sample['mixture'].size(dim) for sample in batch])
     min_length = (min_length // hop) * hop
     for sample in batch:
-        outbatch['mixture'].append(sample['mixture'][:min_length])
-        outbatch['target'].append(sample['target'][:min_length])
-        outbatch['interference'].append(sample['interference'][:min_length])
+        outbatch['mixture'].append(sample['mixture'].narrow(dim, 0, min_length))
+        outbatch['target'].append(sample['target'].narrow(dim, 0, min_length))
+        outbatch['interference'].append(sample['interference'].narrow(dim, 0, min_length))
 
     outbatch = {key: torch.stack(values) for key, values in outbatch.items()}
     return outbatch

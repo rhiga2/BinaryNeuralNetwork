@@ -33,6 +33,26 @@ class RealNetwork(nn.Module):
         y = h.view(-1, x.size(2), x.size(1)).permute(0, 2, 1)
         return y
 
+def make_dataset(device):
+    np.random.seed(0)
+    speaker_path = '/media/data/timit-wav/train'
+    targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
+                    'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0']
+    inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
+                    'mwad0']
+    train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers)
+    train_inters, val_inters = get_speech_files(speaker_path, inter_speakers)
+    make_spectrogram = MakeSpectrogram(fft_size=1024, hop=256).to(device)
+    trainset = TwoSourceMixtureDataset(train_speeches, train_inters,
+        transform=make_spectrogram)
+    valset = TwoSourceMixtureDataset(val_speeches, val_inters,
+        transform=make_spectrogram)
+    collate_fn = lambda x: collate_and_trim(x, 256, dim=1)
+    train_dl = DataLoader(trainset, batch_size=args.batchsize,
+        shuffle=True, collate_fn=collate_fn)
+    val_dl = DataLoader(valset, batch_size=len(valset), collate_fn=collate_fn)
+    return train_dl, val_dl
+
 def main():
     parser = argparse.ArgumentParser(description='real network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
@@ -52,25 +72,7 @@ def main():
         device = torch.device('cpu')
         dtype = torch.FloatTensor
 
-    np.random.seed(0)
-    targ_path = '/media/data/timit-wav/train'
-    inter_path = targ_path
-    targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
-                    'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0']
-    inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
-                    'mwad0']
-    train_speeches, val_speeches = get_speech_files(targ_path, targ_speakers)
-    train_inters, val_inters = get_speech_files(inter_path, inter_speakers)
-    trainset = TwoSourceMixtureDataset(train_speeches, train_inters)
-    valset = TwoSourceMixtureDataset(val_speeches, val_inters)
-    print('Train Length: ', len(trainset))
-    print('Validation Length: ', len(valset))
-    collate_fn = lambda x: collate_and_trim(x, 256)
-    train_dl = DataLoader(trainset, batch_size=args.batchsize,
-        shuffle=True, collate_fn=collate_fn)
-    val_dl = DataLoader(valset, batch_size=len(valset), collate_fn=collate_fn)
-
-    make_spectrogram = MakeSpectrogram(fft_size=1024, hop=256).to(device)
+    train_dl, val_dl = make_dataset(device)
     real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
     print(real_net)
     loss = torch.nn.BCEWithLogitsLoss()
@@ -86,7 +88,7 @@ def main():
                 target_spectrogram = make_spectrogram(batch['target'].to(device))
                 interference_spectrogram = make_spectrogram(batch['interference'].to(device))
                 output = real_net(mixture_spectrogram)
-                ibm = ((target_spectrogram - interference_spectrogram) > 0).type(dtype) # ideal binary mask
+                ibm = ((target_spectrogram - interference_spectrogram) >= 0).type(dtype) # ideal binary mask
                 cost = loss(output, ibm)
                 total_cost += cost.cpu().data
                 cost.backward()
