@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from TwoSourceMixtureDataset import *
@@ -9,9 +10,10 @@ import argparse
 
 class RealNetwork(nn.Module):
     def __init__(self, fft_size, fc_sizes = [], activation=F.relu):
+        super(RealNetwork, self).__init__()
         input_size = fft_size
         self.linear_layers = nn.ModuleList()
-        fc_sizes = fc_sizes + fft_size
+        fc_sizes = fc_sizes + [fft_size,]
         for output_size in fc_sizes:
             self.linear_layers.append(nn.Linear(input_size, output_size))
             input_size = output_size
@@ -28,7 +30,7 @@ class RealNetwork(nn.Module):
             h = self.activation(layer(h))
         h = self.linear_layers[-1](h)
         # Unflatten (NT, F) -> (N, F, T)
-        y = h.view(-1, x.size(0), x.size(1)).permute(0, 2, 1)
+        y = h.view(-1, x.size(2), x.size(1)).permute(0, 2, 1)
         return y
 
 def main():
@@ -44,9 +46,11 @@ def main():
     if not args.disable_cuda or torch.cuda.is_available():
         print('Using device 0')
         device = torch.device('cuda:0')
+        dtype = torch.cuda.FloatTensor
     else:
         print('Using CPU')
         device = torch.device('cpu')
+        dtype = torch.FloatTensor
 
     np.random.seed(0)
     targ_path = '/media/data/timit-wav/train'
@@ -55,11 +59,13 @@ def main():
                     'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0']
     inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
                     'mwad0']
-    trainset = TwoSourceMixtureDataset(train_speeches, train_noises)
-    valset = TwoSourceMixtureDataset(val_speeches, val_noises)
+    train_speeches, val_speeches = get_speech_files(targ_path, targ_speakers)
+    train_inters, val_inters = get_speech_files(inter_path, inter_speakers)
+    trainset = TwoSourceMixtureDataset(train_speeches, train_inters)
+    valset = TwoSourceMixtureDataset(val_speeches, val_inters)
     print('Train Length: ', len(trainset))
     print('Validation Length: ', len(valset))
-    collate_fn = lambda x: collate_fn(x, 256)
+    collate_fn = lambda x: collate_and_trim(x, 256)
     train_dl = DataLoader(trainset, batch_size=args.batchsize,
         shuffle=True, collate_fn=collate_fn)
     val_dl = DataLoader(valset, batch_size=len(valset), collate_fn=collate_fn)
@@ -68,37 +74,37 @@ def main():
     real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
     print(real_net)
     loss = torch.nn.BCEWithLogitsLoss()
-    optim = optim.Adam(real_net.parameters(), lr=1e-3)
+    optimizer = optim.Adam(real_net.parameters(), lr=1e-3)
 
     try:
         for epoch in range(args.epochs):
             total_cost = 0
             real_net.train()
             for count, batch in enumerate(train_dl):
-                optim.zero_grad()
+                optimizer.zero_grad()
                 mixture_spectrogram = make_spectrogram(batch['mixture'].to(device))
                 target_spectrogram = make_spectrogram(batch['target'].to(device))
                 interference_spectrogram = make_spectrogram(batch['interference'].to(device))
                 output = real_net(mixture_spectrogram)
-                ibm = (target_spectrogram - inter_spectrogram) > 0 # ideal binary mask
+                ibm = ((target_spectrogram - interference_spectrogram) > 0).type(dtype) # ideal binary mask
                 cost = loss(output, ibm)
-                total_cost += cost
+                total_cost += cost.cpu().data
                 cost.backward()
-                optim.step()
-            avg_cost = cost / (count + 1)
-            print('Epoch %d Training Cost: ' % epoch, avg_cost, sep=' ')
+                optimizer.step()
+            avg_cost = total_cost / (count + 1)
+            print('Epoch %d Training Cost: ' % epoch, avg_cost, end=' ')
 
             total_cost = 0
             real_net.eval()
-            for batch in val_dl:
+            for count, batch in enumerate(val_dl):
                 mixture_spectrogram = make_spectrogram(batch['mixture'].to(device))
                 target_spectrogram = make_spectrogram(batch['target'].to(device))
                 interference_spectrogram = make_spectrogram(batch['interference'].to(device)
                 output = real_net(mixture_spectrogram)
-                ibm = (target_spectrogram - interference_spectrogram) > 0
+                ibm = ((target_spectrogram - interference_spectrogram) > 0).type(dtype)
                 cost = loss(output, ibm)
-                total_cost += cost
-            avg_cost = cost / (count + 1)
+                total_cost += cost.cpu().data
+            avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)
 
     finally:
