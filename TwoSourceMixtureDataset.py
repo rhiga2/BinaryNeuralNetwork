@@ -40,8 +40,8 @@ class TwoSourceMixtureDataset(Dataset):
                                       res_type='kaiser_fast')
 
         # normalize and mix signals
-        sig = torch.FloatTensor(sig / np.std(sig))
-        inter = torch.FloatTensor(inter / np.std(inter))
+        sig = torch.from_numpy(sig / np.std(sig))
+        inter = torch.from_numpy(inter / np.std(inter))
         mix = 1/(1 + 1/self.snr) * sig + 1/(1 + self.snr) * inter
 
         if self.transform:
@@ -49,22 +49,24 @@ class TwoSourceMixtureDataset(Dataset):
             inter = self.transform(inter)
             mix = self.transform(mix)
 
-        return mix, sig, inter
+        return {'mixture': mix,
+                'target': sig,
+                'interference': inter}
 
     def __getitem__(self, i):
         sigf, interf = self.mixes[i] # get sig and interference file
         return self._getmix(sigf, interf)
 
-def collate_and_trim(batch, hop):
-    outbatch = [[], [], []]
-    min_length = min([sample[0].shape[0] for sample in batch])
+def collate_and_trim(batch, hop=256):
+    outbatch = {'mixture': [], 'target': [], 'interference': []}
+    min_length = min([sample['mixture'].shape[0] for sample in batch])
     min_length = (min_length // hop) * hop
     for sample in batch:
-        outbatch[0].append(sample[0][:min_length])
-        outbatch[1].append(sample[1][:min_length])
-        outbatch[2].append(sample[2][:min_length])
+        outbatch['mixture'].append(sample['mixture'][:min_length])
+        outbatch['target'].append(sample['target'][:min_length])
+        outbatch['interference'].append(sample['interference'][:min_length])
 
-    outbatch = [torch.FloatTensor(np.array(records)) for records in outbatch]
+    outbatch = {key: torch.stack(values) for key, values in outbatch.items()}
     return outbatch
 
 def get_speech_files(speaker_path, speakers=[], num_train=8):
@@ -77,7 +79,7 @@ def get_speech_files(speaker_path, speakers=[], num_train=8):
     for speaker in speakers:
         if speaker[-1] != '/':
             speaker += '/'
-        files = glob2.glob(speaker_path + speaker + '*.wav')
+        files = glob.glob(speaker_path + speaker + '*.wav')
         random.shuffle(files)
         train_speeches.extend(files[:num_train])
         val_speeches.extend(files[num_train:])
@@ -111,7 +113,8 @@ def main():
 
     # output validation set
     for i in range(len(valset)):
-        mix, target, inter = valset[i]
+        sample = valset[i]
+        mix, target, inter = sample['mixture'], sample['target'], sample['interference']
         mix, target, inter = mix.numpy(), target.numpy(), inter.numpy()
     print('Clean Speech Shape: ', target.shape)
     print('Noisy Speech Shape: ', mix.shape)
