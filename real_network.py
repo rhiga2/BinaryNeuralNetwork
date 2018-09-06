@@ -93,7 +93,7 @@ def main():
             for batch in val_dl:
                 mixture_spectrogram = make_spectrogram(batch['mixture'].to(device))
                 target_spectrogram = make_spectrogram(batch['target'].to(device))
-                interference_spectrogram = make_spectrogram(batch['interference'].to(device))
+                interference_spectrogram = make_spectrogram(batch['interference'].to(device)
                 output = real_net(mixture_spectrogram)
                 ibm = (target_spectrogram - interference_spectrogram) > 0
                 cost = loss(output, ibm)
