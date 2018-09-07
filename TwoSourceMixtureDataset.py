@@ -3,6 +3,7 @@ import librosa
 import glob
 import torch
 import itertools
+import torch.nn as nn
 from torch.utils.data import Dataset
 import random
 import pdb
@@ -15,6 +16,7 @@ class TwoSourceMixtureDataset(Dataset):
         self.random_start = random_start
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
+        self.dtype = dtype
 
     def __len__(self):
         return len(self.mixes)
@@ -40,8 +42,8 @@ class TwoSourceMixtureDataset(Dataset):
                                       res_type='kaiser_fast')
 
         # normalize and mix signals
-        sig = torch.from_numpy(sig / np.std(sig)).type(dtype)
-        inter = torch.from_numpy(inter / np.std(inter)).type(dtype)
+        sig = torch.from_numpy(sig / np.std(sig)).type(self.dtype)
+        inter = torch.from_numpy(inter / np.std(inter)).type(self.dtype)
         mix = 1/(1 + 1/self.snr) * sig + 1/(1 + self.snr) * inter
         sample = {'mixture': mix, 'target': sig, 'interference': inter}
 
@@ -55,12 +57,12 @@ class TwoSourceMixtureDataset(Dataset):
         return self._getmix(sigf, interf)
 
 class MakeSpectrogram(nn.Module):
-    def __init__(self, fft_size, hop):
+    def __init__(self, fft_size, hop, dtype=torch.FloatTensor):
         super(MakeSpectrogram, self).__init__()
         self.fft_size = fft_size
         fft = np.fft.fft(np.eye(fft_size)) * np.hanning(fft_size)
-        real_fft = nn.Parameter(torch.FloatTensor(np.real(fft)).unsqueeze(1), requires_grad=False)
-        imag_fft = nn.Parameter(torch.FloatTensor(np.imag(fft)).unsqueeze(1), requires_grad=False)
+        real_fft = nn.Parameter(torch.from_numpy(np.real(fft)).type(dtype).unsqueeze(1), requires_grad=False)
+        imag_fft = nn.Parameter(torch.from_numpy(np.imag(fft)).type(dtype).unsqueeze(1), requires_grad=False)
         self.real_conv = nn.Conv1d(1, fft_size, fft_size, stride=hop, bias=False)
         self.imag_conv = nn.Conv1d(1, fft_size, fft_size, stride=hop, bias=False)
         self.real_conv.weight = real_fft
@@ -85,21 +87,21 @@ class MakeSpectrogram(nn.Module):
 class TwoSourceSpectrogramDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
         random_start=True, dtype=torch.FloatTensor,
-        transform=None),
-        fft_size=1024, hop=256):
+        transform=None, fft_size=1024, hop=256, device=torch.device('cpu')):
         self.mixture_set = TwoSourceMixtureDataset(speeches, interferences,
             fs=fs, snr=snr, random_start=random_start, dtype=dtype,
             transform=transform)
-        self.make_spectrogram = MakeSpectrogram(fft_size, hop)
+        self.make_spectrogram = MakeSpectrogram(fft_size, hop, dtype=dtype).to(device)
         self.constrain = lambda x: cola_constrain(x, hop)
 
     def __getitem__(self, i):
         sample = self.mixture_set[i]
+        print(sample)
         output = {}
         for key in sample:
             mag, phase = self.make_spectrogram(self.constrain(sample[key]))
             output[key + '_' + 'magnitude'] = mag
-            output[ley + '_' + 'phase'] = phase
+            output[key + '_' + 'phase'] = phase
         return output
 
     def __len__(self):
@@ -109,7 +111,7 @@ def cola_constrain(x, hop=256):
     return x[:(x.size(0)//hop)*hop]
 
 def collate_and_trim(batch, dim=0):
-    keys = batch.keys()
+    keys = list(batch[0].keys())
     outbatch = {key: [] for key in keys}
     min_length = min([sample[keys[0]].size(dim) for sample in batch])
     for sample in batch:

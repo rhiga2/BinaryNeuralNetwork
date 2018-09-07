@@ -32,7 +32,7 @@ class RealNetwork(nn.Module):
         y = h.view(-1, x.size(2), x.size(1)).permute(0, 2, 1)
         return y
 
-def make_dataset(batchsize):
+def make_dataset(batchsize, dtype, device):
     np.random.seed(0)
     speaker_path = '/media/data/timit-wav/train'
     targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
@@ -41,8 +41,8 @@ def make_dataset(batchsize):
                     'mwad0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers)
     train_inters, val_inters = get_speech_files(speaker_path, inter_speakers)
-    trainset = TwoSourceSpectrogramDataset(train_speeches, train_inters)
-    valset = TwoSourceSpectrogramDataset(val_speeches, val_inters)
+    trainset = TwoSourceSpectrogramDataset(train_speeches, train_inters, dtype=dtype, device=device)
+    valset = TwoSourceSpectrogramDataset(val_speeches, val_inters, dtype=dtype, device=device)
     collate_fn = lambda x: collate_and_trim(x, dim=1)
     train_dl = DataLoader(trainset, batch_size=batchsize,
         shuffle=True, collate_fn=collate_fn)
@@ -52,6 +52,10 @@ def make_dataset(batchsize):
 def make_model(device):
     real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
     return real_net
+
+def make_ibm(target, interference, dtype=torch.FloatTensor):
+    # target (N, F, T) and interference (N, F, T)
+    return (target - interference > 0).type(dtype)
 
 def main():
     parser = argparse.ArgumentParser(description='real network')
@@ -72,7 +76,7 @@ def main():
         device = torch.device('cpu')
         dtype = torch.FloatTensor
 
-    train_dl, val_dl = make_dataset(args.batchsize, device)
+    train_dl, val_dl = make_dataset(args.batchsize, dtype=dtype, device=device)
     real_net = make_model(device)
     print(real_net)
     loss = torch.nn.BCEWithLogitsLoss()
@@ -84,10 +88,10 @@ def main():
             real_net.train()
             for count, batch in enumerate(train_dl):
                 optimizer.zero_grad()
-                output = real_net(batch['mixture'].to(device))
-                ibm = ((batch['target'] - batch['interference']) >= 0).type(dtype) # ideal binary mask
+                output = real_net(batch['mixture_magnitude'])
+                ibm = make_ibm(batch['target_magnitude'], batch['interference_magnitude'])
                 cost = loss(output, ibm)
-                total_cost += cost.cpu().numpy()[0]
+                total_cost += cost.data
                 cost.backward()
                 optimizer.step()
             avg_cost = total_cost / (count + 1)
@@ -96,15 +100,15 @@ def main():
             total_cost = 0
             real_net.eval()
             for count, batch in enumerate(val_dl):
-                output = real_net(batch['mixture'].to(device))
-                ibm = ((batch['target'] - batch['interference']) >= 0).type(dtype) # ideal binary mask
+                output = real_net(batch['mixture_magnitude'])
+                ibm = make_ibm(batch['target_magnitude'], batch['interference_magnitude'])
                 cost = loss(output, ibm)
-                total_cost += cost.cpu().numpy()[0]
+                total_cost += cost.data
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)
 
     finally:
-        torch.save(real_net.state_dict(), 'models/real_network.model')
+        torch.save(real_net.state_dict(), 'real_network.model')
 
 if __name__ == '__main__':
     main()
