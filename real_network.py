@@ -32,7 +32,7 @@ class RealNetwork(nn.Module):
         y = h.view(-1, x.size(2), x.size(1)).permute(0, 2, 1)
         return y
 
-def make_dataset(batchsize, dtype, device):
+def make_dataset(batchsize):
     np.random.seed(0)
     speaker_path = '/media/data/timit-wav/train'
     targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
@@ -41,16 +41,16 @@ def make_dataset(batchsize, dtype, device):
                     'mwad0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers)
     train_inters, val_inters = get_speech_files(speaker_path, inter_speakers)
-    trainset = TwoSourceSpectrogramDataset(train_speeches, train_inters, dtype=dtype, device=device)
-    valset = TwoSourceSpectrogramDataset(val_speeches, val_inters, dtype=dtype, device=device)
+    trainset = TwoSourceSpectrogramDataset(train_speeches, train_inters)
+    valset = TwoSourceSpectrogramDataset(val_speeches, val_inters)
     collate_fn = lambda x: collate_and_trim(x, dim=1)
     train_dl = DataLoader(trainset, batch_size=batchsize,
         shuffle=True, collate_fn=collate_fn)
     val_dl = DataLoader(valset, batch_size=1, collate_fn=collate_fn)
     return train_dl, val_dl
 
-def make_model(device):
-    real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
+def make_model():
+    real_net = RealNetwork(513, fc_sizes=[1024, 1024])
     return real_net
 
 def make_ibm(target, interference, dtype=torch.FloatTensor):
@@ -64,25 +64,14 @@ def main():
     parser.add_argument('--batchsize', '-b', type=int, default=16,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
-    parser.add_argument('--disable_cuda', type=bool, default=False)
     args = parser.parse_args()
 
-    if not args.disable_cuda or torch.cuda.is_available():
-        print('Using device 0')
-        device = torch.device('cuda:0')
-        dtype = torch.cuda.FloatTensor
-    else:
-        print('Using CPU')
-        device = torch.device('cpu')
-        dtype = torch.FloatTensor
-
-    train_dl, val_dl = make_dataset(args.batchsize, dtype=dtype, device=device)
-    real_net = make_model(device)
-    print(real_net)
-    loss = torch.nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(real_net.parameters(), lr=1e-3)
-
-    try:
+    with torch.cuda.device(0):
+        train_dl, val_dl = make_dataset(args.batchsize)
+        real_net = make_model(device)
+        print(real_net)
+        loss = torch.nn.BCEWithLogitsLoss()
+        optimizer = optim.Adam(real_net.parameters(), lr=1e-3)
         for epoch in range(args.epochs):
             total_cost = 0
             real_net.train()
@@ -106,8 +95,6 @@ def main():
                 total_cost += cost.data
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)
-
-    finally:
         torch.save(real_net.state_dict(), 'real_network.model')
 
 if __name__ == '__main__':
