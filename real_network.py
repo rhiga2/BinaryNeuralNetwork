@@ -33,7 +33,7 @@ class RealNetwork(nn.Module):
         y = h.view(-1, x.size(2), x.size(1)).permute(0, 2, 1)
         return y
 
-def make_dataset():
+def make_dataset(batchsize):
     np.random.seed(0)
     speaker_path = '/media/data/timit-wav/train'
     targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
@@ -45,10 +45,11 @@ def make_dataset():
     make_spectrogram = MakeSpectrogram(fft_size=1024, hop=256)
     trainset = TwoSourceMixtureDataset(train_speeches, train_inters,
         transform=make_spectrogram)
+    train = trainset[0]
     valset = TwoSourceMixtureDataset(val_speeches, val_inters,
         transform=make_spectrogram)
-    collate_fn = lambda x: collate_and_trim(x, 256, dim=1)
-    train_dl = DataLoader(trainset, batch_size=args.batchsize,
+    collate_fn = lambda x: collate_and_trim(x, 1, dim=1)
+    train_dl = DataLoader(trainset, batch_size=batchsize,
         shuffle=True, collate_fn=collate_fn)
     val_dl = DataLoader(valset, batch_size=len(valset), collate_fn=collate_fn)
     return train_dl, val_dl
@@ -72,7 +73,7 @@ def main():
         device = torch.device('cpu')
         dtype = torch.FloatTensor
 
-    train_dl, val_dl = make_dataset()
+    train_dl, val_dl = make_dataset(args.batchsize)
     real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
     print(real_net)
     loss = torch.nn.BCEWithLogitsLoss()
@@ -84,11 +85,8 @@ def main():
             real_net.train()
             for count, batch in enumerate(train_dl):
                 optimizer.zero_grad()
-                mixture_spectrogram = make_spectrogram(batch['mixture'].to(device))
-                target_spectrogram = make_spectrogram(batch['target'].to(device))
-                interference_spectrogram = make_spectrogram(batch['interference'].to(device))
-                output = real_net(mixture_spectrogram)
-                ibm = ((target_spectrogram - interference_spectrogram) >= 0).type(dtype) # ideal binary mask
+                output = real_net(batch['mixture'].to(device))
+                ibm = ((batch['target'] - batch['interference']) >= 0).type(dtype) # ideal binary mask
                 cost = loss(output, ibm)
                 total_cost += cost.cpu().data
                 cost.backward()
@@ -99,11 +97,8 @@ def main():
             total_cost = 0
             real_net.eval()
             for count, batch in enumerate(val_dl):
-                mixture_spectrogram = make_spectrogram(batch['mixture'].to(device))
-                target_spectrogram = make_spectrogram(batch['target'].to(device))
-                interference_spectrogram = make_spectrogram(batch['interference'].to(device)
-                output = real_net(mixture_spectrogram)
-                ibm = ((target_spectrogram - interference_spectrogram) > 0).type(dtype)
+                output = real_net(batch['mixture'].to(device))
+                ibm = ((batch['target'] - batch['interference']) >= 0).type(dtype) # ideal binary mask
                 cost = loss(output, ibm)
                 total_cost += cost.cpu().data
             avg_cost = total_cost / (count + 1)

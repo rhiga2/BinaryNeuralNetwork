@@ -14,7 +14,7 @@ class TwoSourceMixtureDataset(Dataset):
         self.snr = np.power(10, snr/20)
         self.random_start = random_start
         self.mixes = list(itertools.product(speeches, interferences))
-        self.transform = None
+        self.transform = transform
 
     def __len__(self):
         return len(self.mixes)
@@ -57,14 +57,16 @@ class TwoSourceMixtureDataset(Dataset):
         sigf, interf = self.mixes[i] # get sig and interference file
         return self._getmix(sigf, interf)
 
-def collate_and_trim(batch, hop=256, dim=0):
+def collate_and_trim(batch, hop=1, dim=0):
     outbatch = {'mixture': [], 'target': [], 'interference': []}
     min_length = min([sample['mixture'].size(dim) for sample in batch])
     min_length = (min_length // hop) * hop
     for sample in batch:
-        outbatch['mixture'].append(sample['mixture'].narrow(dim, 0, min_length))
-        outbatch['target'].append(sample['target'].narrow(dim, 0, min_length))
-        outbatch['interference'].append(sample['interference'].narrow(dim, 0, min_length))
+        length = sample['mixture'].size(dim)
+        start = (length - min_length) // 2
+        outbatch['mixture'].append(sample['mixture'].narrow(dim, start, min_length))
+        outbatch['target'].append(sample['target'].narrow(dim, start, min_length))
+        outbatch['interference'].append(sample['interference'].narrow(dim, start, min_length))
 
     outbatch = {key: torch.stack(values) for key, values in outbatch.items()}
     return outbatch

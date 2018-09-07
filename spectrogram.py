@@ -17,9 +17,15 @@ class MakeSpectrogram(nn.Module):
         self.imag_conv.weight = imag_fft
 
     def forward(self, x):
-        assert len(x.size()) == 2 # 2D time series
-        x = x.unsqueeze(1)
+        if len(x.size()) == 1:
+            x = x.unsqueeze(0).unsqueeze(1)
+        elif len(x.size()) == 2:
+            x = x.unsqueeze(1)
+        else:
+            raise ValueError('Dimensions of input must be less than 1 or 2')
         real_x = self.real_conv(x)
         imag_x = self.imag_conv(x)
         mag = (real_x**2 + imag_x**2)[:, :self.fft_size // 2 + 1, :]
+        if mag.size(0) == 1:
+            mag = mag.squeeze(0)
         return mag
