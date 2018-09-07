@@ -5,7 +5,6 @@ import torch.nn.functional as F
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from TwoSourceMixtureDataset import *
-from spectrogram import *
 import argparse
 
 class RealNetwork(nn.Module):
@@ -42,17 +41,17 @@ def make_dataset(batchsize):
                     'mwad0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers)
     train_inters, val_inters = get_speech_files(speaker_path, inter_speakers)
-    make_spectrogram = MakeSpectrogram(fft_size=1024, hop=256)
-    trainset = TwoSourceMixtureDataset(train_speeches, train_inters,
-        transform=make_spectrogram)
-    train = trainset[0]
-    valset = TwoSourceMixtureDataset(val_speeches, val_inters,
-        transform=make_spectrogram)
-    collate_fn = lambda x: collate_and_trim(x, 1, dim=1)
+    trainset = TwoSourceSpectrogramDataset(train_speeches, train_inters)
+    valset = TwoSourceSpectrogramDataset(val_speeches, val_inters)
+    collate_fn = lambda x: collate_and_trim(x, dim=1)
     train_dl = DataLoader(trainset, batch_size=batchsize,
         shuffle=True, collate_fn=collate_fn)
-    val_dl = DataLoader(valset, batch_size=len(valset), collate_fn=collate_fn)
+    val_dl = DataLoader(valset, batch_size=1, collate_fn=collate_fn)
     return train_dl, val_dl
+
+def make_model(device):
+    real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
+    return real_net
 
 def main():
     parser = argparse.ArgumentParser(description='real network')
@@ -73,8 +72,8 @@ def main():
         device = torch.device('cpu')
         dtype = torch.FloatTensor
 
-    train_dl, val_dl = make_dataset(args.batchsize)
-    real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
+    train_dl, val_dl = make_dataset(args.batchsize, device)
+    real_net = make_model(device)
     print(real_net)
     loss = torch.nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(real_net.parameters(), lr=1e-3)
@@ -88,7 +87,7 @@ def main():
                 output = real_net(batch['mixture'].to(device))
                 ibm = ((batch['target'] - batch['interference']) >= 0).type(dtype) # ideal binary mask
                 cost = loss(output, ibm)
-                total_cost += cost.cpu().data
+                total_cost += cost.cpu().numpy()[0]
                 cost.backward()
                 optimizer.step()
             avg_cost = total_cost / (count + 1)
@@ -100,12 +99,12 @@ def main():
                 output = real_net(batch['mixture'].to(device))
                 ibm = ((batch['target'] - batch['interference']) >= 0).type(dtype) # ideal binary mask
                 cost = loss(output, ibm)
-                total_cost += cost.cpu().data
+                total_cost += cost.cpu().numpy()[0]
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)
 
     finally:
-        torch.save(real_net.state_dict(), 'real_network.model')
+        torch.save(real_net.state_dict(), 'models/real_network.model')
 
 if __name__ == '__main__':
     main()

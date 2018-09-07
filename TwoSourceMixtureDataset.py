@@ -8,9 +8,9 @@ import random
 import pdb
 
 class TwoSourceMixtureDataset(Dataset):
-    def __init__(self, speeches, interferences, samp_freq=16000, snr=0,
+    def __init__(self, speeches, interferences, fs=16000, snr=0,
         random_start=True, transform=None):
-        self.samp_freq = samp_freq
+        self.fs = fs
         self.snr = np.power(10, snr/20)
         self.random_start = random_start
         self.mixes = list(itertools.product(speeches, interferences))
@@ -31,11 +31,11 @@ class TwoSourceMixtureDataset(Dataset):
             inter_offset = np.random.random() * (inter_duration - duration)
 
         # Read files
-        sig, _ = librosa.core.load(sigf, sr=self.samp_freq, mono=True,
+        sig, _ = librosa.core.load(sigf, sr=self.fs, mono=True,
                                       duration=duration,
                                       offset=sig_offset,
                                       res_type='kaiser_fast')
-        inter, _ = librosa.core.load(interf, sr=self.samp_freq, mono=True,
+        inter, _ = librosa.core.load(interf, sr=self.fs, mono=True,
                                       duration=duration, offset=inter_offset,
                                       res_type='kaiser_fast')
 
@@ -43,30 +43,79 @@ class TwoSourceMixtureDataset(Dataset):
         sig = torch.from_numpy(sig / np.std(sig))
         inter = torch.from_numpy(inter / np.std(inter))
         mix = 1/(1 + 1/self.snr) * sig + 1/(1 + self.snr) * inter
+        sample = {'mixture': mix, 'target': sig, 'interference': inter}
 
         if self.transform:
-            sig = self.transform(sig)
-            inter = self.transform(inter)
-            mix = self.transform(mix)
+            sample = {key: self.transform(value) for key, value in sample.items()}
 
-        return {'mixture': mix,
-                'target': sig,
-                'interference': inter}
+        return sample
 
     def __getitem__(self, i):
         sigf, interf = self.mixes[i] # get sig and interference file
         return self._getmix(sigf, interf)
 
-def collate_and_trim(batch, hop=1, dim=0):
-    outbatch = {'mixture': [], 'target': [], 'interference': []}
-    min_length = min([sample['mixture'].size(dim) for sample in batch])
-    min_length = (min_length // hop) * hop
+class MakeSpectrogram(nn.Module):
+    def __init__(self, fft_size, hop):
+        super(MakeSpectrogram, self).__init__()
+        self.fft_size = fft_size
+        fft = np.fft.fft(np.eye(fft_size)) * np.hanning(fft_size)
+        real_fft = nn.Parameter(torch.FloatTensor(np.real(fft)).unsqueeze(1), requires_grad=False)
+        imag_fft = nn.Parameter(torch.FloatTensor(np.imag(fft)).unsqueeze(1), requires_grad=False)
+        self.real_conv = nn.Conv1d(1, fft_size, fft_size, stride=hop, bias=False)
+        self.imag_conv = nn.Conv1d(1, fft_size, fft_size, stride=hop, bias=False)
+        self.real_conv.weight = real_fft
+        self.imag_conv.weight = imag_fft
+
+    def forward(self, x):
+        if len(x.size()) == 1:
+            x = x.unsqueeze(0).unsqueeze(1)
+        elif len(x.size()) == 2:
+            x = x.unsqueeze(1)
+        else:
+            raise ValueError('Dimensions of input must be less than 1 or 2')
+        real_x = self.real_conv(x)
+        imag_x = self.imag_conv(x)
+        mag = (real_x**2 + imag_x**2)[:, :self.fft_size // 2 + 1, :]
+        phase = torch.atan2(imag_x, real_x)
+        if mag.size(0) == 1:
+            mag = mag.squeeze(0)
+            phase = phase.squeeze(0)
+        return mag, phase
+
+class TwoSourceSpectrogramDataset(Dataset):
+    def __init__(self, speeches, interferences, fs=16000, snr=0,
+        random_start=True, dtype=torch.cuda.FloatTensor,
+        transform=None),
+        fft_size=1024, hop=256):
+        self.mixture_set = TwoSourceMixtureDataset(speeches, interferences,
+            fs, snr, random_start, dtype, transform)
+        self.make_spectrogram = MakeSpectrogram(fft_size, hop)
+        self.constrain = lambda x: cola_constrain(x, hop)
+
+    def __getitem__(self, i):
+        sample = self.mixture_set[i]
+        output = {}
+        for key in sample:
+            mag, phase = self.make_spectrogram(self.constrain(sample[key]))
+            output[key + '_' + 'magnitude'] = mag
+            output[ley + '_' + 'phase'] = phase
+        return output
+
+    def __len__(self):
+        return len(self.mixture_set)
+
+def cola_constrain(x, hop=256):
+    return x[:(x.size(0)//hop)*hop]
+
+def collate_and_trim(batch, dim=0):
+    keys = batch.keys()
+    outbatch = {key: [] for key in keys}
+    min_length = min([sample[keys[0]].size(dim) for sample in batch])
     for sample in batch:
-        length = sample['mixture'].size(dim)
+        length = sample[keys[0]].size(dim)
         start = (length - min_length) // 2
-        outbatch['mixture'].append(sample['mixture'].narrow(dim, start, min_length))
-        outbatch['target'].append(sample['target'].narrow(dim, start, min_length))
-        outbatch['interference'].append(sample['interference'].narrow(dim, start, min_length))
+        for key in keys:
+            outbatch[key].append(sample[key].narrow(dim, start, min_length))
 
     outbatch = {key: torch.stack(values) for key, values in outbatch.items()}
     return outbatch
