@@ -9,7 +9,7 @@ import pdb
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
-        random_start=True, transform=None):
+        random_start=True, dtype=torch.FloatTensor, transform=None):
         self.fs = fs
         self.snr = np.power(10, snr/20)
         self.random_start = random_start
@@ -40,8 +40,8 @@ class TwoSourceMixtureDataset(Dataset):
                                       res_type='kaiser_fast')
 
         # normalize and mix signals
-        sig = torch.from_numpy(sig / np.std(sig))
-        inter = torch.from_numpy(inter / np.std(inter))
+        sig = torch.from_numpy(sig / np.std(sig)).type(dtype)
+        inter = torch.from_numpy(inter / np.std(inter)).type(dtype)
         mix = 1/(1 + 1/self.snr) * sig + 1/(1 + self.snr) * inter
         sample = {'mixture': mix, 'target': sig, 'interference': inter}
 
@@ -84,11 +84,12 @@ class MakeSpectrogram(nn.Module):
 
 class TwoSourceSpectrogramDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
-        random_start=True, dtype=torch.cuda.FloatTensor,
+        random_start=True, dtype=torch.FloatTensor,
         transform=None),
         fft_size=1024, hop=256):
         self.mixture_set = TwoSourceMixtureDataset(speeches, interferences,
-            fs, snr, random_start, dtype, transform)
+            fs=fs, snr=snr, random_start=random_start, dtype=dtype,
+            transform=transform)
         self.make_spectrogram = MakeSpectrogram(fft_size, hop)
         self.constrain = lambda x: cola_constrain(x, hop)
 
