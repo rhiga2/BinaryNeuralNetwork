@@ -60,8 +60,8 @@ class MakeSpectrogram(nn.Module):
         super(MakeSpectrogram, self).__init__()
         self.fft_size = fft_size
         fft = np.fft.fft(np.eye(fft_size)) * np.hanning(fft_size)
-        real_fft = nn.Parameter(torch.from_numpy(np.real(fft)).unsqueeze(1), requires_grad=False)
-        imag_fft = nn.Parameter(torch.from_numpy(np.imag(fft)).unsqueeze(1), requires_grad=False)
+        real_fft = nn.Parameter(torch.FloatTensor(np.real(fft)).unsqueeze(1), requires_grad=False)
+        imag_fft = nn.Parameter(torch.FloatTensor(np.imag(fft)).unsqueeze(1), requires_grad=False)
         self.real_conv = nn.Conv1d(1, fft_size, fft_size, stride=hop, bias=False)
         self.imag_conv = nn.Conv1d(1, fft_size, fft_size, stride=hop, bias=False)
         self.real_conv.weight = real_fft
@@ -93,7 +93,6 @@ class TwoSourceSpectrogramDataset(Dataset):
 
     def __getitem__(self, i):
         sample = self.mixture_set[i]
-        print(sample)
         output = {}
         for key in sample:
             mag, phase = self.make_spectrogram(self.constrain(sample[key]))

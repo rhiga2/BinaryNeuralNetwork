@@ -68,7 +68,7 @@ def main():
 
     with torch.cuda.device(0):
         train_dl, val_dl = make_dataset(args.batchsize)
-        real_net = make_model(device)
+        real_net = make_model()
         print(real_net)
         loss = torch.nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(real_net.parameters(), lr=1e-3)
