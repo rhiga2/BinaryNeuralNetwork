@@ -11,14 +11,14 @@ import pdb
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
         random_start=True, transform=None, device=torch.device('cpu'),
-        dtype=torch.FloatTensor):
+        dtype=torch.float):
         self.fs = fs
         self.snr = np.power(10, snr/20)
         self.random_start = random_start
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
         self.device = device
-        self.dtype=dtype
+        self.dtype = dtype
 
     def __len__(self):
         return len(self.mixes)
@@ -46,7 +46,7 @@ class TwoSourceMixtureDataset(Dataset):
         # normalize and mix signals
         sig = torch.tensor(sig / np.std(sig), dtype=self.dtype, device=self.device)
         inter = torch.tensor(inter / np.std(inter), dtype=self.dtype, device=self.device)
-        mix = 1/(1 + 1/self.snr) * sig + 1/(1 + self.snr) * inter
+        mix = sig + inter
         sample = {'mixture': mix, 'target': sig, 'interference': inter}
 
         if self.transform:
@@ -63,8 +63,8 @@ class MakeSpectrogram(nn.Module):
         super(MakeSpectrogram, self).__init__()
         self.fft_size = fft_size
         fft = np.fft.fft(np.eye(fft_size)) * np.hanning(fft_size)
-        real_fft = torch.tensor(np.real(fft), dtype=torch.FloatTensor)
-        imag_fft = torch.tensor(np.imag(fft), dtype=torch.FloatTensor)
+        real_fft = torch.tensor(np.real(fft), dtype=torch.float)
+        imag_fft = torch.tensor(np.imag(fft), dtype=torch.float)
         real_fft = nn.Parameter(real_fft.unsqueeze(1), requires_grad=False)
         imag_fft = nn.Parameter(imag_fft.unsqueeze(1), requires_grad=False)
         self.real_conv = nn.Conv1d(1, fft_size, fft_size, stride=hop, bias=False)
@@ -94,7 +94,7 @@ class TwoSourceSpectrogramDataset(Dataset):
         fft_size=1024, hop=256):
         self.mixture_set = TwoSourceMixtureDataset(speeches, interferences,
             fs=fs, snr=snr, random_start=random_start, transform=transform,
-            device=device, dtype=torch.FloatTensor)
+            device=device, dtype=torch.float)
         self.make_spectrogram = MakeSpectrogram(fft_size, hop).to(device)
         self.constrain = lambda x: cola_constrain(x, hop)
 

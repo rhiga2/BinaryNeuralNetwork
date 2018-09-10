@@ -32,7 +32,7 @@ class RealNetwork(nn.Module):
         y = h.view(-1, x.size(2), x.size(1)).permute(0, 2, 1)
         return y
 
-def make_dataset(batchsize, dtype=torch.FloatTensor, device=torch.device('cpu')):
+def make_dataset(batchsize, device=torch.device('cpu')):
     np.random.seed(0)
     speaker_path = '/media/data/timit-wav/train'
     targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
@@ -42,9 +42,9 @@ def make_dataset(batchsize, dtype=torch.FloatTensor, device=torch.device('cpu'))
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers)
     train_inters, val_inters = get_speech_files(speaker_path, inter_speakers)
     trainset = TwoSourceSpectrogramDataset(train_speeches, train_inters,
-        dtype=dtype, device=device)
+        device=device)
     valset = TwoSourceSpectrogramDataset(val_speeches, val_inters,
-        dtype=dtype, device=device)
+        device=device)
     collate_fn = lambda x: collate_and_trim(x, dim=1)
     train_dl = DataLoader(trainset, batch_size=batchsize,
         shuffle=True, collate_fn=collate_fn)
@@ -55,9 +55,9 @@ def make_model(device=torch.device('cpu')):
     real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
     return real_net
 
-def make_ibm(target, interference, dtype=torch.FloatTensor):
+def make_ibm(target, interference, type=torch.float):
     # target (N, F, T) and interference (N, F, T)
-    return (target - interference > 0).type(dtype)
+    return (target - interference > 0).type(type)
 
 def main():
     parser = argparse.ArgumentParser(description='real network')
@@ -70,12 +70,10 @@ def main():
 
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
-        dtype = torch.cuda.FloatTensor
     else:
         device = torch.device('cpu')
-        dtype = torch.FloatTensor
 
-    train_dl, val_dl = make_dataset(args.batchsize, dtype=dtype, device=device)
+    train_dl, val_dl = make_dataset(args.batchsize, device=device)
     real_net = make_model(device)
     print(real_net)
     loss = torch.nn.BCEWithLogitsLoss()
