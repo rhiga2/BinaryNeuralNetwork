@@ -5,6 +5,7 @@ import torch
 import itertools
 import torch.nn as nn
 from torch.utils.data import Dataset
+import scipy.signal as signal
 import random
 import pdb
 
@@ -58,36 +59,6 @@ class TwoSourceMixtureDataset(Dataset):
         sigf, interf = self.mixes[i] # get sig and interference file
         return self._getmix(sigf, interf)
 
-class MakeSpectrogram(nn.Module):
-    def __init__(self, fft_size, hop):
-        super(MakeSpectrogram, self).__init__()
-        self.fft_size = fft_size
-        fft = np.fft.fft(np.eye(fft_size)) * np.hanning(fft_size)
-        real_fft = torch.tensor(np.real(fft), dtype=torch.float)
-        imag_fft = torch.tensor(np.imag(fft), dtype=torch.float)
-        real_fft = nn.Parameter(real_fft.unsqueeze(1), requires_grad=False)
-        imag_fft = nn.Parameter(imag_fft.unsqueeze(1), requires_grad=False)
-        self.real_conv = nn.Conv1d(1, fft_size, fft_size, stride=hop, bias=False)
-        self.imag_conv = nn.Conv1d(1, fft_size, fft_size, stride=hop, bias=False)
-        self.real_conv.weight = real_fft
-        self.imag_conv.weight = imag_fft
-
-    def forward(self, x):
-        if len(x.size()) == 1:
-            x = x.unsqueeze(0).unsqueeze(1)
-        elif len(x.size()) == 2:
-            x = x.unsqueeze(1)
-        else:
-            raise ValueError('Dimensions of input must be less than 1 or 2')
-        real_x = self.real_conv(x)
-        imag_x = self.imag_conv(x)
-        mag = (real_x**2 + imag_x**2)[:, :self.fft_size // 2 + 1, :]
-        phase = torch.atan2(imag_x, real_x)
-        if mag.size(0) == 1:
-            mag = mag.squeeze(0)
-            phase = phase.squeeze(0)
-        return mag, phase
-
 class TwoSourceSpectrogramDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
         random_start=True, transform=None, device=torch.device('cpu'),
@@ -95,14 +66,21 @@ class TwoSourceSpectrogramDataset(Dataset):
         self.mixture_set = TwoSourceMixtureDataset(speeches, interferences,
             fs=fs, snr=snr, random_start=random_start, transform=transform,
             device=device, dtype=torch.float)
-        self.make_spectrogram = MakeSpectrogram(fft_size, hop).to(device)
+        self.fft_size = 1024
+        self.hop = 256
+        self.window = torch.hann_window(fft_size).to(device)
         self.constrain = lambda x: cola_constrain(x, hop)
 
     def __getitem__(self, i):
         sample = self.mixture_set[i]
         output = {}
         for key in sample:
-            mag, phase = self.make_spectrogram(self.constrain(sample[key]))
+            x = self.constrain(sample[key]).unsqueeze(0)
+            X = torch.stft(x, self.fft_size,
+                hop_length=self.hop, window=self.window)
+            X = X.squeeze(0)
+            mag = X[:, :, 0]**2 + X[:, :, 1]**2
+            phase = torch.atan2(X[:, :, 1], X[:, :, 0])
             output[key + '_' + 'magnitude'] = mag
             output[key + '_' + 'phase'] = phase
         return output
