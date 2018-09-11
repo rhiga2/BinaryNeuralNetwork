@@ -8,6 +8,7 @@ from torch.utils.data import Dataset
 import scipy.signal as signal
 import random
 import stft
+import soundfile as sf
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
@@ -75,10 +76,10 @@ class TwoSourceSpectrogramDataset(Dataset):
         sample = self.mixture_set[i]
         output = {}
         for key in sample:
-            x = x.unsqueeze(0)
-            mag, phase = stft.transform(x)
-            output[key + '_' + 'magnitude'] = mag
-            output[key + '_' + 'phase'] = phase
+            x = sample[key].unsqueeze(0)
+            mag, phase = self.stft.transform(x)
+            output[key + '_' + 'magnitude'] = mag.squeeze(0)
+            output[key + '_' + 'phase'] = phase.squeeze(0)
         return output
 
     def __len__(self):
