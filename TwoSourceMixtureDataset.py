@@ -26,24 +26,13 @@ class TwoSourceMixtureDataset(Dataset):
         return len(self.mixes)
 
     def _getmix(self, sigf, interf):
-        sig_duration = librosa.core.get_duration(filename=sigf)
-        inter_duration = librosa.core.get_duration(filename=interf)
-        duration = min(sig_duration, inter_duration)
-
-        sig_offset = 0
-        inter_offset = 0
-        if self.random_start:
-            sig_offset =  np.random.random() * (sig_duration - duration)
-            inter_offset = np.random.random() * (inter_duration - duration)
-
         # Read files
-        sig, _ = librosa.core.load(sigf, sr=self.fs, mono=True,
-                                      duration=duration,
-                                      offset=sig_offset,
-                                      res_type='kaiser_fast')
-        inter, _ = librosa.core.load(interf, sr=self.fs, mono=True,
-                                      duration=duration, offset=inter_offset,
-                                      res_type='kaiser_fast')
+        sig, _ = sf.read(sigf)
+        if len(sig.shape) != 1:
+            sig = np.mean(sig, axis=1)
+        inter, _ = sf.read(interf, frames=sig.shape[0])
+        if len(inter.shape) != 1:
+            inter = np.mean(inter, axis=1)
 
         # normalize and mix signals
         sig = torch.tensor(sig / np.std(sig), dtype=self.dtype, device=self.device)
