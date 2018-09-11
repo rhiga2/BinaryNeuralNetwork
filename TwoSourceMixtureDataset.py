@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 import scipy.signal as signal
 import random
-import pdb
+import stft
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
@@ -59,6 +59,7 @@ class TwoSourceMixtureDataset(Dataset):
         sigf, interf = self.mixes[i] # get sig and interference file
         return self._getmix(sigf, interf)
 
+
 class TwoSourceSpectrogramDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
         random_start=True, transform=None, device=torch.device('cpu'),
@@ -66,30 +67,22 @@ class TwoSourceSpectrogramDataset(Dataset):
         self.mixture_set = TwoSourceMixtureDataset(speeches, interferences,
             fs=fs, snr=snr, random_start=random_start, transform=transform,
             device=device, dtype=torch.float)
+        self.stft = stft.STFT(fft_size, hop, window_type='hann').to(device)
         self.fft_size = 1024
         self.hop = 256
-        self.window = torch.hann_window(fft_size).to(device)
-        self.constrain = lambda x: cola_constrain(x, hop)
 
     def __getitem__(self, i):
         sample = self.mixture_set[i]
         output = {}
         for key in sample:
-            x = self.constrain(sample[key]).unsqueeze(0)
-            X = torch.stft(x, self.fft_size,
-                hop_length=self.hop, window=self.window)
-            X = X.squeeze(0)
-            mag = X[:, :, 0]**2 + X[:, :, 1]**2
-            phase = torch.atan2(X[:, :, 1], X[:, :, 0])
+            x = x.unsqueeze(0)
+            mag, phase = stft.transform(x)
             output[key + '_' + 'magnitude'] = mag
             output[key + '_' + 'phase'] = phase
         return output
 
     def __len__(self):
         return len(self.mixture_set)
-
-def cola_constrain(x, hop=256):
-    return x[:(x.size(0)//hop)*hop]
 
 def collate_and_trim(batch, dim=0):
     keys = list(batch[0].keys())
