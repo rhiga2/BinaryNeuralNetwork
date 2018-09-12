@@ -30,6 +30,9 @@ def compute_sar(s_target, e_inter, e_art):
 def bss_eval(pred, sources, target_idx=0):
     '''
     BSS eval metric calculation.
+    pred (T) s.t. T is the number of time steps
+    sources (T, S) s.t. S is the number of sources in mixture
+    target_idx (int) index of target in sources
     '''
     target = sources[:, target_idx]
     s_target = compute_s_target(pred, target)
@@ -85,7 +88,7 @@ def test_metrics():
     trainset = TwoSourceMixtureDataset(speeches, noises)
     for i in range(len(trainset)):
         sample = trainset[i]
-        pred = sample['mixture']
+        pred = sample['mixture'] + torch.rand(sample['mixture'].size())*0.01
         sources = torch.stack([sample['target'], sample['interference']], dim=1)
         sdr_est, sir_est, sar_est = bss_eval(pred, sources)
         sdr, sir, sar = bss_eval_test(pred.numpy(), sources.numpy().T)
