@@ -32,8 +32,8 @@ class RealNetwork(nn.Module):
         y = h.view(-1, x.size(2), x.size(1)).permute(0, 2, 1)
         return y
 
-def make_dataset(batchsize, device=torch.device('cpu')):
-    np.random.seed(0)
+def make_dataset(batchsize, device=torch.device('cpu'), seed=0):
+    np.random.seed(seed)
     speaker_path = '/media/data/timit-wav/train'
     targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
                     'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0']
