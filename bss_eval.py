@@ -2,37 +2,74 @@ import mir_eval
 from TwoSourceMixtureDataset import *
 
 def compute_s_target(pred, target):
-    print(target.size())
-    return torch.mean(target*pred, dim=1)/torch.mean(target**2, dim=1)*target
+    '''
+    pred (T)
+    target (T)
+    '''
+    return torch.mean(target*pred)/torch.mean(target**2)*target
 
-def compute_e_interference(pred, inter):
-    return torch.mean(inter*pred, dim=1)/torch.mean(inter**2, dim=1)*inter
+def compute_source_projection(pred, sources):
+    '''
+    pred (T)
+    sources (T, S)
+    '''
+    pinv_pred = torch.matmul(torch.pinverse(sources), pred)
+    return torch.matmul(sources, pinv_pred)
 
-def compute_e_artifact(pred, s_target, e_inter):
-    return pred - s_target - e_inter
-
-def compute_sdr(s_target, e_inter, e_art):
-    error = e_inter + e_art
-    return 10*torch.log10(torch.mean(s_target**2, dim=1)/torch.mean(error**2, dim=1))
+def compute_sdr(pred, s_target):
+    e_total = pred - s_target
+    return 10*torch.log10(torch.mean(s_target**2)/torch.mean(e_total**2))
 
 def compute_sir(s_target, e_inter):
-    return 10*torch.log10(torch.mean(s_target**2, dim=1)/torch.mean(e_inter**2, dim=1))
+    return 10*torch.log10(torch.mean(s_target**2)/torch.mean(e_inter**2))
 
 def compute_sar(s_target, e_inter, e_art):
     source_projection = s_target + e_inter
-    return 10*torch.log10(torch.mean(source_projection**2, dim=1)/torch.mean(e_art**2, dim=1))
+    return 10*torch.log10(torch.mean(source_projection**2)/torch.mean(e_art**2))
 
-def bss_eval(pred, target, inter):
+def bss_eval(pred, sources, target_idx=0):
     '''
-    BSS eval for two sources
+    BSS eval metric calculation.
     '''
+    target = sources[:, target_idx]
     s_target = compute_s_target(pred, target)
-    e_inter = compute_e_interference(pred, inter)
-    e_art = compute_e_artifact(pred, s_target, e_inter)
-    sdr = compute_sdr(s_target, e_inter, e_art)
+    source_proj = compute_source_projection(pred, sources)
+    e_inter = source_proj - s_target
+    e_art = pred - source_proj
+    sdr = compute_sdr(pred, s_target)
     sir = compute_sir(s_target, e_inter)
     sar = compute_sar(s_target, e_inter, e_art)
     return sdr, sir, sar
+
+def bss_eval_test( sep, sources, i=0):
+    # Current target
+    from numpy import dot, linalg, log10
+    min_len = min([len(sep), len(sources[i])])
+    sources = sources[:,:min_len]
+    sep = sep[:min_len]
+    target = sources[i]
+
+    # Target contribution
+    s_target = target * dot( target, sep.T) / dot( target, target.T)
+
+    # Interference contribution
+    pse = dot( dot( sources, sep.T), \
+    linalg.inv( dot( sources, sources.T))).T.dot( sources)
+    e_interf = pse - s_target
+
+    # Artifact contribution
+    e_artif= sep - pse;
+
+    # Interference + artifacts contribution
+    e_total = e_interf + e_artif;
+
+    # Computation of the log energy ratios
+    sdr = 10*log10( sum( s_target**2) / sum( e_total**2));
+    sir = 10*log10( sum( s_target**2) / sum( e_interf**2));
+    sar = 10*log10( sum( (s_target + e_interf)**2) / sum( e_artif**2));
+
+    # Done!
+    return (sdr, sir, sar)
 
 def test_metrics():
     # test code
@@ -48,16 +85,13 @@ def test_metrics():
     trainset = TwoSourceMixtureDataset(speeches, noises)
     for i in range(len(trainset)):
         sample = trainset[i]
-        pred = sample['mixture'].unsqueeze(0)
-        target = sample['target'].unsqueeze(0)
-        interference = sample['interference'].unsqueeze(0)
-        sdr_est, sir_est, sar_est = bss_eval(pred, target, interference)
-        refs = np.stack([sample['target'].numpy(), sample['interference'].numpy()], axis=1).T
-        ests = np.stack([sample['mixture'].numpy(), sample['interference'].numpy()], axis=1).T
-        sdrs, sirs, sars, perm = mir_eval.separation.bss_eval_sources(refs, ests)
-        print('SDR Error: ', (sdrs[0] - sdr_est.numpy())**2)
-        print('SDR Error: ', (sirs[0] - sir_est.numpy())**2)
-        print('SDR Error: ', (sars[0] - sar_est.numpy())**2)
+        pred = sample['mixture']
+        sources = torch.stack([sample['target'], sample['interference']], dim=1)
+        sdr_est, sir_est, sar_est = bss_eval(pred, sources)
+        sdr, sir, sar = bss_eval_test(pred.numpy(), sources.numpy().T)
+        print('SDR Error: ', (sdr - sdr_est.numpy())**2, sdr, sdr_est.numpy())
+        print('SIR Error: ', (sir - sir_est.numpy())**2, sir, sir_est.numpy())
+        print('SAR Error: ', (sar - sar_est.numpy())**2, sar, sar_est.numpy())
 
 if __name__=='__main__':
     test_metrics()
