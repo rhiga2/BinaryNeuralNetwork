@@ -2,10 +2,11 @@ import mir_eval
 from TwoSourceMixtureDataset import *
 
 def compute_s_target(pred, target):
-    return torch.mean(target*pred, dim=1)/torch.mean(target * target, dim=1)*target
+    print(target.size())
+    return torch.mean(target*pred, dim=1)/torch.mean(target**2, dim=1)*target
 
 def compute_e_interference(pred, inter):
-    return torch.mean(inter*pred, dim=1)/torch.mean(inter*inter, dim=1)*inter
+    return torch.mean(inter*pred, dim=1)/torch.mean(inter**2, dim=1)*inter
 
 def compute_e_artifact(pred, s_target, e_inter):
     return pred - s_target - e_inter
