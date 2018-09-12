@@ -48,7 +48,7 @@ def make_dataset(batchsize, device=torch.device('cpu'), seed=0):
     collate_fn = lambda x: collate_and_trim(x, dim=1)
     train_dl = DataLoader(trainset, batch_size=batchsize,
         shuffle=True, collate_fn=collate_fn)
-    val_dl = DataLoader(valset, batch_size=1, collate_fn=collate_fn)
+    val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
     return train_dl, val_dl
 
 def make_model(device=torch.device('cpu')):
