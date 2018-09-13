@@ -1,12 +1,36 @@
 import mir_eval
 from TwoSourceMixtureDataset import *
 
+class BSSMetrics:
+    def __init__(self, sdr=0, sir=0, sar=0):
+        self.sdr = sdr
+        self.sir = sir
+        self.sar = sar
+
+class BSSMetricsList:
+    def __init__(self):
+        self.sdrs = []
+        self.sirs = []
+        self.sars = []
+
+    def append(self, metric):
+        self.sdrs.append(metric.sdr)
+        self.sirs.append(metric.sir)
+        self.sars.append(metric.sar)
+
+    def mean(self):
+        sdr = torch.mean(torch.tensor(self.sdrs))
+        sir = torch.mean(torch.tensor(self.sirs))
+        sar = torch.mean(torch.tensor(self.sars))
+        return sdr, sir, sar
+
 def compute_s_target(pred, target):
     '''
     pred (T)
     target (T)
     '''
-    return torch.mean(target*pred)/torch.mean(target**2)*target
+    return torch.mean(target*pred, dim=1, keepdims=True)/\
+        torch.mean(target**2, dim=1, keepdims=True)*target
 
 def compute_source_projection(pred, sources):
     '''
@@ -42,7 +66,22 @@ def bss_eval(pred, sources, target_idx=0):
     sdr = compute_sdr(pred, s_target)
     sir = compute_sir(s_target, e_inter)
     sar = compute_sar(s_target, e_inter, e_art)
-    return sdr, sir, sar
+    metric = BSSMetrics(sdr, sir, sar)
+    return metric
+
+def bss_eval_batch(preds, source_tensor, target_idx=0):
+    '''
+    preds (N, T)
+    source_tensor (N, T, S)
+    '''
+    matrics = BSSMetricsList()
+    sdrs, sirs, sars = [], [], []
+    for i in range(pred.size()[0]):
+        pred = preds[i]
+        sources = source_tensor[i]
+        metric = bss_eval(pred, sources, target_idx)
+        metrics.append(metric)
+    return metrics
 
 def bss_eval_test( sep, sources, i=0):
     # Current target
