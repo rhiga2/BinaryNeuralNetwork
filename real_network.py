@@ -47,7 +47,7 @@ def make_dataset(batchsize, device=torch.device('cpu'), seed=0):
         device=device)
     valset = TwoSourceMixtureDataset(val_speeches, val_inters,
         device=device)
-    collate_fn = lambda x: collate_and_trim(x, dim=1)
+    collate_fn = lambda x: collate_and_trim(x, dim=0)
     train_dl = DataLoader(trainset, batch_size=batchsize,
         shuffle=True, collate_fn=collate_fn)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
@@ -57,8 +57,8 @@ def make_model(device=torch.device('cpu')):
     real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
     return real_net
 
-def make_binary_mask(premask, dtype=torch.float):
-    return torch.tensor(premask > 0, dtype=dtype)
+def make_binary_mask(premask, device=torch.device('cpu'), dtype=torch.float):
+    return torch.tensor(premask > 0, dtype=dtype, device=device)
 
 def main():
     parser = argparse.ArgumentParser(description='real network')
@@ -84,14 +84,13 @@ def main():
         total_cost = 0
         real_net.train()
         for count, batch in enumerate(train_dl):
-            mix, targ, inter = batch['mixture'],
-                batch['target'], batch['interference']
+            mix, targ, inter = batch['mixture'], batch['target'], batch['interference']
             mix_mag, mix_phase = spectrogram.transform(mix)
             targ_mag, targ_phase = spectrogram.transform(targ)
             inter_mag, inter_phase = spectrogram.transform(inter)
             optimizer.zero_grad()
             premask = real_net(mix_mag)
-            ibm = make_binary_mask(targ_mag - inter_mag)
+            ibm = make_binary_mask(targ_mag - inter_mag, device)
             cost = loss(premask, ibm)
             total_cost += cost.data
 
@@ -104,7 +103,7 @@ def main():
             bss_eval_batch
 
             # compute sdr, sir, sar metrics
-            mask = make_binary_mask(premask)
+            mask = make_binary_mask(premask, device)
             preds = spectrogram.inverse(mask*mix_mag, mix_phase)
             sources = torch.stack([targ, inter], dim=2)
             metrics = bss_eval_batch(preds, sources)
@@ -114,15 +113,12 @@ def main():
             total_cost = 0
             real_net.eval()
             for count, batch in enumerate(val_dl):
-                mix, targ, inter = batch['mixture'],
-                    batch['target'], batch['interference']
+                mix, targ, inter = batch['mixture'], batch['target'], batch['interference']
                 mix_mag, mix_phase = spectrogram.transform(mix)
                 targ_mag, targ_phase = spectrogram.transform(targ)
                 inter_mag, inter_phase = spectrogram.transform(inter)
                 premask = real_net(mix_mag)
-                ibm = make_binary_mask(targ_mag - inter_mag)
-                mask = make_binary_mask(premask)
-                pred = inverse(premask * mix)
+                ibm = make_binary_mask(targ_mag - inter_mag, device)
                 cost = loss(premask, ibm)
                 total_cost += cost.data
             avg_cost = total_cost / (count + 1)
