@@ -74,10 +74,11 @@ class TwoSourceSpectrogramDataset(Dataset):
     def __len__(self):
         return len(self.mixture_set)
 
-def collate_and_trim(batch, dim=0):
+def collate_and_trim(batch, dim=0, hop=1):
     keys = list(batch[0].keys())
     outbatch = {key: [] for key in keys}
     min_length = min([sample[keys[0]].size(dim) for sample in batch])
+    min_length = min_length // hop * hop
     for sample in batch:
         length = sample[keys[0]].size(dim)
         start = (length - min_length) // 2

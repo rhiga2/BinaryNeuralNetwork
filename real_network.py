@@ -47,7 +47,7 @@ def make_dataset(batchsize, device=torch.device('cpu'), seed=0):
         device=device)
     valset = TwoSourceMixtureDataset(val_speeches, val_inters,
         device=device)
-    collate_fn = lambda x: collate_and_trim(x, dim=0)
+    collate_fn = lambda x: collate_and_trim(x, dim=0, hop=256)
     train_dl = DataLoader(trainset, batch_size=batchsize,
         shuffle=True, collate_fn=collate_fn)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
