@@ -74,7 +74,7 @@ def bss_eval_batch(preds, source_tensor, target_idx=0):
     preds (N, T)
     source_tensor (N, T, S)
     '''
-    matrics = BSSMetricsList()
+    metrics = BSSMetricsList()
     sdrs, sirs, sars = [], [], []
     for i in range(preds.size()[0]):
         pred = preds[i]

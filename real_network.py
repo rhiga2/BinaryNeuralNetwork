@@ -108,7 +108,7 @@ def main():
             sources = torch.stack([targ, inter], dim=2)
             metrics = bss_eval_batch(preds, sources)
             sdr, sir, sar = metrics.mean()
-            print('SDR: %d, SIR: %d, SAR: %d' %(sdr, sir, sar))
+            print('SDR: %f, SIR: %f, SAR: %f' %(sdr, sir, sar))
 
             total_cost = 0
             real_net.eval()
@@ -125,12 +125,12 @@ def main():
             print('Validation Cost: ', avg_cost, end = ', ')
 
             # compute sdr, sir, sar metrics
-            mask = make_binary_mask(premask)
+            mask = make_binary_mask(premask, device)
             preds = spectrogram.inverse(mask*mix_mag, mix_phase)
             sources = torch.stack([targ, inter], dim=2)
             metrics = bss_eval_batch(preds, sources)
             sdr, sir, sar = metrics.mean()
-            print('SDR: %d, SIR: %d, SAR: %d' %(sdr, sir, sar))
+            print('SDR: %f, SIR: %f, SAR: %f' %(sdr, sir, sar))
     torch.save(real_net.state_dict(), 'real_network.model')
 
 if __name__ == '__main__':
