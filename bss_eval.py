@@ -18,6 +18,11 @@ class BSSMetricsList:
         self.sirs.append(metric.sir)
         self.sars.append(metric.sar)
 
+    def extend(self, metrics):
+        self.sdrs.extend(metrics.sdrs)
+        self.sirs.extend(metrics.sirs)
+        self.sars.extend(metrics.sars)
+
     def mean(self):
         sdr = torch.mean(torch.tensor(self.sdrs))
         sir = torch.mean(torch.tensor(self.sirs))
