@@ -14,15 +14,15 @@ class RealNetwork(nn.Module):
         super(RealNetwork, self).__init__()
         self.params = {}
         self.num_layers = len(fc_sizes) + 1
-        fc_sizes = fc_sizes + [fft_size,]
+        fc_sizes = fc_sizes + [input_size,]
         for i, output_size in enumerate(fc_sizes):
             wname, bname = 'weight%d' % (i+1,), 'bias%d' % (i+1,)
             w = torch.empty(output_size, input_size)
             nn.init.xavier_uniform_(w)
             b = torch.zeros(output_size)
             input_size = output_size
-            setattr(self, wname, nn.Parameter(w, requires_grad=True)
-            setattr(self, bias, nn.Parameter(b, require_grad=True))
+            setattr(self, wname, nn.Parameter(w, requires_grad=True))
+            setattr(self, bname, nn.Parameter(b, requires_grad=True))
         self.activation = F.relu
 
     def forward(self, x):
@@ -75,7 +75,7 @@ def main():
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=16,
                         help='Training batch size')
-    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-2)
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -121,7 +121,7 @@ def main():
             optimizer.step()
         avg_cost = total_cost / (count + 1)
 
-        if epoch % 4 == 0:
+        if epoch % 8 == 0:
             print('Epoch %d Training Cost: ' % epoch, avg_cost, end=', ')
             sdr, sir, sar = bss_metrics.mean()
             print('SDR: %f, SIR: %f, SAR: %f' % (sdr, sir, sar))
