@@ -60,24 +60,6 @@ def make_model(device=torch.device('cpu')):
 def make_binary_mask(premask, device=torch.device('cpu'), dtype=torch.float):
     return torch.tensor(premask > 0, dtype=dtype, device=device)
 
-def evaluate_model(model, batch, device):
-    mix, targ, inter = batch['mixture'], batch['target'], batch['interference']
-    mix_mag, mix_phase = spectrogram.transform(mix)
-    targ_mag, targ_phase = spectrogram.transform(targ)
-    inter_mag, inter_phase = spectrogram.transform(inter)
-    premask = real_net(mix_mag)
-    ibm = make_binary_mask(targ_mag - inter_mag, device)
-    cost = loss(premask, ibm)
-
-    # calculate bss eval metrics
-    mask = make_binary_mask(premask, device)
-    preds = spectrogram.inverse(mask*mix_mag, mix_phase)
-    sources = torch.stack([targ, inter], dim=2)
-    metrics = bss_eval_batch(preds, sources)
-
-    return cost, metrics
-
-
 def main():
     parser = argparse.ArgumentParser(description='real network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
@@ -93,19 +75,39 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize, device=device)
-    spectrogram = STFT(1024, 256, window_type='hann').to(device)
+    stft = STFT(1024, 256).to(device)
     model = make_model(device)
     print(model)
     loss = torch.nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(real_net.parameters(), lr=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+
+    def evaluate_model(model, batch):
+        mix, targ, inter = batch['mixture'], batch['target'], batch['interference']
+        mix_mag, mix_phase = stft.transform(mix)
+        targ_mag, targ_phase = stft.transform(targ)
+        inter_mag, inter_phase = stft.transform(inter)
+        premask = model(mix_mag)
+        ibm = make_binary_mask(targ_mag - inter_mag, device)
+        cost = loss(premask, ibm)
+
+        # calculate bss eval metrics
+        mask = make_binary_mask(premask, device)
+        mag_pred = mask*mix_mag
+        sig_pred = stft.inverse(mask*mix_mag, mix_phase)
+        sources = torch.stack([targ, inter], dim=2)
+        metrics = bss_eval_batch(sig_pred, sources)
+
+        return cost, metrics
+
     for epoch in range(args.epochs):
         total_cost = 0
         bss_metrics = BSSMetricsList()
         model.train()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()
+            cost, metrics = evaluate_model(model, batch)
+            bss_metrics.extend(metrics)
             total_cost += cost.data
-            cost, metrics = evaluate_model(model, batch, device)
             cost.backward()
             optimizer.step()
         avg_cost = total_cost / (count + 1)
@@ -119,13 +121,14 @@ def main():
             bss_metrics = BSSMetricsList()
             model.eval()
             for count, batch in enumerate(val_dl):
-                cost, metrics = evaluate_model(model, batch, device)
+                cost, metrics = evaluate_model(model, batch)
                 total_cost += cost.data
+                bss_metrics.extend(metrics)
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost, end = ', ')
             sdr, sir, sar = bss_metrics.mean()
             print('SDR: %f, SIR: %f, SAR: %f' % (sdr, sir, sar))
-    torch.save(real_net.state_dict(), 'real_network.model')
+    torch.save(model.state_dict(), 'models/real_network.model')
 
 if __name__ == '__main__':
     main()
