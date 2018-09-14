@@ -3,10 +3,27 @@ import scipy.signal as signal
 import json
 from two_source_mixture import *
 
+class BinarySpectrogram():
+    def __init__(self, config):
+        self.window = config.get('window', 'hann')
+        self.nperseg = config.get('nperseg', 1024)
+        self.noverlap = config.get('noverlap', 768)
+
+    def transform(self, x):
+        stft_x = signal.stft(x,
+            window=self.window,
+            nperseg=self.nperseg,
+            noverlap=self.noverlap)[2]
+        real, imag = np.real(stft_x), np.imag(stft_x)
+        mag = np.sqrt(real**2 + imag**2)
+        phase = np.arctan2(imag, real)
+        return mag, phase
+
+    def inverse(self, x):
+        pass
+
 def main():
-    window = 'hann'
-    nperseg = 1024
-    noverlap = 768
+    config = {'window': 'hann', 'nperseg': 1024, 'noverlap': 768}
     np.random.seed(seed)
     speaker_path = '/media/data/timit-wav/train'
     targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0']
@@ -23,7 +40,6 @@ def main():
 
     # out trainset
     dataset_dir = '/data/media/binary_audio/'
-    config = {'window': window, 'nperseg': nperseg, 'noverlap': noverlap}
     json_out = json.dumps(config)
 
     with open(dataset_dir + 'config.json', 'w') as f:
