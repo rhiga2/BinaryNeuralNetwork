@@ -4,10 +4,10 @@ import json
 from two_source_mixture import *
 
 class BinarySpectrogram():
-    def __init__(self, config):
-        self.window = config.get('window', 'hann')
-        self.nperseg = config.get('nperseg', 1024)
-        self.noverlap = config.get('noverlap', 768)
+    def __init__(self, window='hann', nperseg=1024, noverlap=768):
+        self.window = window
+        self.nperseg = nperseg
+        self.noverlap = noverlap
 
     def transform(self, x):
         stft_x = signal.stft(x,
@@ -31,10 +31,10 @@ def main():
 
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers)
     train_noises, val_noises = get_speech_files(speaker_path, inter_speakers)
-    transform = lambda x: signal.stft(x, window=window, nperseg=nperseg, noverlap=noverlap)[2]
+    binary_stft = BinarySpectrogram(config**)
 
-    trainset = TwoSourceMixtureDataset(train_speeches, train_noises, transform=transform)
-    valset = TwoSourceMixtureDataset(val_speeches, val_noises, transform=transform)
+    trainset = TwoSourceMixtureDataset(train_speeches, train_noises, transform=binary_stft.transform)
+    valset = TwoSourceMixtureDataset(val_speeches, val_noises, transform=binary_stft.transform)
     print('Train Length: ', len(trainset))
     print('Validation Length: ', len(valset))
 
@@ -50,14 +50,20 @@ def main():
         fname = 'train/%d.npz' % i
         sample = trainset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
-        np.savez(dataset_dir + fname, mix=mix, target=target)
+        np.savez(dataset_dir + fname, mix_mag=mix[0],
+            mix_phase=mix[1],
+            targ_mag=target[0],
+            targ_phase=target[1])
 
     # output validation set
     for i in range(len(valset)):
         fname = 'val/%d.npz % i'
         sample = valset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
-        np.savez(dataset_dir + fname, mix=mix, target=target)
+        np.savez(dataset_dir + fname, mix_mag=mix[0],
+            mix_phase=mix[1],
+            targ_mag=target[0],
+            targ_phase=target[1])
 
     print('Clean Speech Shape: ', target.shape)
     print('Noisy Speech Shape: ', mix.shape)
