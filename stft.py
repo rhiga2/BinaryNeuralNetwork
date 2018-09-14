@@ -11,6 +11,7 @@ class STFT(nn.Module):
             window = np.ones(nfft)
         else:
             window = signal.get_window(window_type, nfft)
+        window = np.expand_dims(window, axis=0)
         fft = fft * window
         scale = nfft / hop
         self.nfft = nfft
@@ -18,8 +19,8 @@ class STFT(nn.Module):
         self.cutoff = nfft // 2 + 1
         fft_matrix = np.concatenate([np.real(fft[:self.cutoff]),
             np.imag(fft[:self.cutoff])], axis=0)
-        fft_tensor = torch.tensor(fft_matrix, dtype=dtype)
-        ifft_tensor = torch.t(torch.pinverse(scale * fft_tensor))
+        self.fft_tensor = fft_tensor = torch.tensor(fft_matrix, dtype=dtype)
+        self.ifft_tensor = ifft_tensor = torch.t(torch.pinverse(scale * fft_tensor))
         fft_tensor = nn.Parameter(fft_tensor.unsqueeze(1), requires_grad=False)
         ifft_tensor = nn.Parameter(ifft_tensor.unsqueeze(1), requires_grad=False)
         self._transform = nn.Conv1d(1, 2*self.cutoff, nfft, stride=hop, bias=False,
