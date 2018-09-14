@@ -10,13 +10,18 @@ from stft import *
 import argparse
 
 class RealNetwork(nn.Module):
-    def __init__(self, fft_size, fc_sizes = [], activation=F.relu):
+    def __init__(self, input_size, fc_sizes = [], activation=F.tanh):
         super(RealNetwork, self).__init__()
-        input_size = fft_size
-        self.linear_layers = nn.ModuleList()
+        self.params = {}
+        self.num_layers = len(fc_sizes) + 1
         fc_sizes = fc_sizes + [fft_size,]
-        for output_size in fc_sizes:
-            self.linear_layers.append(nn.Linear(input_size, output_size))
+        for i, output_size in enumerate(fc_sizes):
+            wname, bname = 'weight%d' % (i+1,), 'bias%d' % (i+1,)
+            w = torch.empty(output_size, input_size)
+            nn.init.xavier_uniform_(w)
+            self.params[wname] = nn.Parameter(w, requires_grad=True)
+            b = torch.zeros(output_size)
+            self.params[bname] = nn.Parameter(b, require_grad=True)
             input_size = output_size
         self.activation = F.relu
 
@@ -27,9 +32,13 @@ class RealNetwork(nn.Module):
         '''
         # Flatten (N, F, T) -> (NT, F)
         h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
-        for layer in self.linear_layers[:-1]:
-            h = self.activation(layer(h))
-        h = self.linear_layers[-1](h)
+        for i in range(self.num_layers):
+            wname, bname = 'weight%d' % (i+1,), 'bias%d' % (i+1,)
+            modified_w = torch.tanh(self.params[wname])
+            modified_b = torch.tanh(self.params[bname])
+            h = F.linear(h, modified_w, modified_b)
+            if i != self.num_layers:
+                h = self.activation(h)
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(-1, x.size(2), x.size(1)).permute(0, 2, 1)
         return y
