@@ -1,5 +1,4 @@
 import numpy as np
-import librosa
 import glob
 import torch
 import itertools
@@ -12,15 +11,12 @@ import soundfile as sf
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
-        random_start=True, transform=None, device=torch.device('cpu'),
-        dtype=torch.float):
+        random_start=True, transform=None):
         self.fs = fs
         self.snr = np.power(10, snr/20)
         self.random_start = random_start
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
-        self.device = device
-        self.dtype = dtype
 
     def __len__(self):
         return len(self.mixes)
@@ -35,8 +31,8 @@ class TwoSourceMixtureDataset(Dataset):
             inter = np.mean(inter, axis=1)
 
         # normalize and mix signals
-        sig = torch.tensor(sig / np.std(sig), dtype=self.dtype, device=self.device)
-        inter = torch.tensor(inter / np.std(inter), dtype=self.dtype, device=self.device)
+        sig = sig / np.std(sig)
+        inter = inter / np.std(inter)
         mix = sig + inter
         sample = {'mixture': mix, 'target': sig, 'interference': inter}
 
@@ -48,31 +44,6 @@ class TwoSourceMixtureDataset(Dataset):
     def __getitem__(self, i):
         sigf, interf = self.mixes[i] # get sig and interference file
         return self._getmix(sigf, interf)
-
-
-class TwoSourceSpectrogramDataset(Dataset):
-    def __init__(self, speeches, interferences, fs=16000, snr=0,
-        random_start=True, transform=None, device=torch.device('cpu'),
-        fft_size=1024, hop=256):
-        self.mixture_set = TwoSourceMixtureDataset(speeches, interferences,
-            fs=fs, snr=snr, random_start=random_start, transform=transform,
-            device=device, dtype=torch.float)
-        self.stft = stft.STFT(fft_size, hop, window_type='hann').to(device)
-        self.fft_size = 1024
-        self.hop = 256
-
-    def __getitem__(self, i):
-        sample = self.mixture_set[i]
-        output = {}
-        for key in sample:
-            x = sample[key].unsqueeze(0)
-            mag, phase = self.stft.transform(x)
-            output[key + '_' + 'magnitude'] = mag.squeeze(0)
-            output[key + '_' + 'phase'] = phase.squeeze(0)
-        return output
-
-    def __len__(self):
-        return len(self.mixture_set)
 
 def collate_and_trim(batch, dim=0, hop=1):
     keys = list(batch[0].keys())
@@ -115,30 +86,37 @@ def get_noise_files(noise_path, noises, num_train=2):
     return train_noises, val_noises
 
 def main():
-    # test code
+    np.random.seed(seed)
     speaker_path = '/media/data/timit-wav/train'
-    noise_path = '/media/data/noises-16k'
+    targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0']
+    inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0']
 
-    # get training and validation files
-    speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0']
-    noises = ['car-16k.wav', 'babble-16k.wav', 'street-16k.wav']
     train_speeches, val_speeches = get_speech_files(speaker_path, speakers)
     train_noises, val_noises = get_noise_files(noise_path, noises)
+    transform = lambda x: signal.stft(x, nperseg=1024, noverlap=768)[2]
 
-    trainset = TwoSourceMixtureDataset(train_speeches, train_noises)
-    valset = TwoSourceMixtureDataset(val_speeches, val_noises)
+    trainset = TwoSourceMixtureDataset(train_speeches, train_noises, transform=transform)
+    valset = TwoSourceMixtureDataset(val_speeches, val_noises, transform=transform)
     print('Train Length: ', len(trainset))
     print('Validation Length: ', len(valset))
 
+    # out trainset
+    dataset_dir = '/data/media/binary_audio/'
+    for i in range(len(trainset)):
+        fname = 'train/%d.npy' % i
+        samples = trainset[i]
+        mix, target, inter = sample['mixture'], sample['target'], sample['interference']
+        np.save(dataset_dir + fname, mix)
+
     # output validation set
     for i in range(len(valset)):
+        fname = 'val/%d.npy % i'
         sample = valset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
-        mix, target, inter = mix.numpy(), target.numpy(), inter.numpy()
+        np.save(dataset_dir + fname)
+
     print('Clean Speech Shape: ', target.shape)
     print('Noisy Speech Shape: ', mix.shape)
-    librosa.output.write_wav('results/clean_example.wav', target, 16000, norm = True)
-    librosa.output.write_wav('results/noisy_example.wav', mix, 16000, norm = True)
 
 if __name__ == '__main__':
     main()
