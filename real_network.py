@@ -19,10 +19,10 @@ class RealNetwork(nn.Module):
             wname, bname = 'weight%d' % (i+1,), 'bias%d' % (i+1,)
             w = torch.empty(output_size, input_size)
             nn.init.xavier_uniform_(w)
-            self.params[wname] = nn.Parameter(w, requires_grad=True)
             b = torch.zeros(output_size)
-            self.params[bname] = nn.Parameter(b, require_grad=True)
             input_size = output_size
+            setattr(self, wname, nn.Parameter(w, requires_grad=True)
+            setattr(self, bias, nn.Parameter(b, require_grad=True))
         self.activation = F.relu
 
     def forward(self, x):
@@ -34,8 +34,8 @@ class RealNetwork(nn.Module):
         h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
         for i in range(self.num_layers):
             wname, bname = 'weight%d' % (i+1,), 'bias%d' % (i+1,)
-            modified_w = torch.tanh(self.params[wname])
-            modified_b = torch.tanh(self.params[bname])
+            modified_w = torch.tanh(getattr(self, wname))
+            modified_b = torch.tanh(getattr(self, bname))
             h = F.linear(h, modified_w, modified_b)
             if i != self.num_layers:
                 h = self.activation(h)
