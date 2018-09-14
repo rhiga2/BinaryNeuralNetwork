@@ -30,7 +30,6 @@ class STFT(nn.Module):
 
     def transform(self, x):
         x = x.unsqueeze(1)
-        x = self._cola_constrain(x)
         X = self._transform(x)
         real_X = X[:, :self.cutoff, :]
         imag_X = X[:, self.cutoff:, :]
@@ -46,6 +45,3 @@ class STFT(nn.Module):
 
     def forward(self, x):
         return self._transform(x)
-
-    def _cola_constrain(self, x):
-        return x[:, :, :(x.size(2)//self.hop)*self.hop]
