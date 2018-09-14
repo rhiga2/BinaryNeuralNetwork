@@ -4,15 +4,9 @@ import numpy as np
 import scipy.signal as signal
 
 class STFT(nn.Module):
-    def __init__(self, nfft, hop, dtype=torch.float, window_type=None):
+    def __init__(self, nfft, hop, dtype=torch.float):
         super(STFT, self).__init__()
         fft = np.fft.fft(np.eye(nfft))
-        if window_type == None:
-            window = np.ones(nfft)
-        else:
-            window = signal.get_window(window_type, nfft)
-        window = np.expand_dims(window, axis=0)
-        fft = fft * window
         scale = nfft / hop
         self.nfft = nfft
         self.hop = hop
