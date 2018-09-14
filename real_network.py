@@ -14,14 +14,14 @@ class RealNetwork(nn.Module):
         super(RealNetwork, self).__init__()
         self.params = {}
         self.num_layers = len(fc_sizes) + 1
-        fc_sizes = fc_sizes + [fft_size,]
+        fc_sizes = fc_sizes + [input_size,]
         for i, output_size in enumerate(fc_sizes):
             wname, bname = 'weight%d' % (i+1,), 'bias%d' % (i+1,)
             w = torch.empty(output_size, input_size)
             nn.init.xavier_uniform_(w)
             self.params[wname] = nn.Parameter(w, requires_grad=True)
             b = torch.zeros(output_size)
-            self.params[bname] = nn.Parameter(b, require_grad=True)
+            self.params[bname] = nn.Parameter(b, requires_grad=True)
             input_size = output_size
         self.activation = F.relu
 
