@@ -47,7 +47,7 @@ def main():
 
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers)
     train_noises, val_noises = get_speech_files(speaker_path, inter_speakers)
-    binary_stft = BinarySpectrogram(config**)
+    binary_stft = BinarySpectrogram(**config)
 
     trainset = TwoSourceMixtureDataset(train_speeches, train_noises, transform=binary_stft.transform)
     valset = TwoSourceMixtureDataset(val_speeches, val_noises, transform=binary_stft.transform)
@@ -56,7 +56,6 @@ def main():
 
     # out trainset
     dataset_dir = '/media/data/binary_audio/'
-    config = {'window': window, 'nperseg': nperseg, 'noverlap': noverlap}
     json_out = json.dumps(config)
 
     with open(dataset_dir + 'config.json', 'w') as f:
@@ -80,9 +79,6 @@ def main():
             mix_phase=mix[1],
             targ_mag=target[0],
             targ_phase=target[1])
-
-    print('Clean Speech Shape: ', target.shape)
-    print('Noisy Speech Shape: ', mix.shape)
 
 if __name__ == '__main__':
     main()
