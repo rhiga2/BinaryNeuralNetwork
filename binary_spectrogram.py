@@ -3,6 +3,20 @@ import scipy.signal as signal
 import json
 from two_source_mixture import *
 
+def quantize(x, bins, num_bits=4):
+    '''
+    x is shape (F, T)
+    F = frequency range
+    T = time range
+    '''
+    assert len(bins)+1 == 2**num_bits
+    digit_x = np.digitize(x, bins).astype(np.uint8)
+    binary_x = []
+    for i in range(x.shape[0]):
+        bits = np.unpackbits(np.expand_dims(x[i], axis=0), axis=0)[:num_bits]
+        binary_x.append(bits)
+    return np.concatenate(binary_x, axis=0)
+
 class BinarySpectrogram():
     def __init__(self, window='hann', nperseg=1024, noverlap=768):
         self.window = window
@@ -10,7 +24,7 @@ class BinarySpectrogram():
         self.noverlap = noverlap
 
     def transform(self, x):
-        stft_x = signal.stft(x,
+        _, _, stft_x = signal.stft(x,
             window=self.window,
             nperseg=self.nperseg,
             noverlap=self.noverlap)[2]
@@ -19,8 +33,10 @@ class BinarySpectrogram():
         phase = np.arctan2(imag, real)
         return mag, phase
 
-    def inverse(self, x):
-        pass
+    def inverse(self, mag, phase):
+        stft_x = mag*np.exp(1j*phase)
+        _, x = signal.istft(stft_x, window=self.window, nperseg=nperseg, noverlap=noverlap)
+        return x
 
 def main():
     config = {'window': 'hann', 'nperseg': 1024, 'noverlap': 768}
