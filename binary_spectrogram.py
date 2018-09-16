@@ -49,7 +49,7 @@ def quantize(x, bins, centers):
 def make_binary_mask(premask, dtype=torch.float):
     return np.array(premask > 0, dtype=dtype)
 
-class Spectrogram():
+class STFT():
     def __init__(self, window='hann', nperseg=1024, noverlap=768):
         self.window = window
         self.nperseg = nperseg
@@ -79,9 +79,9 @@ def main():
     inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
                     'mwad0']
 
-    train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers, num_train=7)
-    train_noises, val_noises = get_speech_files(speaker_path, inter_speakers, num_train=7)
-    stft = Spectrogram(**config)
+    train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers, num_train=6)
+    train_noises, val_noises = get_speech_files(speaker_path, inter_speakers, num_train=6)
+    stft = STFT(**config)
 
     trainset = TwoSourceMixtureDataset(train_speeches, train_noises)
     valset = TwoSourceMixtureDataset(val_speeches, val_noises)
@@ -109,7 +109,7 @@ def main():
         sample = trainset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
         mix_mag, mix_phase = stft.transform(mix)
-        targ_mag, targ_phase = stft.transform(targ)
+        targ_mag, targ_phase = stft.transform(target)
         inter_mag, inter_phase = stft.transform(inter)
         ibm = make_binary_mask(targ_mag - inter_mag, dtype=np.uint8)
         bmag = binarize(mix_mag, bins)
