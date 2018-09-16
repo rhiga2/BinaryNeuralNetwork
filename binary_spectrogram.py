@@ -105,7 +105,8 @@ def main():
 
     # Output training binarization
     for i in range(len(trainset)):
-        fname = 'train/%d.npz' % i
+        binary_fname = 'train/binary_data%d.npz' % i
+        raw_fname = 'train/raw_data%d.npz'
         sample = trainset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
         mix_mag, mix_phase = stft.transform(mix)
@@ -113,24 +114,35 @@ def main():
         inter_mag, inter_phase = stft.transform(inter)
         ibm = make_binary_mask(targ_mag - inter_mag, dtype=np.uint8)
         bmag = binarize(mix_mag, bins)
-        np.savez(dataset_dir + fname,
+        np.savez(
+            dataset_dir + binary_fname,
             bmag=bmag,
-            ibm=ibm,
+            ibm=ibm
+        )
+        np.savez(
+            dataset_dir + raw_fname,
             mix=mix,
-            target=target)
+            target=target
+        )
 
     # Output validation binarization
     for i in range(len(valset)):
-        fname = 'val/%d.npz % i'
+        binary_fname = 'val/binary_data%d.npz' % i
+        raw_fname = 'val/raw_data%d.npz'
         sample = valset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
         mix_mag, mix_phase = stft.transform(sample['mixture'])
         bmag = binarize(mix_mag, bins)
-        np.savez(dataset_dir + fname,
+        np.savez(
+            dataset_dir + binary_fname,
             bmag=bmag,
-            ibm=ibm,
+            ibm=ibm
+        )
+        np.savez(
+            dataset_dir + raw_fname,
             mix=mix,
-            target=target)
+            target=target
+        )
 
 if __name__ == '__main__':
     main()
