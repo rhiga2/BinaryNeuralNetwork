@@ -46,6 +46,9 @@ def quantize(x, bins, centers):
     qx = centers[digit_x] # qx = quantized x
     return qx
 
+def make_binary_mask(premask, dtype=torch.float):
+    return np.array(premask > 0, dtype=dtype)
+
 class Spectrogram():
     def __init__(self, window='hann', nperseg=1024, noverlap=768):
         self.window = window
@@ -71,11 +74,13 @@ def main():
     config = {'window': 'hann', 'nperseg': 1024, 'noverlap': 768}
     np.random.seed(0)
     speaker_path = '/media/data/timit-wav/train'
-    targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0']
-    inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0']
+    targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
+                    'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0']
+    inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
+                    'mwad0']
 
-    train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers)
-    train_noises, val_noises = get_speech_files(speaker_path, inter_speakers)
+    train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers, num_train=7)
+    train_noises, val_noises = get_speech_files(speaker_path, inter_speakers, num_train=7)
     stft = Spectrogram(**config)
 
     trainset = TwoSourceMixtureDataset(train_speeches, train_noises)
@@ -103,14 +108,16 @@ def main():
         fname = 'train/%d.npz' % i
         sample = trainset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
-        mix_mag, mix_phase = stft.transform(sample['mixture'])
+        mix_mag, mix_phase = stft.transform(mix)
+        targ_mag, targ_phase = stft.transform(targ)
+        inter_mag, inter_phase = stft.transform(inter)
+        ibm = make_binary_mask(targ_mag - inter_mag, dtype=np.uint8)
         bmag = binarize(mix_mag, bins)
         np.savez(dataset_dir + fname,
             bmag=bmag,
-            mix_mag=mix_mag,
-            mix_phase=mix_phase,
-            target=target,
-            inter=inter)
+            ibm=ibm,
+            mix=mix,
+            target=target)
 
     # Output validation binarization
     for i in range(len(valset)):
@@ -121,10 +128,9 @@ def main():
         bmag = binarize(mix_mag, bins)
         np.savez(dataset_dir + fname,
             bmag=bmag,
-            mix_mag=mix_mag,
-            mix_phase=mix_phase,
-            target=target,
-            inter=inter)
+            ibm=ibm,
+            mix=mix,
+            target=target)
 
 if __name__ == '__main__':
     main()
