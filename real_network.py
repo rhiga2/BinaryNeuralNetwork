@@ -71,7 +71,7 @@ def make_dataset(batchsize, seed=0):
     return train_dl, val_dl
 
 def make_model(device=torch.device('cpu')):
-    real_net = RealNetwork(513, fc_sizes=[1024, 1024]).to(device)
+    real_net = RealNetwork(2048, fc_sizes=[1024, 1024]).to(device)
     return real_net
 
 def main():
