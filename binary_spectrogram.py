@@ -53,18 +53,18 @@ class Spectrogram():
         self.noverlap = noverlap
 
     def transform(self, x):
-        _, _, stft_x = signal.stft(x,
+        stft_x = signal.stft(x,
             window=self.window,
             nperseg=self.nperseg,
             noverlap=self.noverlap)[2]
         real, imag = np.real(stft_x), np.imag(stft_x)
         mag = np.sqrt(real**2 + imag**2)
         phase = np.arctan2(imag, real)
-        return mag, phase, bmag
+        return mag, phase
 
     def inverse(self, mag, phase):
         stft_x = mag*np.exp(1j*phase)
-        _, x = signal.istft(stft_x, window=self.window, nperseg=nperseg, noverlap=noverlap)
+        x = signal.istft(stft_x, window=self.window, nperseg=nperseg, noverlap=noverlap)[1]
         return x
 
 def main():
@@ -93,6 +93,7 @@ def main():
     # Output qlevels for training data
     x = []
     for i in range(0, len(trainset), 10):
+        sample = trainset[i]
         mix_mag, mix_phase = stft.transform(sample['mixture'])
         x.append(mix_mag.reshape(-1))
     centers, bins = kmeans_qlevels(np.concatenate(x, axis=0))
