@@ -27,12 +27,13 @@ class BinaryDataset():
         return self.length
 
 class RealNetwork(nn.Module):
-    def __init__(self, input_size, output_size, fc_sizes = [], activation=torch.tanh):
+    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, activation=torch.tanh):
         super(RealNetwork, self).__init__()
         self.params = {}
         self.num_layers = len(fc_sizes) + 1
         fc_sizes = fc_sizes + [output_size,]
         in_size = input_size
+        self.dropout_list = nn.ModuleList()
         for i, out_size in enumerate(fc_sizes):
             wname, bname = 'weight%d' % (i+1,), 'bias%d' % (i+1,)
             w = torch.empty(out_size, in_size)
@@ -41,6 +42,7 @@ class RealNetwork(nn.Module):
             in_size = out_size
             setattr(self, wname, nn.Parameter(w, requires_grad=True))
             setattr(self, bname, nn.Parameter(b, requires_grad=True))
+            self.dropout_list.append(nn.Dropout(dropout))
         self.activation = activation
 
     def forward(self, x):
@@ -81,7 +83,8 @@ def main():
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=16,
                         help='Training batch size')
-    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-2)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
+    parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -93,7 +96,7 @@ def main():
     model = make_model(device)
     print(model)
     loss = torch.nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
     def evaluate_model(model, batch):
         bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
@@ -115,7 +118,7 @@ def main():
         avg_cost = total_cost / (count + 1)
 
         if epoch % 8 == 0:
-            print('Epoch %d Training Cost: ' % epoch, avg_cost, end=', ')
+            print('Epoch %d Training Cost: ' % epoch, avg_cost)
 
             total_cost = 0
             bss_metrics = BSSMetricsList()
@@ -124,7 +127,7 @@ def main():
                 cost = evaluate_model(model, batch)
                 total_cost += cost.data
             avg_cost = total_cost / (count + 1)
-            print('Validation Cost: ', avg_cost, end = ', ')
+            print('Validation Cost: ', avg_cost)
     torch.save(model.state_dict(), 'models/real_network.model')
 
 if __name__ == '__main__':
