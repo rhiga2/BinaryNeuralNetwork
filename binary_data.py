@@ -49,26 +49,20 @@ def quantize(x, bins, centers):
 def make_binary_mask(premask, dtype=torch.float):
     return np.array(premask > 0, dtype=dtype)
 
-class STFT():
-    def __init__(self, window='hann', nperseg=1024, noverlap=768):
-        self.window = window
-        self.nperseg = nperseg
-        self.noverlap = noverlap
+def stft(x, window='hann', nperseg=1024, noverlap=768):
+    stft_x = signal.stft(x,
+        window=window,
+        nperseg=nperseg,
+        noverlap=noverlap)[2]
+    real, imag = np.real(stft_x), np.imag(stft_x)
+    mag = np.sqrt(real**2 + imag**2)
+    phase = np.arctan2(imag, real)
+    return mag, phase
 
-    def transform(self, x):
-        stft_x = signal.stft(x,
-            window=self.window,
-            nperseg=self.nperseg,
-            noverlap=self.noverlap)[2]
-        real, imag = np.real(stft_x), np.imag(stft_x)
-        mag = np.sqrt(real**2 + imag**2)
-        phase = np.arctan2(imag, real)
-        return mag, phase
-
-    def inverse(self, mag, phase):
-        stft_x = mag*np.exp(1j*phase)
-        x = signal.istft(stft_x, window=self.window, nperseg=nperseg, noverlap=noverlap)[1]
-        return x
+def istft(mag, phase, window='hann', nperseg=1024, noverlap=768):
+    stft_x = mag*np.exp(1j*phase)
+    x = signal.istft(stft_x, window=window, nperseg=nperseg, noverlap=noverlap)[1]
+    return x
 
 class BinaryDataset():
     def __init__(self, data_dir):
@@ -103,7 +97,6 @@ class RawDataset():
         return self.length
 
 def main():
-    config = {'window': 'hann', 'nperseg': 1024, 'noverlap': 768}
     np.random.seed(0)
     speaker_path = '/media/data/timit-wav/train'
     targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
@@ -113,21 +106,13 @@ def main():
 
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers, num_train=6)
     train_noises, val_noises = get_speech_files(speaker_path, inter_speakers, num_train=6)
-    stft = STFT(**config)
 
     trainset = TwoSourceMixtureDataset(train_speeches, train_noises)
     valset = TwoSourceMixtureDataset(val_speeches, val_noises)
     print('Train Length: ', len(trainset))
     print('Validation Length: ', len(valset))
 
-    # out trainset
     dataset_dir = '/media/data/binary_audio/'
-    json_out = json.dumps(config)
-
-    with open(dataset_dir + 'config.json', 'w') as f:
-        f.write(json_out)
-
-    # Output qlevels for training data
     x = []
     for i in range(0, len(trainset), 10):
         sample = trainset[i]
@@ -141,9 +126,9 @@ def main():
         raw_fname = 'train/raw_data%d.npz'
         sample = trainset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
-        mix_mag, mix_phase = stft.transform(mix)
-        targ_mag, targ_phase = stft.transform(target)
-        inter_mag, inter_phase = stft.transform(inter)
+        mix_mag, mix_phase = stft(mix)
+        targ_mag, targ_phase = stft(target)
+        inter_mag, inter_phase = stft(inter)
         ibm = make_binary_mask(targ_mag - inter_mag, dtype=np.uint8)
         bmag = binarize(mix_mag, bins)
         np.savez(
@@ -163,9 +148,9 @@ def main():
         raw_fname = 'val/raw_data%d.npz'
         sample = valset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
-        mix_mag, mix_phase = stft.transform(sample['mixture'])
-        targ_mag, targ_phase = stft.transform(target)
-        inter_mag, inter_phase = stft.transform(inter)
+        mix_mag, mix_phase = stft(mix)
+        targ_mag, targ_phase = stft(target)
+        inter_mag, inter_phase = stft(inter)
         ibm = make_binary_mask(targ_mag - inter_mag, dtype=np.uint8)
         bmag = binarize(mix_mag, bins)
         np.savez(

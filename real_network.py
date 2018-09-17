@@ -7,7 +7,7 @@ import numpy as np
 from bss_eval import *
 from torch.utils.data import Dataset, DataLoader
 from two_source_mixture import *
-from binary_spectrogram import *
+from binary_data import *
 import argparse
 
 class RealNetwork(nn.Module):
