@@ -10,22 +10,6 @@ from two_source_mixture import *
 from binary_spectrogram import *
 import argparse
 
-class BinaryDataset():
-    def __init__(self, data_dir):
-        self.data_dir = data_dir
-        if data_dir[-1] != '/':
-            self.data_dir += '/'
-        flist = glob.glob(self.data_dir + 'binary_data*.npz')
-        self.length = len(flist)
-
-    def __getitem__(self, i):
-        fname = self.data_dir + ('binary_data%d.npz'%i)
-        data = np.load(fname)
-        return {'bmag': data['bmag'], 'ibm': data['ibm']}
-
-    def __len__(self):
-        return self.length
-
 class RealNetwork(nn.Module):
     def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, activation=torch.tanh):
         super(RealNetwork, self).__init__()
