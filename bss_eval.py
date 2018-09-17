@@ -1,5 +1,5 @@
 import mir_eval
-from TwoSourceMixtureDataset import *
+from two_source_mixture import *
 
 class BSSMetrics:
     def __init__(self, sdr=0, sir=0, sar=0):

@@ -44,19 +44,19 @@ class TwoSourceMixtureDataset(Dataset):
         sigf, interf = self.mixes[i] # get sig and interference file
         return self._getmix(sigf, interf)
 
-def collate_and_trim(batch, axis=0, hop=1):
+def collate_and_trim(batch, axis=0, hop=1, dtype=torch.float):
     keys = list(batch[0].keys())
     outbatch = {key: [] for key in keys}
-    min_length = min([sample[keys[0]].size(dim) for sample in batch])
+    min_length = min([sample[keys[0]].shape[axis] for sample in batch])
     min_length = min_length // hop * hop
     for sample in batch:
-        length = sample[keys[0]].size(dim)
+        length = sample[keys[0]].shape[axis]
         start = (length - min_length) // 2
         for key in keys:
-            indices = range(start, min_length)
+            indices = range(start, start+min_length)
             outbatch[key].append(sample[key].take(indices=indices, axis=axis))
 
-    outbatch = {key: np.stack(values, axis=0) for key, values in outbatch.items()}
+    outbatch = {key: torch.as_tensor(np.stack(values, axis=0), dtype=dtype) for key, values in outbatch.items()}
     return outbatch
 
 def get_speech_files(speaker_path, speakers=[], num_train=8):

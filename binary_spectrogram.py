@@ -131,7 +131,10 @@ def main():
         raw_fname = 'val/raw_data%d.npz'
         sample = valset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
-        mix_mag, mix_phase = stft.transform(sample['mixture'])
+        mix_mag, mix_phase = stft.transform(sample['mixture']) 
+        targ_mag, targ_phase = stft.transform(target)
+        inter_mag, inter_phase = stft.transform(inter)
+        ibm = make_binary_mask(targ_mag - inter_mag, dtype=np.uint8)
         bmag = binarize(mix_mag, bins)
         np.savez(
             dataset_dir + binary_fname,
