@@ -35,7 +35,7 @@ def compute_s_target(pred, target):
     target (T)
     '''
     return np.mean(target*pred)/\
-        torch.mean(target**2)*target
+        np.mean(target**2)*target
 
 def compute_source_projection(pred, sources):
     '''
@@ -132,8 +132,8 @@ def test_metrics():
     trainset = TwoSourceMixtureDataset(speeches, noises)
     for i in range(len(trainset)):
         sample = trainset[i]
-        pred = sample['mixture'] + torch.rand(sample['mixture'].size())*0.01
-        sources = torch.stack([sample['target'], sample['interference']], dim=1)
+        pred = sample['mixture'] + np.random.random(sample['mixture'].shape())*0.01
+        sources = np.stack([sample['target'], sample['interference']], axis=1)
         metric = bss_eval(pred, sources)
         sdr, sir, sar = bss_eval_test(pred.numpy(), sources.numpy().T)
         print('SDR Error: ', (sdr - metric.sdr.numpy())**2, sdr, metric.sdr.numpy())
