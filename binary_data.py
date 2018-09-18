@@ -73,9 +73,9 @@ class BinaryDataset():
         self.length = len(flist)
 
     def __getitem__(self, i):
-        fname = self.data_dir + ('binary_data%d.npz'%i)
-        data = np.load(fname)
-        return {'bmag': data['bmag'], 'ibm': data['ibm']}
+        binary_fname = self.data_dir + ('binary_data%d.npz'%i)
+        binary_data = np.load(binary_fname)
+        return {'bmag': binary_data['bmag'], 'ibm': binary_data['ibm']}
 
     def __len__(self):
         return self.length
@@ -89,9 +89,9 @@ class RawDataset():
         self.length = len(flist)
 
     def __getitem__(self, i):
-        fname = self.data_dir + ('binary_data%d.npz'%i)
-        data = np.load(fname)
-        return {'mix': data['mix'], 'target': data['target']}
+        raw_fname = self.data_dir + ('raw_data%d.npz'%i)
+        raw_data = np.load(raw_fname)
+        return {'mix': raw_data['mix'], 'targ': raw_data['targ']}
 
     def __len__(self):
         return self.length
@@ -116,7 +116,7 @@ def main():
     x = []
     for i in range(0, len(trainset), 10):
         sample = trainset[i]
-        mix_mag, mix_phase = stft.transform(sample['mixture'])
+        mix_mag, mix_phase = stft(sample['mixture'])
         x.append(mix_mag.reshape(-1))
     centers, bins = kmeans_qlevels(np.concatenate(x, axis=0))
 

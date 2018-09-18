@@ -57,10 +57,6 @@ def make_dataset(batchsize, seed=0):
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
     return train_dl, val_dl
 
-def make_model(device=torch.device('cpu')):
-    real_net = RealNetwork(2052, 513, fc_sizes=[1024, 1024]).to(device)
-    return real_net
-
 def main():
     parser = argparse.ArgumentParser(description='real network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
@@ -77,12 +73,12 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize)
-    model = make_model(device)
+    model = RealNetwork(2052, 513, fc_sizes=[1024, 1024]).to(device)
     print(model)
     loss = torch.nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
-    def evaluate_model(model, batch):
+    def model_loss(model, binary_batch, compute_bss=False):
         bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
         premask = model(bmag)
         cost = loss(premask, ibm)
@@ -95,7 +91,7 @@ def main():
         model.train()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()
-            cost = evaluate_model(model, batch)
+            cost = model_loss(model, batch)
             total_cost += cost.data
             cost.backward()
             optimizer.step()
@@ -108,7 +104,7 @@ def main():
             bss_metrics = BSSMetricsList()
             model.eval()
             for count, batch in enumerate(val_dl):
-                cost = evaluate_model(model, batch)
+                cost = model_loss(model, batch)
                 total_cost += cost.data
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)
