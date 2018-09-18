@@ -89,7 +89,7 @@ class RawDataset():
         self.length = len(flist)
 
     def __getitem__(self, i):
-        fname = self.data_dir + ('binary_data%d.npz'%i)
+        fname = self.data_dir + ('raw_data%d.npz'%i)
         data = np.load(fname)
         return {'mix': data['mix'], 'target': data['target']}
 
@@ -116,14 +116,14 @@ def main():
     x = []
     for i in range(0, len(trainset), 10):
         sample = trainset[i]
-        mix_mag, mix_phase = stft.transform(sample['mixture'])
+        mix_mag, mix_phase = stft(sample['mixture'])
         x.append(mix_mag.reshape(-1))
     centers, bins = kmeans_qlevels(np.concatenate(x, axis=0))
 
     # Output training binarization
     for i in range(len(trainset)):
         binary_fname = 'train/binary_data%d.npz' % i
-        raw_fname = 'train/raw_data%d.npz'
+        raw_fname = 'train/raw_data%d.npz' % i
         sample = trainset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
         mix_mag, mix_phase = stft(mix)
@@ -145,7 +145,7 @@ def main():
     # Output validation binarization
     for i in range(len(valset)):
         binary_fname = 'val/binary_data%d.npz' % i
-        raw_fname = 'val/raw_data%d.npz'
+        raw_fname = 'val/raw_data%d.npz' % i
         sample = valset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
         mix_mag, mix_phase = stft(mix)
