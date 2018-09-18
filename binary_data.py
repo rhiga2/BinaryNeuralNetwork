@@ -123,7 +123,7 @@ def main():
     # Output training binarization
     for i in range(len(trainset)):
         binary_fname = 'train/binary_data%d.npz' % i
-        raw_fname = 'train/raw_data%d.npz'
+        raw_fname = 'train/raw_data%d.npz' % i
         sample = trainset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
         mix_mag, mix_phase = stft(mix)
@@ -145,7 +145,7 @@ def main():
     # Output validation binarization
     for i in range(len(valset)):
         binary_fname = 'val/binary_data%d.npz' % i
-        raw_fname = 'val/raw_data%d.npz'
+        raw_fname = 'val/raw_data%d.npz' % i
         sample = valset[i]
         mix, target, inter = sample['mixture'], sample['target'], sample['interference']
         mix_mag, mix_phase = stft(mix)
