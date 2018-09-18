@@ -24,9 +24,9 @@ class BSSMetricsList:
         self.sars.extend(metrics.sars)
 
     def mean(self):
-        sdr = torch.mean(torch.tensor(self.sdrs))
-        sir = torch.mean(torch.tensor(self.sirs))
-        sar = torch.mean(torch.tensor(self.sars))
+        sdr = np.mean(torch.tensor(self.sdrs))
+        sir = np.mean(torch.tensor(self.sirs))
+        sar = np.mean(torch.tensor(self.sars))
         return sdr, sir, sar
 
 def compute_s_target(pred, target):
@@ -34,7 +34,7 @@ def compute_s_target(pred, target):
     pred (T)
     target (T)
     '''
-    return torch.mean(target*pred)/\
+    return np.mean(target*pred)/\
         torch.mean(target**2)*target
 
 def compute_source_projection(pred, sources):
@@ -42,19 +42,19 @@ def compute_source_projection(pred, sources):
     pred (T)
     sources (T, S)
     '''
-    pinv_pred = torch.matmul(torch.pinverse(sources), pred)
-    return torch.matmul(sources, pinv_pred)
+    pinv_pred = np.matmul(np.pinv(sources), pred)
+    return np.matmul(sources, pinv_pred)
 
 def compute_sdr(pred, s_target):
     e_total = pred - s_target
-    return 10*torch.log10(torch.mean(s_target**2)/torch.mean(e_total**2))
+    return 10*np.log10(np.mean(s_target**2)/np.mean(e_total**2))
 
 def compute_sir(s_target, e_inter):
-    return 10*torch.log10(torch.mean(s_target**2)/torch.mean(e_inter**2))
+    return 10*np.log10(np.mean(s_target**2)/np.mean(e_inter**2))
 
 def compute_sar(s_target, e_inter, e_art):
     source_projection = s_target + e_inter
-    return 10*torch.log10(torch.mean(source_projection**2)/torch.mean(e_art**2))
+    return 10*np.log10(np.mean(source_projection**2)/np.mean(e_art**2))
 
 def bss_eval(pred, sources, target_idx=0):
     '''
