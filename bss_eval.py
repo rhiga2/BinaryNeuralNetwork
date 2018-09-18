@@ -42,7 +42,7 @@ def compute_source_projection(pred, sources):
     pred (T)
     sources (T, S)
     '''
-    pinv_pred = np.matmul(np.pinv(sources), pred)
+    pinv_pred = np.matmul(np.linalg.pinv(sources), pred)
     return np.matmul(sources, pinv_pred)
 
 def compute_sdr(pred, s_target):
