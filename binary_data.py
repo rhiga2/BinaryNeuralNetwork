@@ -46,7 +46,7 @@ def quantize(x, bins, centers):
     qx = centers[digit_x] # qx = quantized x
     return qx
 
-def make_binary_mask(premask, dtype=torch.float):
+def make_binary_mask(premask, dtype=np.float):
     return np.array(premask > 0, dtype=dtype)
 
 def stft(x, window='hann', nperseg=1024, noverlap=768):
@@ -91,7 +91,7 @@ class RawDataset():
     def __getitem__(self, i):
         raw_fname = self.data_dir + ('raw_data%d.npz'%i)
         raw_data = np.load(raw_fname)
-        return {'mix': raw_data['mix'], 'targ': raw_data['targ']}
+        return {'mix': raw_data['mix'], 'target': raw_data['target']}
 
     def __len__(self):
         return self.length
