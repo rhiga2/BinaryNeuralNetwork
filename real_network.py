@@ -51,9 +51,7 @@ def make_dataset(batchsize, seed=0):
     np.random.seed(seed)
     trainset = BinaryDataset('/media/data/binary_audio/train')
     valset = BinaryDataset('/media/data/binary_audio/val')
-    collate_fn = lambda x: collate_and_trim(x, axis=1, hop=1)
-    train_dl = DataLoader(trainset, batch_size=batchsize,
-        shuffle=True, collate_fn=collate_fn)
+    train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
     return train_dl, val_dl
 
@@ -108,7 +106,7 @@ def main():
                 total_cost += cost.data
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)
-    torch.save(model.state_dict(), 'models/real_network.model')
+            torch.save(model.state_dict(), 'models/real_network.model')
 
 if __name__ == '__main__':
     main()
