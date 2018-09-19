@@ -96,6 +96,9 @@ class RawDataset():
     def __len__(self):
         return self.length
 
+def crop_length(x, hop):
+    return x[:len(x)//hop*hop]
+
 def main():
     np.random.seed(0)
     speaker_path = '/media/data/timit-wav/train'
@@ -107,7 +110,8 @@ def main():
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers, num_train=6)
     train_noises, val_noises = get_speech_files(speaker_path, inter_speakers, num_train=6)
 
-    trainset = TwoSourceMixtureDataset(train_speeches, train_noises)
+    cut = lambda x: crop_length(x, 256)
+    trainset = TwoSourceMixtureDataset(train_speeches, train_noises, transform=cut)
     valset = TwoSourceMixtureDataset(val_speeches, val_noises)
     print('Train Length: ', len(trainset))
     print('Validation Length: ', len(valset))
