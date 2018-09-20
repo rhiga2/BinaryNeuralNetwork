@@ -24,9 +24,9 @@ class BSSMetricsList:
         self.sars.extend(metrics.sars)
 
     def mean(self):
-        sdr = np.mean(torch.tensor(self.sdrs))
-        sir = np.mean(torch.tensor(self.sirs))
-        sar = np.mean(torch.tensor(self.sars))
+        sdr = np.mean(self.sdrs)
+        sir = np.mean(self.sirs)
+        sar = np.mean(self.sars)
         return sdr, sir, sar
 
 def compute_s_target(pred, target):
