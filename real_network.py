@@ -10,13 +10,15 @@ from two_source_mixture import *
 from binary_data import *
 import argparse
 
-class RealNetwork(nn.Module):
-    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, activation=torch.tanh):
-        super(RealNetwork, self).__init__()
+class BitwiseNetwork(nn.Module):
+    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, activation=torch.tanh,
+    constrainer=torch.tanh):
+        super(BitwiseNetwork, self).__init__()
         self.params = {}
         self.num_layers = len(fc_sizes) + 1
         fc_sizes = fc_sizes + [output_size,]
         in_size = input_size
+        self.constrainer = constrainer
         self.dropout_list = nn.ModuleList()
         for i, out_size in enumerate(fc_sizes):
             wname, bname = 'weight%d' % (i+1,), 'bias%d' % (i+1,)
@@ -56,7 +58,7 @@ def make_dataset(batchsize, seed=0):
     return train_dl, val_dl
 
 def main():
-    parser = argparse.ArgumentParser(description='real network')
+    parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=16,
@@ -71,7 +73,7 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize)
-    model = RealNetwork(2052, 513, fc_sizes=[1024, 1024]).to(device)
+    model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024]).to(device)
     print(model)
     loss = torch.nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
@@ -82,6 +84,7 @@ def main():
         cost = loss(premask, ibm)
         return cost
 
+    print('Real Network Training')
     for epoch in range(args.epochs):
         total_cost = 0
         count = 0
@@ -107,6 +110,10 @@ def main():
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)
             torch.save(model.state_dict(), 'models/real_network.model')
+
+    print('Noisy Training')
+    model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024], activation=).to(device)
+
 
 if __name__ == '__main__':
     main()
