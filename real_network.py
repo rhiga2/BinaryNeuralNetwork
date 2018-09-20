@@ -51,7 +51,8 @@ def make_dataset(batchsize, seed=0):
     np.random.seed(seed)
     trainset = BinaryDataset('/media/data/binary_audio/train')
     valset = BinaryDataset('/media/data/binary_audio/val')
-    train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True)
+    collate_fn = lambda x: collate_and_trim(x, axis=1)
+    train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True, collate_fn=collate_fn)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
     return train_dl, val_dl
 
@@ -62,7 +63,8 @@ def main():
     parser.add_argument('--batchsize', '-b', type=int, default=16,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
-    parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
+    parser.add_argument('--weight_decay', '-wd', type=float, default=0)
+    parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -71,14 +73,14 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize)
-    model = RealNetwork(2052, 513, fc_sizes=[1024, 1024]).to(device)
+    model = RealNetwork(2052, 513, fc_sizes=[1024, 1024], dropout=args.dropout).to(device)
     print(model)
     loss = torch.nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
     def model_loss(model, binary_batch, compute_bss=False):
         bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
-        premask = model(bmag)
+        premask = model(2*bmag-1)
         cost = loss(premask, ibm)
         return cost
 

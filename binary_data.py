@@ -107,18 +107,18 @@ def main():
     inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
                     'mwad0']
 
-    train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers, num_train=6)
-    train_noises, val_noises = get_speech_files(speaker_path, inter_speakers, num_train=6)
+    train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers, num_train=7)
+    train_noises, val_noises = get_speech_files(speaker_path, inter_speakers, num_train=7)
 
-    cut = lambda x: crop_length(x, 256)
-    trainset = TwoSourceMixtureDataset(train_speeches, train_noises, transform=cut)
-    valset = TwoSourceMixtureDataset(val_speeches, val_noises)
+    crop = lambda x: crop_length(x, 256)
+    trainset = TwoSourceMixtureDataset(train_speeches, train_noises, transform=crop)
+    valset = TwoSourceMixtureDataset(val_speeches, val_noises, transform=crop)
     print('Train Length: ', len(trainset))
     print('Validation Length: ', len(valset))
 
     dataset_dir = '/media/data/binary_audio/'
     x = []
-    for i in range(0, len(trainset)):
+    for i in range(0, len(trainset), 50):
         sample = trainset[i]
         mix_mag, mix_phase = stft(sample['mixture'])
         x.append(mix_mag.reshape(-1))
