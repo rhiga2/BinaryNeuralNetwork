@@ -43,7 +43,7 @@ class BitwiseNetwork(nn.Module):
         in_size = input_size
         self.dropout_list = nn.ModuleList()
         self.betas = []
-        self.bin_mode = False
+        self.mode = 'real'
         for i, out_size in enumerate(fc_sizes):
             wname = 'weight%d' % (i+1,)
             bname = 'bias%d' % (i+1,)
@@ -69,10 +69,10 @@ class BitwiseNetwork(nn.Module):
             weight = getattr(self, wname)
             bias = getattr(self, bname)
 
-            if self.bin_mode:
+            if self.mode == 'noisy':
                 modified_w = binarize_params(weight, self.betas[i])
                 modified_b = binarize_params(bias, self.betas[i])
-            else:
+            elif self.mode == 'real':
                 modified_w = torch.tanh(weight)
                 modified_b = torch.tanh(bias)
 
@@ -86,8 +86,8 @@ class BitwiseNetwork(nn.Module):
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
 
-    def binarize(self):
-        self.bin_mode = True
+    def noisy(self):
+        self.mode = 'noisy'
         for name, param in self.state_dict().items():
             setattr(self, name, nn.Parameter(torch.tanh(param), requires_grad=True))
 
@@ -170,7 +170,7 @@ def main():
         model.to(device)
 
     print('Noisy Training')
-    model.binarize()
+    model.noisy()
     for epoch in range(args.epochs):
         model.train()
         model.update_betas()
