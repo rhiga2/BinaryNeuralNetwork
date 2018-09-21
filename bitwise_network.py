@@ -119,6 +119,7 @@ def main():
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
+    parser.add_argument('--skip_real', type=bool, default=False)
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -138,41 +139,44 @@ def main():
         cost = loss(premask, ibm)
         return cost
 
-    print('Real Network Training')
-    for epoch in range(args.epochs):
-        total_cost = 0
-        count = 0
-        bss_metrics = BSSMetricsList()
-        model.train()
-        for count, batch in enumerate(train_dl):
-            optimizer.zero_grad()
-            cost = model_loss(model, batch)
-            total_cost += cost.data
-            cost.backward()
-            optimizer.step()
-        avg_cost = total_cost / (count + 1)
-
-        if epoch % 8 == 0:
-            print('Epoch %d Training Cost: ' % epoch, avg_cost)
-
+    if not skip_real:
+        print('Real Network Training')
+        for epoch in range(args.epochs):
             total_cost = 0
+            count = 0
             bss_metrics = BSSMetricsList()
-            model.eval()
-            for count, batch in enumerate(val_dl):
+            model.train()
+            for count, batch in enumerate(train_dl):
+                optimizer.zero_grad()
                 cost = model_loss(model, batch)
                 total_cost += cost.data
+                cost.backward()
+                optimizer.step()
             avg_cost = total_cost / (count + 1)
-            print('Validation Cost: ', avg_cost)
-            torch.save(model.state_dict(), 'models/real_network.model')
+
+            if epoch % 8 == 0:
+                print('Epoch %d Training Cost: ' % epoch, avg_cost)
+
+                total_cost = 0
+                bss_metrics = BSSMetricsList()
+                model.eval()
+                for count, batch in enumerate(val_dl):
+                    cost = model_loss(model, batch)
+                    total_cost += cost.data
+                avg_cost = total_cost / (count + 1)
+                print('Validation Cost: ', avg_cost)
+                torch.save(model.state_dict(), 'models/real_network.model')
+    else:
+        model.load_state_dict(torch.load('models/real_network.model'))
 
     print('Noisy Training')
     model.binarize()
     for epoch in range(args.epochs):
-        betas = model.update_betas()
+        model.train()
+        model.update_betas()
         total_cost = 0
         count = 0
         bss_metrics = BSSMetricsList()
-        model.train()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()
             cost = model_loss(model, batch)
