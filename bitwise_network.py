@@ -11,50 +11,6 @@ from two_source_mixture import *
 from binary_data import *
 import argparse
 
-class BitwiseNetwork(nn.Module):
-    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, activation=torch.tanh,
-    constrainer=torch.tanh):
-        super(BitwiseNetwork, self).__init__()
-        self.params = {}
-        self.num_layers = len(fc_sizes) + 1
-        fc_sizes = fc_sizes + [output_size,]
-        in_size = input_size
-        self.constrainer = constrainer
-        self.dropout_list = nn.ModuleList()
-        for i, out_size in enumerate(fc_sizes):
-            wname, bname = 'weight%d' % (i+1,), 'bias%d' % (i+1,)
-            w = torch.empty(out_size, in_size)
-            nn.init.xavier_uniform_(w)
-            b = torch.zeros(out_size)
-            in_size = out_size
-            setattr(self, wname, nn.Parameter(w, requires_grad=True, name=wname))
-            setattr(self, bname, nn.Parameter(b, requires_grad=True, name=bname))
-            self.dropout_list.append(nn.Dropout(dropout))
-        self.activation = activation
-
-    def forward(self, x):
-        '''
-        * Input is a tensor of shape (N, F, T)
-        * Output is a tensor of shape (N, F, T)
-        '''
-        # Flatten (N, F, T) -> (NT, F)
-        h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
-        for i in range(self.num_layers):
-            wname, bname = 'weight%d' % (i+1,), 'bias%d' % (i+1,)
-            modified_w = torch.tanh(getattr(self, wname))
-            modified_b = torch.tanh(getattr(self, bname))
-            h = F.linear(h, modified_w, modified_b)
-            if i != self.num_layers:
-                h = self.activation(h)
-        # Unflatten (NT, F) -> (N, F, T)
-        y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
-        return y
-
-    def contrain_params(self):
-        for param in self.parameters():
-            pass
-
-
 class BinarizePreactivations(Function):
     @staticmethod
     def forward(ctx, x):
@@ -77,6 +33,73 @@ class BinarizeParams(Function):
 
 binarize_preactivations = BinarizePreactivations.apply
 binarize_params = BinarizeParams.apply
+
+class BitwiseNetwork(nn.Module):
+    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0):
+        super(BitwiseNetwork, self).__init__()
+        self.params = {}
+        self.num_layers = len(fc_sizes) + 1
+        fc_sizes = fc_sizes + [output_size,]
+        in_size = input_size
+        self.dropout_list = nn.ModuleList()
+        self.betas = []
+        self.bin_mode = False
+        for i, out_size in enumerate(fc_sizes):
+            wname = 'weight%d' % (i+1,)
+            bname = 'bias%d' % (i+1,)
+            w = torch.empty(out_size, in_size)
+            nn.init.xavier_uniform_(w)
+            b = torch.zeros(out_size)
+            in_size = out_size
+            setattr(self, wname, nn.Parameter(w, requires_grad=True, name=wname))
+            setattr(self, bname, nn.Parameter(b, requires_grad=True, name=bname))
+            self.dropout_list.append(nn.Dropout(dropout))
+            self.betas.append(0)
+
+    def forward(self, x):
+        '''
+        * Input is a tensor of shape (N, F, T)
+        * Output is a tensor of shape (N, F, T)
+        '''
+        # Flatten (N, F, T) -> (NT, F)
+        h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
+        for i in range(self.num_layers):
+            wname = 'weight%d' % (i+1,)
+            bname = 'bias%d' % (i+1,)
+            weight = getattr(self, wname)
+            bias = getattr(self, bname)
+
+            if self.bin_mode:
+                modified_w = binarize_params(weight, self.betas[i])
+                modified_b = binarize_params(bias, self.betas[i])
+            else:
+                modified_w = torch.tanh(weight)
+                modified_b = torch.tanh(bias)
+
+            h = F.linear(h, modified_w, modified_b)
+            if i != self.num_layers:
+                if self.bin_mode:
+                    h = torch.tanh(h)
+                else:
+                    h = binarize_preactivations(h)
+        # Unflatten (NT, F) -> (N, F, T)
+        y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
+        return y
+
+    def binarize(self):
+        self.bin_mode = True
+        for name, param in self.state_dict().items:
+            setattr(name, torch.tanh(param))
+
+    def update_betas(self):
+        self.betas = []
+        for layer_idx in range(self.num_layers):
+            wname = 'weight%d' % (i+1,)
+            bname = 'bias%d' % (i+1,)
+            weight = getattr(self, wname).data.numpy()
+            bias = getattr(self, bname).data.numpy()
+            layer_params = np.abs(np.concatenate((weight, bias), axis=1))
+            self.betas.append(np.percentile(layer_params, sparsity))
 
 def make_dataset(batchsize, seed=0):
     np.random.seed(seed)
@@ -143,7 +166,33 @@ def main():
             torch.save(model.state_dict(), 'models/real_network.model')
 
     print('Noisy Training')
+    model.binarize()
+    for epoch in range(args.epochs):
+        betas = model.update_betas()
+        total_cost = 0
+        count = 0
+        bss_metrics = BSSMetricsList()
+        model.train()
+        for count, batch in enumerate(train_dl):
+            optimizer.zero_grad()
+            cost = model_loss(model, batch)
+            total_cost += cost.data
+            cost.backward()
+            optimizer.step()
+        avg_cost = total_cost / (count + 1)
 
+        if epoch % 8 == 0:
+            print('Epoch %d Noisy Training Cost: ' % epoch, avg_cost)
+
+            total_cost = 0
+            bss_metrics = BSSMetricsList()
+            model.eval()
+            for count, batch in enumerate(val_dl):
+                cost = model_loss(model, batch)
+                total_cost += cost.data
+            avg_cost = total_cost / (count + 1)
+            print('Noisy Validation Cost: ', avg_cost)
+            torch.save(model.state_dict(), 'models/bitwise_network.model')
 
 if __name__ == '__main__':
     main()
