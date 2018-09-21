@@ -25,7 +25,7 @@ class BinarizePreactivations(Function):
 class BinarizeParams(Function):
     @staticmethod
     def forward(ctx, x, beta):
-        return torch.tensor((x > beta) - (x < beta), dtype=x.dtype)
+        return torch.tensor((x > beta) - (x < beta), dtype=x.dtype, device=x.device)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -89,16 +89,16 @@ class BitwiseNetwork(nn.Module):
     def binarize(self):
         self.bin_mode = True
         for name, param in self.state_dict().items():
-            setattr(name, torch.tanh(param))
+            setattr(self, name, nn.Parameter(torch.tanh(param), requires_grad=True))
 
-    def update_betas(self):
+    def update_betas(self, sparsity=0.95):
         self.betas = []
-        for layer_idx in range(self.num_layers):
+        for i in range(self.num_layers):
             wname = 'weight%d' % (i+1,)
             bname = 'bias%d' % (i+1,)
-            weight = getattr(self, wname).data.numpy()
-            bias = getattr(self, bname).data.numpy()
-            layer_params = np.abs(np.concatenate((weight, bias), axis=1))
+            weight = getattr(self, wname).data.cpu().numpy()
+            bias = getattr(self, bname).data.cpu().numpy()
+            layer_params = np.abs(np.concatenate((weight, np.expand_dims(bias, axis=1)), axis=1))
             self.betas.append(np.percentile(layer_params, sparsity))
 
 def make_dataset(batchsize, seed=0):
@@ -119,7 +119,7 @@ def main():
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
-    parser.add_argument('--skip_real', type=bool, default=False)
+    parser.add_argument('--skip_real', action='store_true')
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -139,11 +139,10 @@ def main():
         cost = loss(premask, ibm)
         return cost
 
-    if not skip_real:
+    if not args.skip_real:
         print('Real Network Training')
         for epoch in range(args.epochs):
             total_cost = 0
-            count = 0
             bss_metrics = BSSMetricsList()
             model.train()
             for count, batch in enumerate(train_dl):
@@ -154,7 +153,7 @@ def main():
                 optimizer.step()
             avg_cost = total_cost / (count + 1)
 
-            if epoch % 8 == 0:
+            if epoch % 4 == 0:
                 print('Epoch %d Training Cost: ' % epoch, avg_cost)
 
                 total_cost = 0
@@ -168,6 +167,7 @@ def main():
                 torch.save(model.state_dict(), 'models/real_network.model')
     else:
         model.load_state_dict(torch.load('models/real_network.model'))
+        model.to(device)
 
     print('Noisy Training')
     model.binarize()
@@ -175,7 +175,6 @@ def main():
         model.train()
         model.update_betas()
         total_cost = 0
-        count = 0
         bss_metrics = BSSMetricsList()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()
@@ -185,7 +184,7 @@ def main():
             optimizer.step()
         avg_cost = total_cost / (count + 1)
 
-        if epoch % 8 == 0:
+        if epoch % 4 == 0:
             print('Epoch %d Noisy Training Cost: ' % epoch, avg_cost)
 
             total_cost = 0
