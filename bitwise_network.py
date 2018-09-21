@@ -19,7 +19,7 @@ class BinarizePreactivations(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        x = ctx.saved_tensors
+        x = ctx.saved_tensors[0]
         return grad_output * (1 - torch.tanh(x)**2)
 
 class BinarizeParams(Function):
@@ -88,7 +88,7 @@ class BitwiseNetwork(nn.Module):
 
     def binarize(self):
         self.bin_mode = True
-        for name, param in self.state_dict().items:
+        for name, param in self.state_dict().items():
             setattr(name, torch.tanh(param))
 
     def update_betas(self):
