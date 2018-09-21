@@ -27,8 +27,8 @@ class BitwiseNetwork(nn.Module):
             nn.init.xavier_uniform_(w)
             b = torch.zeros(out_size)
             in_size = out_size
-            setattr(self, wname, nn.Parameter(w, requires_grad=True, name=wname))
-            setattr(self, bname, nn.Parameter(b, requires_grad=True, name=bname))
+            setattr(self, wname, nn.Parameter(w, requires_grad=True))
+            setattr(self, bname, nn.Parameter(b, requires_grad=True))
             self.dropout_list.append(nn.Dropout(dropout))
         self.activation = activation
 
