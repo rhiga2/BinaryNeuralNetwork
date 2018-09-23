@@ -25,7 +25,7 @@ class BinarizePreactivations(Function):
 class BinarizeParams(Function):
     @staticmethod
     def forward(ctx, x, beta):
-        return torch.tensor((x > beta) - (x < -beta), dtype=x.dtype, device=x.device)
+        return torch.tensor(x > beta, dtype=x.dtype, device=x.device) - torch.tensor(x < -beta, dtype=x.dtype, device=x.device)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -35,7 +35,7 @@ binarize_preactivations = BinarizePreactivations.apply
 binarize_params = BinarizeParams.apply
 
 class BitwiseNetwork(nn.Module):
-    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0):
+    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, temp=1):
         super(BitwiseNetwork, self).__init__()
         self.params = {}
         self.num_layers = len(fc_sizes) + 1
@@ -44,6 +44,7 @@ class BitwiseNetwork(nn.Module):
         self.dropout_list = nn.ModuleList()
         self.betas = []
         self.mode = 'real'
+        self.temp = temp
         for i, out_size in enumerate(fc_sizes):
             wname = 'weight%d' % (i+1,)
             bname = 'bias%d' % (i+1,)
@@ -77,11 +78,12 @@ class BitwiseNetwork(nn.Module):
                 modified_b = torch.tanh(bias)
 
             h = F.linear(h, modified_w, modified_b)
-            if i != self.num_layers:
+            if i < self.num_layers - 1:
                 if self.mode == 'real':
                     h = torch.tanh(h)
                 elif self.mode == 'noisy':
                     h = binarize_preactivations(h)
+        h = h / self.temp
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
@@ -91,7 +93,7 @@ class BitwiseNetwork(nn.Module):
         for name, param in self.state_dict().items():
             setattr(self, name, nn.Parameter(torch.tanh(param), requires_grad=True))
 
-    def update_betas(self, sparsity=0.05):
+    def update_betas(self, sparsity=0.95):
         self.betas = []
         for i in range(self.num_layers):
             wname = 'weight%d' % (i+1,)
@@ -114,11 +116,11 @@ def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
                         help='Number of epochs')
-    parser.add_argument('--batchsize', '-b', type=int, default=16,
+    parser.add_argument('--batchsize', '-b', type=int, default=32,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
-    parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
+    parser.add_argument('--dropout', '-dropout', type=float, default=0.05)
     parser.add_argument('--skip_real', action='store_true')
     args = parser.parse_args()
 
@@ -128,7 +130,7 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize)
-    model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024], dropout=args.dropout).to(device)
+    model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048], dropout=args.dropout).to(device)
     print(model)
     loss = torch.nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
