@@ -25,7 +25,7 @@ class BinarizePreactivations(Function):
 class BinarizeParams(Function):
     @staticmethod
     def forward(ctx, x, beta):
-        return torch.tensor((x > beta) - (x < beta), dtype=x.dtype, device=x.device)
+        return torch.tensor((x > beta) - (x < -beta), dtype=x.dtype, device=x.device)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -78,9 +78,9 @@ class BitwiseNetwork(nn.Module):
 
             h = F.linear(h, modified_w, modified_b)
             if i != self.num_layers:
-                if self.bin_mode:
+                if self.mode == 'real':
                     h = torch.tanh(h)
-                else:
+                elif self.mode == 'noisy':
                     h = binarize_preactivations(h)
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
