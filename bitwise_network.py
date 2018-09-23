@@ -91,7 +91,7 @@ class BitwiseNetwork(nn.Module):
         for name, param in self.state_dict().items():
             setattr(self, name, nn.Parameter(torch.tanh(param), requires_grad=True))
 
-    def update_betas(self, sparsity=0.95):
+    def update_betas(self, sparsity=0.05):
         self.betas = []
         for i in range(self.num_layers):
             wname = 'weight%d' % (i+1,)
