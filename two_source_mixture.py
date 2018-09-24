@@ -13,7 +13,6 @@ class TwoSourceMixtureDataset(Dataset):
         random_start=True, transform=None):
         self.fs = fs
         self.snr = np.power(10, snr/20)
-        self.random_start = random_start
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
 
@@ -70,7 +69,7 @@ def get_speech_files(speaker_path, speakers=[], num_train=8):
         if speaker[-1] != '/':
             speaker += '/'
         files = glob.glob(speaker_path + speaker + '*.wav')
-        random.shuffle(files)
+        # rnadom.shuffle(files)
         train_speeches.extend(files[:num_train])
         val_speeches.extend(files[num_train:])
     return train_speeches, val_speeches
@@ -80,7 +79,7 @@ def get_noise_files(noise_path, noises, num_train=2):
     if noise_path[-1] != '/':
         noise_path += '/'
     noises = [noise_path + noise for noise in noises]
-    random.shuffle(noises)
+    # random.shuffle(noises)
     train_noises = noises[:num_train]
     val_noises = noises[num_train:]
     return train_noises, val_noises
