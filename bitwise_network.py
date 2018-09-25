@@ -77,7 +77,6 @@ class BitwiseNetwork(nn.Module):
             elif self.mode == 'noisy':
                 modified_w = binarize_params(weight, self.betas[i])
                 modified_b = binarize_params(bias, self.betas[i])
-                print(modified_w)
 
             h = F.linear(h, modified_w, modified_b)
             if self.mode == 'real':
@@ -117,15 +116,17 @@ def make_dataset(batchsize, seed=0):
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
-    parser.add_argument('--epochs', '-e', type=int, default=64,
+    parser.add_argument('--epochs', '-e', type=int, default=256,
                         help='Number of epochs')
-    parser.add_argument('--batchsize', '-b', type=int, default=64,
+    parser.add_argument('--batchsize', '-b', type=int, default=32,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
-    parser.add_argument('--lr_decay', '-lrd', type=float, default=0)
+    parser.add_argument('--lr_decay', '-lrd', type=float, default=0.95)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
-    parser.add_argument('--dropout', '-dropout', type=float, default=0.4)
-    parser.add_argument('--train_real', action='store_false')
+    parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
+    parser.add_argument('--train_noisy', action='store_true')
+    parser.add_argument('--sparsity', '-sparsity', type=float, default=95.0)
+    parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -138,16 +139,19 @@ def main():
     print(model)
     loss = nn.MSELoss()
     #loss = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    lr = args.learning_rate
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
     def model_loss(model, binary_batch, compute_bss=False):
         bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
         ibm = 2*ibm-1
         premask = model(2*bmag-1)
         cost = loss(premask, ibm)
+        for p in model.parameters():
+             cost += args.l1_reg * torch.norm(p, 1)
         return cost
 
-    if args.train_real:
+    if not args.train_noisy:
         print('Real Network Training')
         for epoch in range(args.epochs):
             total_cost = 0
@@ -173,8 +177,9 @@ def main():
                 avg_cost = total_cost / (count + 1)
                 print('Validation Cost: ', avg_cost)
                 torch.save(model.state_dict(), 'models/real_network.model')
+                lr *= args.lr_decay
                 optimizer = optim.Adam(model.parameters(), 
-                    lr=args.learning_rate / (1 + args.lr_decay*epoch/8),
+                    lr=lr,
                     weight_decay=args.weight_decay)
 
     else:
@@ -182,10 +187,11 @@ def main():
         model.to(device)
         print('Noisy Training')
         model.noisy()
-        optimizer = optim.Adam(model.parameters(), lr=1e-6, weight_decay=args.weight_decay)
+        lr = args.learning_rate
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
         for epoch in range(args.epochs):
             model.train()
-            model.update_betas()
+            model.update_betas(sparsity=args.sparsity)
             total_cost = 0
             bss_metrics = BSSMetricsList()
             for count, batch in enumerate(train_dl):
@@ -208,8 +214,9 @@ def main():
                 avg_cost = total_cost / (count + 1)
                 print('Noisy Validation Cost: ', avg_cost)
                 torch.save(model.state_dict(), 'models/bitwise_network.model')
+                lr *= args.lr_decay
                 optimizer = optim.Adam(model.parameters(),
-                    lr=args.learning_rate / (1 + args.lr_decay*epoch/8),
+                    lr=lr,
                     weight_decay=args.weight_decay)
 
 if __name__ == '__main__':
