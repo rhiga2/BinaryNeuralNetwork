@@ -107,7 +107,6 @@ def make_mixture_set():
                     'dr1/fsma0', 'dr1/ftbr0']
     inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
                     'dr1/mwad0', 'dr1/mwar0']
-
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers, num_train=7)
     train_noises, val_noises = get_speech_files(speaker_path, inter_speakers, num_train=7)
 
