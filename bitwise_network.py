@@ -70,7 +70,7 @@ class BitwiseNetwork(nn.Module):
             bname = 'bias%d' % (i,)
             weight = getattr(self, wname)
             bias = getattr(self, bname)
-            
+
             if self.mode == 'real':
                 modified_w = torch.tanh(weight)
                 modified_b = torch.tanh(bias)
@@ -173,7 +173,7 @@ def main():
                 avg_cost = total_cost / (count + 1)
                 print('Validation Cost: ', avg_cost)
                 torch.save(model.state_dict(), 'models/real_network.model')
-                optimizer = optim.Adam(model.parameters(), 
+                optimizer = optim.Adam(model.parameters(),
                     lr=args.learning_rate / (1 + args.lr_decay*epoch/8),
                     weight_decay=args.weight_decay)
 
@@ -214,4 +214,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
