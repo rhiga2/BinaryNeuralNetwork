@@ -9,30 +9,8 @@ from bss_eval import *
 from torch.utils.data import Dataset, DataLoader
 from two_source_mixture import *
 from binary_data import *
+from binary_layers import *
 import argparse
-
-class BinarizePreactivations(Function):
-    @staticmethod
-    def forward(ctx, x):
-        ctx.save_for_backward(x)
-        return torch.sign(x)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        x = ctx.saved_tensors[0]
-        return grad_output * (1 - torch.tanh(x)**2)
-
-class BinarizeParams(Function):
-    @staticmethod
-    def forward(ctx, x, beta):
-        return torch.tensor(x > beta, dtype=x.dtype, device=x.device) - torch.tensor(x < -beta, dtype=x.dtype, device=x.device)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return grad_output, None
-
-binarize_preactivations = BinarizePreactivations.apply
-binarize_params = BinarizeParams.apply
 
 class BitwiseNetwork(nn.Module):
     def __init__(self, input_size, output_size, fc_sizes = [], dropout=0):
@@ -41,21 +19,14 @@ class BitwiseNetwork(nn.Module):
         self.num_layers = len(fc_sizes) + 1
         fc_sizes = fc_sizes + [output_size,]
         in_size = input_size
+        self.linear_list = nn.ModuleList()
         self.dropout_list = nn.ModuleList()
-        self.betas = []
-        self.mode = 'real'
+        self.activation = torch.tanh
         for i, out_size in enumerate(fc_sizes):
-            wname = 'weight%d' % (i,)
-            bname = 'bias%d' % (i,)
-            w = torch.empty(out_size, in_size)
-            nn.init.xavier_uniform_(w)
-            b = torch.zeros(out_size)
+            self.linear_list.append(BitwiseLinear(in_size, out_size))
             in_size = out_size
-            setattr(self, wname, nn.Parameter(w, requires_grad=True))
-            setattr(self, bname, nn.Parameter(b, requires_grad=True))
             if i < self.num_layers - 1:
                 self.dropout_list.append(nn.Dropout(dropout))
-            self.betas.append(0)
 
     def forward(self, x):
         '''
@@ -65,43 +36,23 @@ class BitwiseNetwork(nn.Module):
         # Flatten (N, F, T) -> (NT, F)
         h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
         for i in range(self.num_layers):
-            wname = 'weight%d' % (i,)
-            bname = 'bias%d' % (i,)
-            weight = getattr(self, wname)
-            bias = getattr(self, bname)
-
-            if self.mode == 'real':
-                modified_w = torch.tanh(weight)
-                modified_b = torch.tanh(bias)
-            elif self.mode == 'noisy':
-                modified_w = binarize_params(weight, self.betas[i])/weight.size(1)
-                modified_b = binarize_params(bias, self.betas[i])/weight.size(1) 
-
-            h = F.linear(h, modified_w, modified_b)
+            h = self.linear_list[i](h)
             if i < self.num_layers - 1:
-                if self.mode == 'real':
-                    h = torch.tanh(h)
-                elif self.mode == 'noisy':
-                    h = binarize_preactivations(h)
+                h = self.activation(h)
                 h = self.dropout_list[i](h)
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
 
     def noisy(self):
-        self.mode = 'noisy'
-        for name, param in self.state_dict().items():
-            setattr(self, name, nn.Parameter(torch.tanh(param), requires_grad=True))
+        self.activation = bitwise_activation
+        for layer in self.linear_list:
+            layer.noisy()
 
     def update_betas(self, sparsity=95):
-        self.betas = []
-        for i in range(self.num_layers):
-            wname = 'weight%d' % (i,)
-            bname = 'bias%d' % (i,)
-            weight = getattr(self, wname).data.cpu().numpy()
-            bias = getattr(self, bname).data.cpu().numpy()
-            layer_params = np.abs(np.concatenate((weight, np.expand_dims(bias, axis=1)), axis=1))
-            self.betas.append(np.percentile(layer_params, sparsity))
+        for layer in self.linear_list:
+            if layer.mode == 'noisy':
+                layer.update_beta(sparsity=sparsity)
 
 def make_dataset(batchsize, seed=0):
     np.random.seed(seed)
@@ -114,7 +65,7 @@ def make_dataset(batchsize, seed=0):
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
-    parser.add_argument('--epochs', '-e', type=int, default=128,
+    parser.add_argument('--epochs', '-e', type=int, default=256,
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=32,
                         help='Training batch size')
@@ -123,6 +74,7 @@ def main():
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', action='store_true')
+    parser.add_argument('--output_period', '-op', type=int, default=8)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=95.0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     args = parser.parse_args()
@@ -135,85 +87,54 @@ def main():
     train_dl, val_dl = make_dataset(args.batchsize)
     model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048], dropout=args.dropout).to(device)
     print(model)
-    # loss = nn.MSELoss()
     loss = nn.BCEWithLogitsLoss()
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
     def model_loss(model, binary_batch, compute_bss=False):
         bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
+        ibm = 2*ibm-1
         premask = model(2*bmag-1)
         cost = loss(premask, ibm)
-        if args.l1_reg != 0:
-             for p in model.parameters():
-                 cost += args.l1_reg * torch.norm(p, 1)
+        for p in model.parameters():
+             cost += args.l1_reg * torch.norm(p, 1)
         return cost
 
     if not args.train_noisy:
         print('Real Network Training')
-        for epoch in range(args.epochs):
-            total_cost = 0
-            bss_metrics = BSSMetricsList()
-            model.train()
-            for count, batch in enumerate(train_dl):
-                optimizer.zero_grad()
-                cost = model_loss(model, batch)
-                total_cost += cost.data
-                cost.backward()
-                optimizer.step()
-            avg_cost = total_cost / (count + 1)
-
-            if epoch % 8 == 0:
-                print('Epoch %d Training Cost: ' % epoch, avg_cost)
-
-                total_cost = 0
-                bss_metrics = BSSMetricsList()
-                model.eval()
-                for count, batch in enumerate(val_dl):
-                    cost = model_loss(model, batch)
-                    total_cost += cost.data
-                avg_cost = total_cost / (count + 1)
-                print('Validation Cost: ', avg_cost)
-                torch.save(model.state_dict(), 'models/real_network.model')
-                lr *= args.lr_decay
-                optimizer = optim.Adam(model.parameters(), lr=lr,
-                    weight_decay=args.weight_decay)
-
     else:
+        print('Noisy Network Training')
         model.load_state_dict(torch.load('models/real_network.model'))
         model.to(device)
-        print('Noisy Training')
         model.noisy()
-        lr = args.learning_rate
-        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
-        for epoch in range(args.epochs):
-            model.train()
-            model.update_betas(sparsity=args.sparsity)
+
+    for epoch in range(args.epochs):
+        total_cost = 0
+        model.update_betas(sparsity=args.sparsity)
+        bss_metrics = BSSMetricsList()
+        model.train()
+        for count, batch in enumerate(train_dl):
+            optimizer.zero_grad()
+            cost = model_loss(model, batch)
+            total_cost += cost.data
+            cost.backward()
+            optimizer.step()
+        avg_cost = total_cost / (count + 1)
+
+        if epoch % args.output_period == 0:
+            print('Epoch %d Training Cost: ' % epoch, avg_cost)
             total_cost = 0
             bss_metrics = BSSMetricsList()
-            for count, batch in enumerate(train_dl):
-                optimizer.zero_grad()
+            model.eval()
+            for count, batch in enumerate(val_dl):
                 cost = model_loss(model, batch)
                 total_cost += cost.data
-                cost.backward()
-                optimizer.step()
             avg_cost = total_cost / (count + 1)
-
-            if epoch % 8 == 0:
-                print('Epoch %d Noisy Training Cost: ' % epoch, avg_cost)
-
-                total_cost = 0
-                bss_metrics = BSSMetricsList()
-                model.eval()
-                for count, batch in enumerate(val_dl):
-                    cost = model_loss(model, batch)
-                    total_cost += cost.data
-                avg_cost = total_cost / (count + 1)
-                print('Noisy Validation Cost: ', avg_cost)
-                torch.save(model.state_dict(), 'models/bitwise_network.model')
-                lr *= args.lr_decay
-                optimizer = optim.Adam(model.parameters(), lr=lr,
-                    weight_decay=args.weight_decay)
+            print('Validation Cost: ', avg_cost)
+            torch.save(model.state_dict(), 'models/real_network.model')
+            lr *= args.lr_decay
+            optimizer = optim.Adam(model.parameters(), lr=lr,
+                weight_decay=args.weight_decay)
 
 if __name__ == '__main__':
     main()
