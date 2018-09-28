@@ -35,7 +35,7 @@ binarize_preactivations = BinarizePreactivations.apply
 binarize_params = BinarizeParams.apply
 
 class BitwiseNetwork(nn.Module):
-    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, temp=1):
+    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0):
         super(BitwiseNetwork, self).__init__()
         self.params = {}
         self.num_layers = len(fc_sizes) + 1
@@ -44,7 +44,6 @@ class BitwiseNetwork(nn.Module):
         self.dropout_list = nn.ModuleList()
         self.betas = []
         self.mode = 'real'
-        self.temp = temp
         for i, out_size in enumerate(fc_sizes):
             wname = 'weight%d' % (i,)
             bname = 'bias%d' % (i,)
@@ -75,17 +74,16 @@ class BitwiseNetwork(nn.Module):
                 modified_w = torch.tanh(weight)
                 modified_b = torch.tanh(bias)
             elif self.mode == 'noisy':
-                modified_w = binarize_params(weight, self.betas[i])
-                modified_b = binarize_params(bias, self.betas[i])
+                modified_w = binarize_params(weight, self.betas[i])/weight.size(1)
+                modified_b = binarize_params(bias, self.betas[i])/weight.size(1) 
 
             h = F.linear(h, modified_w, modified_b)
-            if self.mode == 'real':
-                h = torch.tanh(h)
-            elif self.mode == 'noisy':
-                h = binarize_preactivations(h)
             if i < self.num_layers - 1:
+                if self.mode == 'real':
+                    h = torch.tanh(h)
+                elif self.mode == 'noisy':
+                    h = binarize_preactivations(h)
                 h = self.dropout_list[i](h)
-        h = h / self.temp
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
@@ -116,7 +114,7 @@ def make_dataset(batchsize, seed=0):
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
-    parser.add_argument('--epochs', '-e', type=int, default=256,
+    parser.add_argument('--epochs', '-e', type=int, default=128,
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=32,
                         help='Training batch size')
@@ -137,18 +135,18 @@ def main():
     train_dl, val_dl = make_dataset(args.batchsize)
     model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048], dropout=args.dropout).to(device)
     print(model)
-    loss = nn.MSELoss()
-    #loss = nn.BCEWithLogitsLoss()
+    # loss = nn.MSELoss()
+    loss = nn.BCEWithLogitsLoss()
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
     def model_loss(model, binary_batch, compute_bss=False):
         bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
-        ibm = 2*ibm-1
         premask = model(2*bmag-1)
         cost = loss(premask, ibm)
-        for p in model.parameters():
-             cost += args.l1_reg * torch.norm(p, 1)
+        if args.l1_reg != 0:
+             for p in model.parameters():
+                 cost += args.l1_reg * torch.norm(p, 1)
         return cost
 
     if not args.train_noisy:

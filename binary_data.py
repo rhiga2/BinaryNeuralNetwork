@@ -122,12 +122,12 @@ def main():
 
     dataset_dir = '/media/data/binary_audio/'
     x = []
-    for i in range(0, len(trainset), 50):
+    for i in range(0, len(trainset), 25):
         sample = trainset[i]
         mix_mag, mix_phase = stft(sample['mixture'])
         x.append(mix_mag.reshape(-1))
     centers, bins = kmeans_qlevels(np.concatenate(x, axis=0))
-    np.savez('/media/data/binary_audio/config.npz', cetners=centers, bins=bins)
+    np.savez('/media/data/binary_audio/config.npz', centers=centers, bins=bins)
 
     # Output training binarization
     for i in range(len(trainset)):
