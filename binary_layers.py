@@ -53,3 +53,28 @@ class BitwiseLinear(nn.Module):
         self.mode = 'noisy'
         self.weight = nn.Parameter(torch.tanh(self.weight), requires_grad=True)
         self.bias = nn.Parameter(torch.tanh(self.bias), requires_grad=True)
+
+class BLRLinear(nn.Module):
+    def __init__(self, input_size, output_size):
+        super(BLRLinear, self).__init__()
+        w = torch.empty(out_size, in_size)
+        nn.init.xavier_uniform_(w)
+        self.w = nn.Parameter(w, requires_grad=True)
+
+    def forward(self, x):
+        expect = torch.tanh(self.w)
+        mean = F.linear(x, expect)
+        var = F.linear(x**2, 1-expect**2)
+        return mean, var
+
+class BLRSampler(Function):
+    def __init__(self, temp=0.1, eps=1e-5):
+        self.temp = temp
+        self.eps = eps
+
+    @staticmethod
+    def forward(self, mean, var):
+        q = Normal(mean, var).cdf(0)
+        U = torch.rand_like(mean)
+        L = torch.log(U) - torch.log(1 - U)
+        return torch.tanh((torch.log(1/(1-q+eps)-1+eps) + L)/temp)
