@@ -12,7 +12,7 @@ from binary_layers import *
 import argparse
 
 class BitwiseNetwork(nn.Module):
-    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0):
+    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, sparsity=95):
         super(BitwiseNetwork, self).__init__()
         self.params = {}
         self.num_layers = len(fc_sizes) + 1
@@ -26,6 +26,7 @@ class BitwiseNetwork(nn.Module):
             in_size = out_size
             if i < self.num_layers - 1:
                 self.dropout_list.append(nn.Dropout(dropout))
+        self.sparsity = sparsity
 
     def forward(self, x):
         '''
@@ -40,7 +41,7 @@ class BitwiseNetwork(nn.Module):
                 h = self.activation(h)
                 h = self.dropout_list[i](h)
         if self.linear_list[i].mode == 'noisy':
-            h /= self.linear_list[i].input_size
+            h /= (self.linear_list[i].input_size * (1 - sparsity/100.0))
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
@@ -50,10 +51,10 @@ class BitwiseNetwork(nn.Module):
         for layer in self.linear_list:
             layer.noisy()
 
-    def update_betas(self, sparsity=95):
+    def update_betas(self):
         for layer in self.linear_list:
             if layer.mode == 'noisy':
-                layer.update_beta(sparsity=sparsity)
+                layer.update_beta(sparsity=self.sparsity)
 
 def make_dataset(batchsize, seed=0):
     np.random.seed(seed)
@@ -86,7 +87,8 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize)
-    model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048], dropout=args.dropout).to(device)
+    model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
+        dropout=args.dropout, sparsity=args.sparsity).to(device)
     print(model)
     loss = nn.BCEWithLogitsLoss()
     lr = args.learning_rate
@@ -113,7 +115,7 @@ def main():
 
     for epoch in range(args.epochs):
         total_cost = 0
-        model.update_betas(sparsity=args.sparsity)
+        model.update_betas()
         bss_metrics = BSSMetricsList()
         model.train()
         for count, batch in enumerate(train_dl):
