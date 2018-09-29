@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.autograd import Function
 import glob
 import numpy as np
 from bss_eval import *
@@ -40,6 +39,8 @@ class BitwiseNetwork(nn.Module):
             if i < self.num_layers - 1:
                 h = self.activation(h)
                 h = self.dropout_list[i](h)
+        if self.linear_list[i].mode == 'noisy':
+            h /= self.linear_list[i].input_size
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
@@ -65,7 +66,7 @@ def make_dataset(batchsize, seed=0):
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
-    parser.add_argument('--epochs', '-e', type=int, default=256,
+    parser.add_argument('--epochs', '-e', type=int, default=64,
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=32,
                         help='Training batch size')
@@ -93,17 +94,19 @@ def main():
 
     def model_loss(model, binary_batch, compute_bss=False):
         bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
-        ibm = 2*ibm-1
         premask = model(2*bmag-1)
         cost = loss(premask, ibm)
-        for p in model.parameters():
-             cost += args.l1_reg * torch.norm(p, 1)
+        if args.l1_reg:
+            for p in model.parameters():
+                cost += args.l1_reg * torch.norm(p, 1)
         return cost
 
     if not args.train_noisy:
         print('Real Network Training')
+        model_name = 'models/real_network.model'
     else:
         print('Noisy Network Training')
+        model_name = 'models/bitwise_network.py'
         model.load_state_dict(torch.load('models/real_network.model'))
         model.to(device)
         model.noisy()
@@ -131,7 +134,7 @@ def main():
                 total_cost += cost.data
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)
-            torch.save(model.state_dict(), 'models/real_network.model')
+            torch.save(model.state_dict(), model_name)
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)
