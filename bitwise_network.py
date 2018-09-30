@@ -40,8 +40,8 @@ class BitwiseNetwork(nn.Module):
             if i < self.num_layers - 1:
                 h = self.activation(h)
                 h = self.dropout_list[i](h)
-        if self.linear_list[i].mode == 'noisy':
-            h /= (self.linear_list[i].input_size * (1 - sparsity/100.0))
+                if self.linear_list[i].mode == 'noisy':
+                    h /= (self.linear_list[i].input_size * (1 - self.sparsity/100.0))
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
@@ -108,7 +108,7 @@ def main():
         model_name = 'models/real_network.model'
     else:
         print('Noisy Network Training')
-        model_name = 'models/bitwise_network.py'
+        model_name = 'models/bitwise_network.model'
         model.load_state_dict(torch.load('models/real_network.model'))
         model.to(device)
         model.noisy()
