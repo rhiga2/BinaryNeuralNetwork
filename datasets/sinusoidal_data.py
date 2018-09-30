@@ -18,8 +18,8 @@ class SinusoidDataset(Dataset):
 
     def __getitem__(self, key):
         # return (mixture, target, interference)
-        sig1 = np.sin(self.signal_freqs[key] * self.time + self.signal_phases[key])
-        sig2 = np.sin(self.noise_freqs[key] * self.time + self.noise_phases[key])
+        sig1 = np.sin(2*np.pi*self.signal_freqs[key] * self.time + self.signal_phases[key])
+        sig2 = np.sin(2*np.pi*self.noise_freqs[key] * self.time + self.noise_phases[key])
         sig1 = sig1 / np.std(sig1)
         sig2 = sig2 / np.std(sig2)
         mix = sig1 + (1 / self.snr) * sig2
