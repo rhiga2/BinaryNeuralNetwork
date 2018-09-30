@@ -1,4 +1,5 @@
-from two_source_mixture import *
+import numpy as np
+from datasets.two_source_mixture import *
 
 class BSSMetrics:
     def __init__(self, sdr=0, sir=0, sar=0):

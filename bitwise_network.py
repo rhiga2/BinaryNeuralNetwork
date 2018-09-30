@@ -89,7 +89,6 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False):
         print('Noisy Network Training')
         model_name = bitwise_model
         model.load_state_dict(torch.load(real_model))
-        model.to(device)
         model.noisy()
 
     return model, model_name
