@@ -71,6 +71,29 @@ def make_dataset(batchsize, seed=0, toy=False):
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
     return train_dl, val_dl
 
+def make_model(train_noisy=False, toy=False):
+    if toy:
+        model = BitwiseNetwork(2052, 513, fc_sizes=[], dropout=args.dropout).to(device)
+        real_model = 'models/toy_real_network.model'
+        bitwise_model = 'models/toy_bitwise_network.model'
+    else:
+        model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
+            dropout=args.dropout, sparsity=args.sparsity).to(device)
+        real_model = 'models/bitwise_network.model'
+        bitwise_model = 'models/real_network.model'
+
+    if not train_noisy:
+        print('Real Network Training')
+        model_name = real_model
+    else:
+        print('Noisy Network Training')
+        model_name = bitwise_model
+        model.load_state_dict(torch.load(real_model))
+        model.to(device)
+        model.noisy()
+
+    return model, model_name
+
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
@@ -94,16 +117,7 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize, toy=args.toy)
-    if args.toy:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[], dropout=args.dropout).to(device)
-        real_model = 'models/toy_real_network.model'
-        bitwise_model = 'models/toy_bitwise_network.model'
-    else:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
-            dropout=args.dropout, sparsity=args.sparsity).to(device)
-        real_model = 'models/bitwise_network.model'
-        bitwise_model = 'models/real_network.model'
-    
+    model, model_name = make_model(args.train_noisy, toy=args.toy)
     print(model)
     loss = nn.BCEWithLogitsLoss()
     lr = args.learning_rate
@@ -117,16 +131,6 @@ def main():
             for p in model.parameters():
                 cost += args.l1_reg * torch.norm(p, 1)
         return cost
-
-    if not args.train_noisy:
-        print('Real Network Training')
-        model_name = real_model
-    else:
-        print('Noisy Network Training')
-        model_name = bitwise_model
-        model.load_state_dict(torch.load(real_model))
-        model.to(device)
-        model.noisy()
 
     for epoch in range(args.epochs):
         total_cost = 0

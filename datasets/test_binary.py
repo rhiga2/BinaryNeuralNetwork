@@ -1,5 +1,5 @@
 import unittest
-from binary_data import *
+from .binary_data import *
 
 class TestQuantize(unittest.TestCase):
     def test_binarize(self):
