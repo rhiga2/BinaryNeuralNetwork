@@ -4,10 +4,9 @@ import torch.optim as optim
 import torch.nn.functional as F
 import glob
 import numpy as np
-from bss_eval import *
 from torch.utils.data import Dataset, DataLoader
-from two_source_mixture import *
-from datasets/binary_data import *
+from datasets.two_source_mixture import *
+from datasets.binary_data import *
 from binary_layers import *
 import argparse
 
@@ -95,8 +94,16 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize, toy=args.toy)
-    model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
-        dropout=args.dropout, sparsity=args.sparsity).to(device)
+    if args.toy:
+        model = BitwiseNetwork(2052, 513, fc_sizes=[], dropout=args.dropout).to(device)
+        real_model = 'models/toy_real_network.model'
+        bitwise_model = 'models/toy_bitwise_network.model'
+    else:
+        model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
+            dropout=args.dropout, sparsity=args.sparsity).to(device)
+        real_model = 'models/bitwise_network.model'
+        bitwise_model = 'models/real_network.model'
+    
     print(model)
     loss = nn.BCEWithLogitsLoss()
     lr = args.learning_rate
@@ -113,11 +120,11 @@ def main():
 
     if not args.train_noisy:
         print('Real Network Training')
-        model_name = 'models/real_network.model'
+        model_name = real_model
     else:
         print('Noisy Network Training')
-        model_name = 'models/bitwise_network.model'
-        model.load_state_dict(torch.load('models/real_network.model'))
+        model_name = bitwise_model
+        model.load_state_dict(torch.load(real_model))
         model.to(device)
         model.noisy()
 

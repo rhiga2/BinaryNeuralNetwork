@@ -104,6 +104,7 @@ def make_mixture_set():
 def main():
     parser = argparse.ArgumentParser(description='binary data')
     parser.add_argument('--toy', action='store_true')
+    args = parser.parse_args()
     if not args.toy:
         trainset, valset = make_mixture_set()
         config_name = 'config.npz'

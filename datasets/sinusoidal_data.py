@@ -10,7 +10,7 @@ class SinusoidDataset(Dataset):
         self.size = size
         self.length = length
         self.time = np.arange(length) * 1 / samp_freq
-        self.snr = np.power(snr/20, 10)
+        self.snr = np.power(10, snr/20)
         self.signal_freqs = np.random.uniform(sig_range[0], sig_range[1], self.size)
         self.noise_freqs = np.random.uniform(noise_range[0], noise_range[1], self.size)
         self.signal_phases = np.random.random(self.size) * 2*np.pi
@@ -20,8 +20,11 @@ class SinusoidDataset(Dataset):
         # return (mixture, target, interference)
         sig1 = np.sin(self.signal_freqs[key] * self.time + self.signal_phases[key])
         sig2 = np.sin(self.noise_freqs[key] * self.time + self.noise_phases[key])
+        sig1 = sig1 / np.std(sig1)
+        sig2 = sig2 / np.std(sig2)
         mix = sig1 + (1 / self.snr) * sig2
-        return mix, sig1, sig2
+        mix = mix / np.std(mix)
+        return {'mixture': mix, 'target': sig1, 'interference': sig2}
 
     def __len__(self):
         return self.size
