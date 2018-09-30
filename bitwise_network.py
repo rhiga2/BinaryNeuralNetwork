@@ -131,7 +131,6 @@ def main():
     for epoch in range(args.epochs):
         total_cost = 0
         model.update_betas()
-        bss_metrics = BSSMetricsList()
         model.train()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()
@@ -144,7 +143,6 @@ def main():
         if epoch % args.output_period == 0:
             print('Epoch %d Training Cost: ' % epoch, avg_cost)
             total_cost = 0
-            bss_metrics = BSSMetricsList()
             model.eval()
             for count, batch in enumerate(val_dl):
                 cost = model_loss(model, batch)
