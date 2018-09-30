@@ -10,11 +10,12 @@ import soundfile as sf
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
-        random_start=True, transform=None):
+        random_start=True, transform=None, hop=None):
         self.fs = fs
         self.snr = np.power(10, snr/20)
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
+        self.hop = hop
 
     def __len__(self):
         return len(self.mixes)
@@ -33,6 +34,9 @@ class TwoSourceMixtureDataset(Dataset):
         inter = inter / np.std(inter)
         mix = sig + inter
         sample = {'mixture': mix, 'target': sig, 'interference': inter}
+
+        if self.hop:
+            sample = {key: value[:len(value)//self.hop*self.hop] for key, value in sample.items()}
 
         if self.transform:
             sample = {key: self.transform(value) for key, value in sample.items()}

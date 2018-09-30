@@ -25,6 +25,7 @@ class BitwiseParams(Function):
         return grad_output, None
 
 bitwise_activation = BitwiseActivation.apply
+bitwise_params = BitwiseParams.apply
 
 class BitwiseLinear(nn.Module):
     def __init__(self, input_size, output_size):
@@ -44,8 +45,8 @@ class BitwiseLinear(nn.Module):
             w = torch.tanh(self.weight)
             b = torch.tanh(self.bias)
         elif self.mode == 'noisy':
-            w = BitwiseParams.apply(self.weight, self.beta)
-            b = BitwiseParams.apply(self.bias, self.beta)
+            w = bitwise_params(self.weight, self.beta)
+            b = bitwise_params(self.bias, self.beta)
         return F.linear(x, w, b)
 
     def update_beta(self, sparsity):
