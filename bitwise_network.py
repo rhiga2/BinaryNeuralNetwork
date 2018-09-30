@@ -71,14 +71,14 @@ def make_dataset(batchsize, seed=0, toy=False):
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
     return train_dl, val_dl
 
-def make_model(train_noisy=False, toy=False):
+def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False):
     if toy:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[], dropout=args.dropout).to(device)
+        model = BitwiseNetwork(2052, 513, fc_sizes=[], dropout=dropout)
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
     else:
         model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
-            dropout=args.dropout, sparsity=args.sparsity).to(device)
+            dropout=dropout, sparsity=sparsity)
         real_model = 'models/bitwise_network.model'
         bitwise_model = 'models/real_network.model'
 
@@ -117,7 +117,8 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize, toy=args.toy)
-    model, model_name = make_model(args.train_noisy, toy=args.toy)
+    model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy, toy=args.toy)
+    model.to(device)
     print(model)
     loss = nn.BCEWithLogitsLoss()
     lr = args.learning_rate
