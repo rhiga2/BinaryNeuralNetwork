@@ -1,7 +1,5 @@
 import numpy as np
 import scipy.signal as signal
-from .two_source_mixture import *
-from .sinusoidal_data import *
 from sklearn.cluster import KMeans
 import argparse
 
