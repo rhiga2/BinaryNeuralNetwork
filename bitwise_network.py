@@ -7,7 +7,7 @@ import numpy as np
 from bss_eval import *
 from torch.utils.data import Dataset, DataLoader
 from two_source_mixture import *
-from binary_data import *
+from datasets/binary_data import *
 from binary_layers import *
 import argparse
 
@@ -38,10 +38,10 @@ class BitwiseNetwork(nn.Module):
         for i in range(self.num_layers):
             h = self.linear_list[i](h)
             if i < self.num_layers - 1:
-                h = self.activation(h)
-                h = self.dropout_list[i](h)
                 if self.linear_list[i].mode == 'noisy':
                     h /= (self.linear_list[i].input_size * (1 - self.sparsity/100.0))
+                h = self.activation(h)
+                h = self.dropout_list[i](h)
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
@@ -56,10 +56,17 @@ class BitwiseNetwork(nn.Module):
             if layer.mode == 'noisy':
                 layer.update_beta(sparsity=self.sparsity)
 
-def make_dataset(batchsize, seed=0):
+def make_dataset(batchsize, seed=0, toy=False):
     np.random.seed(seed)
-    trainset = BinaryDataset('/media/data/binary_audio/train')
-    valset = BinaryDataset('/media/data/binary_audio/val')
+
+    train_dir = '/media/data/binary_audio/train'
+    val_dir = '/media/data/binary_audio/val'
+    if toy:
+        train_dir = '/media/data/binary_audio/toy_train'
+        val_dir = '/media/data/binary_audio/toy_val'
+
+    trainset = BinaryDataset(train_dir)
+    valset = BinaryDataset(val_dir)
     collate_fn = lambda x: collate_and_trim(x, axis=1)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True, collate_fn=collate_fn)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
@@ -79,6 +86,7 @@ def main():
     parser.add_argument('--output_period', '-op', type=int, default=8)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=95.0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
+    parser.add_argument('--toy', action='store_true')
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -86,7 +94,7 @@ def main():
     else:
         device = torch.device('cpu')
 
-    train_dl, val_dl = make_dataset(args.batchsize)
+    train_dl, val_dl = make_dataset(args.batchsize, toy=args.toy)
     model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
         dropout=args.dropout, sparsity=args.sparsity).to(device)
     print(model)

@@ -82,22 +82,6 @@ class BinaryDataset():
     def __len__(self):
         return self.length
 
-class RawDataset():
-    def __init__(self, data_dir):
-        self.data_dir = data_dir
-        if data_dir[-1] != '/':
-            self.data_dir += '/'
-        flist = glob.glob(self.data_dir + 'raw_data*.npz')
-        self.length = len(flist)
-
-    def __getitem__(self, i):
-        raw_fname = self.data_dir + ('raw_data%d.npz'%i)
-        raw_data = np.load(raw_fname)
-        return {'mix': raw_data['mix'], 'target': raw_data['target']}
-
-    def __len__(self):
-        return self.length
-
 def crop_length(x, hop):
     return x[:len(x)//hop*hop]
 
@@ -128,11 +112,11 @@ def main():
     else:
         trainset = SinusoidDataset(size=1000, length=32000,
             sig_range=[0, 4000], noise_range=[4000, 8000])
-        valset = SinusoidDataset(size=100, length=48000,
+        valset = SinusoidDataset(size=100, length=32000,
             sig_range=[0, 4000], noise_range=[4000, 8000])
         config_name = 'toy_config.npz'
         train_subdir = 'toy_train/'
-        val_subdir = 'val_dir/'
+        val_subdir = 'toy_val/'
     print('Train Length: ', len(trainset))
     print('Validation Length: ', len(valset))
 

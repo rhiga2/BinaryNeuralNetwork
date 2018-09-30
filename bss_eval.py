@@ -1,4 +1,3 @@
-import mir_eval
 from two_source_mixture import *
 
 class BSSMetrics:
