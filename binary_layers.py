@@ -18,7 +18,7 @@ class BitwiseActivation(Function):
 class BitwiseParams(Function):
     @staticmethod
     def forward(ctx, x, beta):
-        return torch.tensor(x > beta, dtype=x.dtype, device=x.device) - torch.tensor(x < -beta, dtype=x.dtype, device=x.device)
+        return (x > beta).to(dtype=x.dtype, device=x.device) - (x < -beta).to(dtype=x.dtype, device=x.device)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -36,7 +36,7 @@ class BitwiseLinear(nn.Module):
         b = torch.zeros(output_size)
         self.weight = nn.Parameter(w, requires_grad=True)
         self.bias = nn.Parameter(b, requires_grad=True)
-        self.beta = 0
+        self.beta = nn.Parameter(0, requires_grad=False)
         self.mode = 'real'
 
     def forward(self, x):
@@ -52,7 +52,7 @@ class BitwiseLinear(nn.Module):
         w = self.weight.cpu().data.numpy()
         b = self.bias.cpu().data.numpy()
         params = np.abs(np.concatenate((w, np.expand_dims(b, axis=1)), axis=1))
-        self.beta = np.percentile(params, sparsity)
+        self.beta = nn.Parameter(np.percentile(params, sparsity), requires_grad=False)
 
     def noisy(self):
         self.mode = 'noisy'
