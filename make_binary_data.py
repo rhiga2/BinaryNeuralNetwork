@@ -5,16 +5,24 @@ import numpy as np
 from datasets.two_source_mixture import *
 from datasets.sinusoidal_data import *
 
-def make_mixture_set():
-    np.random.seed(0)
+def make_mixture_set(denoising=False):
     speaker_path = '/media/data/timit-wav/train'
-    targ_speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
-                    'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0',
-                    'dr1/fsma0', 'dr1/ftbr0']
-    inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
+    targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
+        'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0',
+        'dr1/fsma0', 'dr1/ftbr0']
+    train_speeches, val_speeches = get_speech_files(speaker_path, targets, num_train=7)
+
+    if denoising:
+        noise_path = '/media/data/noises-16k'
+        interferences = ['babble-16k.wav', 'restaurant-16k.wav',
+            'exhibition-16k.wav', 'street-16k.wav', 'street1-16k.wav',
+            'street2-16k.wav', 'car-16k.wav', 'bus-16k.wav',
+            'airport-16k.wav', 'subway-16k.wav']
+        train_noises, val_noises = get_noise_files(noise_path, interferences)
+    else:
+        interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
                     'dr1/mwad0', 'dr1/mwar0']
-    train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers, num_train=7)
-    train_noises, val_noises = get_speech_files(speaker_path, inter_speakers, num_train=7)
+        train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
 
     trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=256)
     valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=256)
@@ -23,10 +31,11 @@ def make_mixture_set():
 def main():
     parser = argparse.ArgumentParser(description='binary data')
     parser.add_argument('--toy', action='store_true')
+    parser.add_argument('--denoising', action='store_true')
     args = parser.parse_args()
     dataset_dir = '/media/data/binary_audio/'
     if not args.toy:
-        trainset, valset = make_mixture_set()
+        trainset, valset = make_mixture_set(args.denoising)
         config_name = 'config.npz'
         train_dir = dataset_dir + 'train/'
         val_dir = dataset_dir + 'val/'
@@ -49,7 +58,7 @@ def main():
     centers, bins = kmeans_qlevels(np.concatenate(x, axis=0))
     np.savez(dataset_dir + config_name, centers=centers, bins=bins)
     with open(train_dir + 'dataset.pkl', 'wb') as f:
-        pkl.dump(trainset, f) 
+        pkl.dump(trainset, f)
     with open(val_dir + 'dataset.pkl', 'wb') as f:
         pkl.dump(valset, f)
 
