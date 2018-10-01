@@ -37,10 +37,10 @@ class BitwiseNetwork(nn.Module):
         for i in range(self.num_layers):
             h = self.linear_list[i](h)
             if i < self.num_layers - 1:
-                if self.linear_list[i].mode == 'noisy':
-                    h /= (self.linear_list[i].input_size * (1 - self.sparsity/100.0))
                 h = self.activation(h)
                 h = self.dropout_list[i](h)
+            if self.linear_list[i].mode == 'noisy':
+                h /= (self.linear_list[i].input_size * (1 - self.sparsity/100.0))
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
@@ -79,8 +79,8 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False):
     else:
         model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
             dropout=dropout, sparsity=sparsity)
-        real_model = 'models/bitwise_network.model'
-        bitwise_model = 'models/real_network.model'
+        real_model = 'models/real_network.model'
+        bitwise_model = 'models/bitwise_network.model'
 
     if not train_noisy:
         print('Real Network Training')

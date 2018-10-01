@@ -37,7 +37,7 @@ class BitwiseLinear(nn.Module):
         b = torch.zeros(output_size)
         self.weight = nn.Parameter(w, requires_grad=True)
         self.bias = nn.Parameter(b, requires_grad=True)
-        self.beta = nn.Parameter(0, requires_grad=False)
+        self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 
     def forward(self, x):
@@ -53,7 +53,9 @@ class BitwiseLinear(nn.Module):
         w = self.weight.cpu().data.numpy()
         b = self.bias.cpu().data.numpy()
         params = np.abs(np.concatenate((w, np.expand_dims(b, axis=1)), axis=1))
-        self.beta = nn.Parameter(np.percentile(params, sparsity), requires_grad=False)
+        beta = torch.tensor(np.percentile(params, sparsity), dtype=self.weight.dtype,
+            device=self.weight.device)
+        self.beta = nn.Parameter(beta, requires_grad=False)
 
     def noisy(self):
         self.mode = 'noisy'

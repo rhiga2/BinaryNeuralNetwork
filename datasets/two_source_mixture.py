@@ -62,7 +62,7 @@ def collate_and_trim(batch, axis=0, hop=1, dtype=torch.float):
     outbatch = {key: torch.as_tensor(np.stack(values, axis=0), dtype=dtype) for key, values in outbatch.items()}
     return outbatch
 
-def get_speech_files(speaker_path, speakers=[], num_train=8):
+def get_speech_files(speaker_path, speakers, num_train=8):
     assert num_train <= 10 # Assume each speaker has 10 sentences
     if speaker_path[-1] != '/':
         speaker_path += '/'
