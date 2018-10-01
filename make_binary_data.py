@@ -12,7 +12,7 @@ def make_mixture_set():
                     'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0',
                     'dr1/fsma0', 'dr1/ftbr0']
     inter_speakers = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
-                    'dr1/mwad0', 'dr1/mwar0']
+                    'dr1/mwad0', 'dr1/mwar0', 'dr1/mtrr0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targ_speakers, num_train=7)
     train_noises, val_noises = get_speech_files(speaker_path, inter_speakers, num_train=7)
 
@@ -61,7 +61,7 @@ def main():
         mix_mag, mix_phase = stft(mix)
         targ_mag, targ_phase = stft(target)
         inter_mag, inter_phase = stft(inter)
-        ibm = make_binary_mask(targ_mag - inter_mag + 1e-5, dtype=np.uint8)
+        ibm = make_binary_mask(targ_mag - inter_mag - 1e-5, dtype=np.uint8)
         bmag = binarize(mix_mag, bins)
         np.savez(
             binary_fname,
@@ -77,7 +77,7 @@ def main():
         mix_mag, mix_phase = stft(mix)
         targ_mag, targ_phase = stft(target)
         inter_mag, inter_phase = stft(inter)
-        ibm = make_binary_mask(targ_mag - inter_mag + 1e-5, dtype=np.uint8)
+        ibm = make_binary_mask(targ_mag - inter_mag - 1e-5, dtype=np.uint8)
         bmag = binarize(mix_mag, bins)
         np.savez(
             binary_fname,
