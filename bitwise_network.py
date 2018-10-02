@@ -34,13 +34,13 @@ class BitwiseNetwork(nn.Module):
         '''
         # Flatten (N, F, T) -> (NT, F)
         h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
-        for i in range(self.num_layers):
-            h = self.linear_list[i](h)
+        for i in range(self.num_layers): 
+            h = self.linear_list[i](h) 
+            # if self.linear_list[i].mode == 'noisy':
+            #    h /= (self.linear_list[i].input_size * (1 - self.sparsity/100.0))
             if i < self.num_layers - 1:
                 h = self.activation(h)
-                h = self.dropout_list[i](h)
-            if self.linear_list[i].mode == 'noisy':
-                h /= (self.linear_list[i].input_size * (1 - self.sparsity/100.0))
+                h = self.dropout_list[i](h) 
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
@@ -73,7 +73,7 @@ def make_dataset(batchsize, seed=0, toy=False):
 
 def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False):
     if toy:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[], dropout=dropout)
+        model = BitwiseNetwork(2052, 513, fc_sizes=[1024], dropout=dropout)
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
     else:
