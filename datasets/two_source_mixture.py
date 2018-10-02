@@ -78,12 +78,11 @@ def get_speech_files(speaker_path, speakers, num_train=8):
         val_speeches.extend(files[num_train:])
     return train_speeches, val_speeches
 
-def get_noise_files(noise_path, noises, num_train=2):
-    assert num_train <= len(noises)
+def get_noise_files(noise_path, noises):
     if noise_path[-1] != '/':
         noise_path += '/'
     noises = [noise_path + noise for noise in noises]
     # random.shuffle(noises)
-    train_noises = noises[:num_train]
-    val_noises = noises[num_train:]
+    train_noises = noises
+    val_noises = noises
     return train_noises, val_noises
