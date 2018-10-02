@@ -94,7 +94,8 @@ class BLRSampler(Function):
 
 class Scaler(nn.Module):
     def __init__(self, num_features):
-        self.gamma = nn.Parameter(torch.ones(num_features), require_grad=True)
+        super(Scaler, self).__init__()
+        self.gamma = nn.Parameter(torch.ones(num_features), requires_grad=True)
 
     def forward(self, x):
         return self.gamma * x
