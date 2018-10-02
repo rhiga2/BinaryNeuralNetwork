@@ -40,7 +40,7 @@ def main():
         train_dir = dataset_dir + 'train/'
         val_dir = dataset_dir + 'val/'
     else:
-        trainset = SinusoidDataset(size=1000, length=32000,
+        trainset = SinusoidDataset(size=100, length=32000,
             sig_range=[0, 4000], noise_range=[4000, 8000])
         valset = SinusoidDataset(size=100, length=32000,
             sig_range=[0, 4000], noise_range=[4000, 8000])

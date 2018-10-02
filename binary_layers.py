@@ -86,3 +86,10 @@ class BLRSampler(Function):
         U = torch.rand_like(mean)
         L = torch.log(U) - torch.log(1 - U)
         return torch.tanh((torch.log(1/(1-q+eps)-1+eps) + L)/temp)
+
+class Scaler(nn.Module):
+    def __init__(self, num_features):
+        self.gamma = nn.Parameter(torch.ones(num_features), require_grad=True)
+
+    def forward(self, x):
+        return self.gamma * x
