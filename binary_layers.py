@@ -62,6 +62,11 @@ class BitwiseLinear(nn.Module):
         self.weight = nn.Parameter(torch.tanh(self.weight), requires_grad=True)
         self.bias = nn.Parameter(torch.tanh(self.bias), requires_grad=True)
 
+    def inference(self):
+        self.mode = 'inference'
+        self.weight = nn.Parameter(bitwise_params(self.weight, self.beta), requires_grad=False)
+        self.bias = nn.Parameter(bitwise_params(self.bias, self.beta), requires_grad=False)
+
 class BLRLinear(nn.Module):
     def __init__(self, input_size, output_size):
         super(BLRLinear, self).__init__()

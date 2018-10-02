@@ -14,6 +14,7 @@ class BitwiseNetwork(nn.Module):
     def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, sparsity=95):
         super(BitwiseNetwork, self).__init__()
         self.params = {}
+        self.mode = 'real'
         self.num_layers = len(fc_sizes) + 1
         fc_sizes = fc_sizes + [output_size,]
         in_size = input_size
@@ -38,9 +39,7 @@ class BitwiseNetwork(nn.Module):
         h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
         for i in range(self.num_layers):
             h = self.linear_list[i](h)
-            # if self.linear_list[i].mode == 'noisy':
-            #    h /= (self.linear_list[i].input_size * (1 - self.sparsity/100.0))
-            if i < self.num_layers - 1:
+            if i < self.num_layers - 1 and self.mode != 'inference':
                 h = self.activation(h)
                 h = self.scaler_list[i](h)
                 h = self.dropout_list[i](h)
@@ -49,9 +48,16 @@ class BitwiseNetwork(nn.Module):
         return y
 
     def noisy(self):
+        self.mode = 'noisy'
         self.activation = bitwise_activation
         for layer in self.linear_list:
             layer.noisy()
+
+    def inference(self):
+        self.mode = 'inference'
+        self.activation = bitwise_activation
+        for layer in self.linear_list:
+            layer.inference()
 
     def update_betas(self):
         for layer in self.linear_list:
