@@ -70,7 +70,7 @@ def main():
         mix_mag, mix_phase = stft(mix)
         targ_mag, targ_phase = stft(target)
         inter_mag, inter_phase = stft(inter)
-        ibm = make_binary_mask(targ_mag - inter_mag + 1e-4, dtype=np.uint8)
+        ibm = make_binary_mask(targ_mag - inter_mag, dtype=np.uint8)
         bmag = binarize(mix_mag, bins)
         np.savez(
             binary_fname,
@@ -86,7 +86,7 @@ def main():
         mix_mag, mix_phase = stft(mix)
         targ_mag, targ_phase = stft(target)
         inter_mag, inter_phase = stft(inter)
-        ibm = make_binary_mask(targ_mag - inter_mag + 1e-4, dtype=np.uint8)
+        ibm = make_binary_mask(targ_mag - inter_mag, dtype=np.uint8)
         bmag = binarize(mix_mag, bins)
         np.savez(
             binary_fname,
