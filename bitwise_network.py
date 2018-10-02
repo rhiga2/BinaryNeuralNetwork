@@ -18,12 +18,14 @@ class BitwiseNetwork(nn.Module):
         fc_sizes = fc_sizes + [output_size,]
         in_size = input_size
         self.linear_list = nn.ModuleList()
+        self.scaler_list = nn.ModuleList()
         self.dropout_list = nn.ModuleList()
         self.activation = torch.tanh
         for i, out_size in enumerate(fc_sizes):
             self.linear_list.append(BitwiseLinear(in_size, out_size))
             in_size = out_size
             if i < self.num_layers - 1:
+                self.scaler_list.append(Scaler(out_size))
                 self.dropout_list.append(nn.Dropout(dropout))
         self.sparsity = sparsity
 
@@ -34,13 +36,14 @@ class BitwiseNetwork(nn.Module):
         '''
         # Flatten (N, F, T) -> (NT, F)
         h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
-        for i in range(self.num_layers): 
-            h = self.linear_list[i](h) 
+        for i in range(self.num_layers):
+            h = self.linear_list[i](h)
             # if self.linear_list[i].mode == 'noisy':
             #    h /= (self.linear_list[i].input_size * (1 - self.sparsity/100.0))
             if i < self.num_layers - 1:
                 h = self.activation(h)
-                h = self.dropout_list[i](h) 
+                h = self.scaler_list[i](h)
+                h = self.dropout_list[i](h)
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
