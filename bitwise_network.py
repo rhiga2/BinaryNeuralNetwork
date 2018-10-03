@@ -26,8 +26,8 @@ class BitwiseNetwork(nn.Module):
         for i, out_size in enumerate(fc_sizes):
             self.linear_list.append(BitwiseLinear(in_size, out_size))
             in_size = out_size
+            self.scaler_list.append(Scaler(out_size))
             if i < self.num_layers - 1:
-                self.scaler_list.append(Scaler(out_size))
                 self.dropout_list.append(nn.Dropout(dropout))
         self.sparsity = sparsity
 
@@ -40,9 +40,10 @@ class BitwiseNetwork(nn.Module):
         h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
         for i in range(self.num_layers):
             h = self.linear_list[i](h)
-            if i < self.num_layers - 1 and self.mode != 'inference':
-                h = self.activation(h)
+            if self.mode != 'inference': 
                 h = self.scaler_list[i](h)
+            if i < self.num_layers - 1:
+                h = self.activation(h)
                 h = self.dropout_list[i](h)
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
@@ -71,7 +72,7 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False):
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
     else:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
+        model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048, 2048],
             dropout=dropout, sparsity=sparsity)
         real_model = 'models/real_network.model'
         bitwise_model = 'models/bitwise_network.model'
