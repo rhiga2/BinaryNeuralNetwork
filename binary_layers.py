@@ -24,19 +24,40 @@ class BitwiseParams(Function):
     def backward(ctx, grad_output):
         return grad_output, None
 
+class Binarize(Function):
+    @staticmethod
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        return torch.sign(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        # There are two options:
+        # 1. Clamp gradients exceeding +/- 1
+        # 2. Zero gradients exceeding +/- 1
+        x = ctx.saved_tensors[0]
+        return grad_output * (torch.abs(x) <= 1).to(grad_output.dtype)
+
 bitwise_activation = BitwiseActivation.apply
 bitwise_params = BitwiseParams.apply
+binarize = Binarize.apply
+
+def init_params(size, biased=True, requires_grad=True):
+    w = torch.empty(size)
+    nn.init.xavier_uniform_(w)
+    w = nn.Parameter(w, requires_grad=requires_grad)
+    b = None
+    if biased:
+        b = torch.zeros(size[0])
+        b = nn.Parameter(b, requires_grad=requires_grad)
+    return w, b
 
 class BitwiseLinear(nn.Module):
     def __init__(self, input_size, output_size):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
-        w = torch.empty(output_size, input_size)
-        nn.init.xavier_uniform_(w)
-        b = torch.zeros(output_size)
-        self.weight = nn.Parameter(w, requires_grad=True)
-        self.bias = nn.Parameter(b, requires_grad=True)
+        self.weight, self.bias = init_params((output_size, input_size), True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 
@@ -67,15 +88,49 @@ class BitwiseLinear(nn.Module):
         self.weight = nn.Parameter(bitwise_params(self.weight, self.beta), requires_grad=False)
         self.bias = nn.Parameter(bitwise_params(self.bias, self.beta), requires_grad=False)
 
+class BinLinear(nn.Module):
+    def __init__(self, input_size, output_size, biased=True):
+        super(BinLinear, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.biased = biased
+        self.weight, self.bias = init_params((output_size, input_size), biased, True)
+
+    def forward(self, x):
+        w = binarize(self.weight)
+        b = None
+        if biased:
+            b = binarize(self.bias)
+        return F.linear(x, w, b)
+
+class BinConv2d(nn.Module):
+    def __init__(self, input_channels, output_channels, kernel_size,
+        biased=True, stride=1, padding=0):
+        super(BinConv2d, self).__init__()
+        self.input_channels = input_channels
+        self.output_channels = output_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.biased = biased
+        self.weight, self.bias = init_params((output_size, input_size), biased, True)
+
+    def forward(self, x):
+        w = binarize(self.weight)
+        b = None
+        if biased:
+            b = binarize(self.bias)
+        return F.conv2d(x, w, b, stride=self.stride, padding=self.padding)
+
 class BLRLinear(nn.Module):
     def __init__(self, input_size, output_size):
         super(BLRLinear, self).__init__()
         w = torch.empty(out_size, in_size)
         nn.init.xavier_uniform_(w)
-        self.w = nn.Parameter(w, requires_grad=True)
+        self.weight = nn.Parameter(w, requires_grad=True)
 
     def forward(self, x):
-        expect = torch.tanh(self.w)
+        expect = torch.tanh(self.weight)
         mean = F.linear(x, expect)
         var = F.linear(x**2, 1-expect**2)
         return mean, var

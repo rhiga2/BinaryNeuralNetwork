@@ -7,6 +7,7 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from datasets.two_source_mixture import *
 from datasets.binary_data import *
+from make_binary_data import *
 from binary_layers import *
 import argparse
 
@@ -63,22 +64,6 @@ class BitwiseNetwork(nn.Module):
         for layer in self.linear_list:
             if layer.mode == 'noisy':
                 layer.update_beta(sparsity=self.sparsity)
-
-def make_dataset(batchsize, seed=0, toy=False):
-    np.random.seed(seed)
-
-    train_dir = '/media/data/binary_audio/train'
-    val_dir = '/media/data/binary_audio/val'
-    if toy:
-        train_dir = '/media/data/binary_audio/toy_train'
-        val_dir = '/media/data/binary_audio/toy_val'
-
-    trainset = BinaryDataset(train_dir)
-    valset = BinaryDataset(val_dir)
-    collate_fn = lambda x: collate_and_trim(x, axis=1)
-    train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True, collate_fn=collate_fn)
-    val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
-    return train_dl, val_dl
 
 def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False):
     if toy:

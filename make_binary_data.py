@@ -5,6 +5,22 @@ import numpy as np
 from datasets.two_source_mixture import *
 from datasets.sinusoidal_data import *
 
+def make_dataset(batchsize, seed=0, toy=False):
+    np.random.seed(seed)
+
+    train_dir = '/media/data/binary_audio/train'
+    val_dir = '/media/data/binary_audio/val'
+    if toy:
+        train_dir = '/media/data/binary_audio/toy_train'
+        val_dir = '/media/data/binary_audio/toy_val'
+
+    trainset = BinaryDataset(train_dir)
+    valset = BinaryDataset(val_dir)
+    collate_fn = lambda x: collate_and_trim(x, axis=1)
+    train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True, collate_fn=collate_fn)
+    val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
+    return train_dl, val_dl
+
 def make_mixture_set(denoising=False):
     speaker_path = '/media/data/timit-wav/train'
     targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
