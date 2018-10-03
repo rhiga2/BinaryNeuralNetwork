@@ -41,6 +41,8 @@ class BitwiseLinear(nn.Module):
         self.mode = 'real'
 
     def forward(self, x):
+        w = self.weight
+        b = self.bias
         if self.mode == 'real':
             w = torch.tanh(self.weight)
             b = torch.tanh(self.bias)
@@ -98,4 +100,4 @@ class Scaler(nn.Module):
         self.gamma = nn.Parameter(torch.ones(num_features), requires_grad=True)
 
     def forward(self, x):
-        return self.gamma * x
+        return torch.abs(self.gamma) * x / (torch.std(x) + 1e-5)
