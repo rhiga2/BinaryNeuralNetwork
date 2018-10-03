@@ -5,7 +5,6 @@ import torch.nn.functional as F
 import glob
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-from datasets.two_source_mixture import *
 from datasets.binary_data import *
 from make_binary_data import *
 from binary_layers import *
@@ -40,7 +39,7 @@ class BitwiseNetwork(nn.Module):
         h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
         for i in range(self.num_layers):
             h = self.linear_list[i](h)
-            if self.mode != 'inference': 
+            if self.mode != 'inference':
                 h = self.scaler_list[i](h)
             if i < self.num_layers - 1:
                 h = self.activation(h)
