@@ -4,6 +4,7 @@ from datasets.binary_data import *
 import numpy as np
 from datasets.two_source_mixture import *
 from datasets.sinusoidal_data import *
+from torch.utils.data import Dataset, DataLoader
 
 def make_dataset(batchsize, seed=0, toy=False):
     np.random.seed(seed)

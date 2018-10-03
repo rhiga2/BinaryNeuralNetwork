@@ -4,7 +4,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 import glob
 import numpy as np
-from torch.utils.data import Dataset, DataLoader
 from datasets.binary_data import *
 from make_binary_data import *
 from binary_layers import *

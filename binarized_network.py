@@ -11,7 +11,7 @@ from binary_layers import *
 import argparse
 
 class BinarizedNetwork(nn.Module):
-    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0):
+    def __init__(self, input_size, output_size, fc_sizes = [], biased=False, dropout=0):
         super(BinarizedNetwork, self).__init__()
         self.params = {}
         self.num_layers = len(fc_sizes) + 1
@@ -22,11 +22,12 @@ class BinarizedNetwork(nn.Module):
         self.dropout_list = nn.ModuleList()
         self.activation = binarize
         for i, out_size in enumerate(fc_sizes):
-            self.linear_list.append(BinLinear(in_size, out_size))
-            self.batchnorm_list.append(nn.BatchNorm1d(out_size))
+            self.linear_list.append(BinLinear(in_size, out_size, biased=biased))
             in_size = out_size
             if i < self.num_layers - 1:
+                self.batchnorm_list.append(nn.BatchNorm1d(out_size))
                 self.dropout_list.append(nn.Dropout(dropout))
+        self.scaler = Scaler(output_size)
 
     def forward(self, x):
         '''
@@ -41,23 +42,23 @@ class BinarizedNetwork(nn.Module):
                 h = self.batchnorm_list[i](h)
                 h = self.activation(h)
                 h = self.dropout_list[i](h)
+        h = self.scaler(h)
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
 
-def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False):
+def make_model(dropout=0, toy=False):
     if toy:
-        model = BinarizedNetowrk(2052, 513, fc_sizes=[1024], dropout=dropout)
+        model = BinarizedNetwork(2052, 513, fc_sizes=[1024], dropout=dropout)
         model_name = 'models/toy_bin_network.model'
     else:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
-            dropout=dropout, sparsity=sparsity)
+        model = BinarizedNetwork(2052, 513, fc_sizes=[2048, 2048, 2048], dropout=dropout)
         model_name = 'models/bin_network.model'
 
     return model, model_name
 
 def main():
-    parser = argparse.ArgumentParser(description='bitwise network')
+    parser = argparse.ArgumentParser(description='binarized network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=32,
@@ -66,9 +67,7 @@ def main():
     parser.add_argument('--lr_decay', '-lrd', type=float, default=0.95)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
-    parser.add_argument('--train_noisy', action='store_true')
     parser.add_argument('--output_period', '-op', type=int, default=8)
-    parser.add_argument('--sparsity', '-sparsity', type=float, default=95.0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     parser.add_argument('--toy', action='store_true')
     args = parser.parse_args()
@@ -79,7 +78,7 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize, toy=args.toy)
-    model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy, toy=args.toy)
+    model, model_name = make_model(args.dropout, toy=args.toy)
     model.to(device)
     print(model)
     loss = nn.BCEWithLogitsLoss()
@@ -97,7 +96,6 @@ def main():
 
     for epoch in range(args.epochs):
         total_cost = 0
-        model.update_betas()
         model.train()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()

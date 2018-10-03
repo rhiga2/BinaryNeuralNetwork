@@ -101,7 +101,7 @@ class BinLinear(nn.Module):
     def forward(self, x):
         w = binarize(self.weight)
         b = None
-        if biased:
+        if self.biased:
             b = binarize(self.bias)
         return F.linear(x, w, b)
 
