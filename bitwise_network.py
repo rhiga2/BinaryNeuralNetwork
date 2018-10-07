@@ -70,7 +70,7 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False):
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
     else:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048, 2048],
+        model = BitwiseNetwork(2052, 513, fc_sizes=[4096, 4096],
             dropout=dropout, sparsity=sparsity)
         real_model = 'models/real_network.model'
         bitwise_model = 'models/bitwise_network.model'

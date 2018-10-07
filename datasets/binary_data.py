@@ -55,12 +55,13 @@ def stft(x, window='hann', nperseg=1024, noverlap=768):
         nperseg=nperseg,
         noverlap=noverlap)[2]
     real, imag = np.real(stft_x), np.imag(stft_x)
-    mag = np.sqrt(real**2 + imag**2)
+    mag = np.sqrt(real**2 + imag**2 + 1e-6)
     phase = stft_x / (mag + 1e-6)
+    mag = np.log(mag)
     return mag, phase
 
 def istft(mag, phase, window='hann', nperseg=1024, noverlap=768):
-    stft_x = mag * phase
+    stft_x = np.exp(mag) * phase
     x = signal.istft(stft_x, window=window, nperseg=nperseg, noverlap=noverlap)[1]
     return x
 
