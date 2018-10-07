@@ -1,5 +1,5 @@
 import unittest
-from .binary_data import *
+from binary_data import *
 
 class TestQuantize(unittest.TestCase):
     def test_binarize(self):
@@ -42,6 +42,15 @@ class TestQuantize(unittest.TestCase):
         print()
         print('Uniform Quantizer Error: ', uerror)
         self.assertLess(uerror, (xmax - xmin)/32)
+
+    def test_stft(self):
+        np.random.seed(0)
+        x = 100*np.sin(np.pi/8*np.arange(16128))
+        mag, phase = stft(x)
+        x_estimate = istft(mag, phase)
+        sq_error = np.sum((x - x_estimate)**2)
+        print('STFT Error: ', sq_error)
+        self.assertLess(sq_error, 1e-6)
 
 if __name__ == '__main__':
     unittest.main()
