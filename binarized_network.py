@@ -21,6 +21,7 @@ class BinarizedNetwork(nn.Module):
         self.batchnorm_list = nn.ModuleList()
         self.dropout_list = nn.ModuleList()
         self.activation = binarize
+        self.conv1 = BinConv1d(input_size, input_size, 5, padding=2, groups=input_size)
         for i, out_size in enumerate(fc_sizes):
             self.linear_list.append(BinLinear(in_size, out_size, biased=biased))
             in_size = out_size
@@ -34,6 +35,8 @@ class BinarizedNetwork(nn.Module):
         * Input is a tensor of shape (N, F, T)
         * Output is a tensor of shape (N, F, T)
         '''
+        h = self.activation(self.conv1(x))
+
         # Flatten (N, F, T) -> (NT, F)
         h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
         for i in range(self.num_layers):
@@ -52,7 +55,7 @@ def make_model(dropout=0, toy=False):
         model = BinarizedNetwork(2052, 513, fc_sizes=[1024], dropout=dropout)
         model_name = 'models/toy_bin_network.model'
     else:
-        model = BinarizedNetwork(2052, 513, fc_sizes=[2048, 2048, 2048], dropout=dropout)
+        model = BinarizedNetwork(2052, 513, fc_sizes=[2048, 2048], dropout=dropout)
         model_name = 'models/bin_network.model'
 
     return model, model_name

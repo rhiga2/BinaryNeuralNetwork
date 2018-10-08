@@ -22,7 +22,7 @@ class BitwiseParams(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        return grad_output*(torch.abs(x) <= 1).to(grad_output.dtype), None
+        return grad_output, None
 
 class Binarize(Function):
     @staticmethod
@@ -35,8 +35,7 @@ class Binarize(Function):
         # There are two options:
         # 1. Clamp gradients exceeding +/- 1
         # 2. Zero gradients exceeding +/- 1
-        x = ctx.saved_tensors[0]
-        return grad_output * (torch.abs(x) <= 1).to(grad_output.dtype)
+        return grad_output * (torch.abs(grad_output) <= 1).to(grad_output.dtype)
 
 bitwise_activation = BitwiseActivation.apply
 bitwise_params = BitwiseParams.apply
@@ -76,6 +75,7 @@ class BitwiseLinear(nn.Module):
         w = self.weight.cpu().data.numpy()
         b = self.bias.cpu().data.numpy()
         params = np.abs(np.concatenate((w, np.expand_dims(b, axis=1)), axis=1))
+        print(params)
         beta = torch.tensor(np.percentile(params, sparsity), dtype=self.weight.dtype,
             device=self.weight.device)
         self.beta = nn.Parameter(beta, requires_grad=False)
@@ -108,7 +108,7 @@ class BinLinear(nn.Module):
 class BinConv1d(nn.Module):
     def __init__(self, input_channels, output_channels, kernel_size,
         biased=True, stride=1, padding=0, groups=1):
-        super(BinConv2d, self).__init__()
+        super(BinConv1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
         self.groups = groups
@@ -116,15 +116,15 @@ class BinConv1d(nn.Module):
         self.stride = stride
         self.padding = padding
         self.biased = biased
-        weight_size = (output_channels, input_channels/self.groups, kernel_size)
+        weight_size = (output_channels, input_channels//self.groups, kernel_size)
         self.weight, self.bias = init_params(weight_size, biased, True)
 
     def forward(self, x):
         w = binarize(self.weight)
         b = None
-        if biased:
+        if self.biased:
             b = binarize(self.bias)
-        return F.conv2d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
+        return F.conv1d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
 
 class BinConv2d(nn.Module):
     def __init__(self, input_channels, output_channels, kernel_size,
@@ -138,15 +138,15 @@ class BinConv2d(nn.Module):
         self.padding = padding
         self.biased = biased
         if isinstance(kernel_size, int):
-            weight_size = (output_channels, input_channels/self.groups, kernel_size, kernel_size)
+            weight_size = (output_channels, input_channels//self.groups, kernel_size, kernel_size)
         else:
-            weight_size = (output_channels, input_channels/self.groups, kernel_size[0], kernel_size[1])
+            weight_size = (output_channels, input_channels//self.groups, kernel_size[0], kernel_size[1])
         self.weight, self.bias = init_params(weight_size, biased, True)
 
     def forward(self, x):
         w = binarize(self.weight)
         b = None
-        if biased:
+        if self.biased:
             b = binarize(self.bias)
         return F.conv2d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
 

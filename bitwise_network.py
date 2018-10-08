@@ -68,7 +68,7 @@ class BitwiseNetwork(nn.Module):
 
 def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False):
     if toy:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[1024], dropout=dropout)
+        model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024], dropout=dropout)
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
     else:
