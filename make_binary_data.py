@@ -22,27 +22,32 @@ def make_dataset(batchsize, seed=0, toy=False):
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
     return train_dl, val_dl
 
-def make_mixture_set(denoising=False):
+def make_mixture_set(mode='normal'):
     speaker_path = '/media/data/timit-wav/train'
     targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
         'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0',
         'dr1/fsma0', 'dr1/ftbr0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targets, num_train=7)
 
-    if denoising:
+    if mode == 'toy':
+        trainset = SineSpeechData(train_speeches, 10, hop=256)
+        valset = SineSpeechData(val_speeches, 10, hop=256)
+    elif mode == 'denoising':
         noise_path = '/media/data/noises-16k'
         interferences = ['babble-16k.wav', 'restaurant-16k.wav',
             'exhibition-16k.wav', 'street-16k.wav', 'street1-16k.wav',
             'street2-16k.wav', 'car-16k.wav', 'bus-16k.wav',
             'airport-16k.wav', 'subway-16k.wav']
-        train_noises, val_noises = get_noise_files(noise_path, interferences)
+        train_noises, val_noises = get_noise_files(noise_path, interferences, 7)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=256)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=256)
     else:
         interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
                     'dr1/mwad0', 'dr1/mwar0']
         train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=256)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=256)
 
-    trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=256)
-    valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=256)
     return trainset, valset
 
 def main():
@@ -52,18 +57,18 @@ def main():
     args = parser.parse_args()
     dataset_dir = '/media/data/binary_audio/'
     if not args.toy:
-        trainset, valset = make_mixture_set(args.denoising)
         config_name = 'config.npz'
         train_dir = dataset_dir + 'train/'
         val_dir = dataset_dir + 'val/'
+        mode = 'normal'
+        if args.denoise:
+            mode = 'denoising'
     else:
-        trainset = SinusoidDataset(size=100, length=32000,
-            sig_range=[0, 4000], noise_range=[4000, 8000])
-        valset = SinusoidDataset(size=100, length=32000,
-            sig_range=[0, 4000], noise_range=[4000, 8000])
+        mode = 'toy'
         config_name = 'toy_config.npz'
         train_dir = dataset_dir + 'toy_train/'
         val_dir = dataset_dir + 'toy_val/'
+    trainset, valset = make_mixture_set(mode)
     print('Train Length: ', len(trainset))
     print('Validation Length: ', len(valset))
 
