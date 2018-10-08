@@ -105,6 +105,27 @@ class BinLinear(nn.Module):
             b = binarize(self.bias)
         return F.linear(x, w, b)
 
+class BinConv1d(nn.Module):
+    def __init__(self, input_channels, output_channels, kernel_size,
+        biased=True, stride=1, padding=0, groups=1):
+        super(BinConv2d, self).__init__()
+        self.input_channels = input_channels
+        self.output_channels = output_channels
+        self.groups = groups
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.biased = biased
+        weight_size = (output_channels, input_channels/self.groups, kernel_size)
+        self.weight, self.bias = init_params(weight_size, biased, True)
+
+    def forward(self, x):
+        w = binarize(self.weight)
+        b = None
+        if biased:
+            b = binarize(self.bias)
+        return F.conv2d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
+
 class BinConv2d(nn.Module):
     def __init__(self, input_channels, output_channels, kernel_size,
         biased=True, stride=1, padding=0, groups=1):
