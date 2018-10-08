@@ -49,7 +49,7 @@ class TwoSourceMixtureDataset(Dataset):
         return self._getmix(sigf, interf)
 
 class SineSpeechData(Dataset):
-    def __init__(self, speeches, num_sines, fs = 16000, sig_range = [2000, 4000], snr = 0,
+    def __init__(self, speeches, num_sines, fs = 16000, noise_range = [2000, 4000], snr = 0,
         hop=None):
         self.fs = fs
         self.hop = hop
@@ -64,23 +64,23 @@ class SineSpeechData(Dataset):
         # return (mixture, target, interference)
         speech_file, sine_params = self.mixes[key]
         freq, phase = sine_params
-        speech, _ = sf.read(sigf)
-        if len(sig.shape) != 1:
+        speech, _ = sf.read(speech_file)
+        if len(speech.shape) != 1:
             speech = np.mean(speech, axis=1)
 
         if self.hop:
             speech = speech[:len(speech)//self.hop*self.hop]
 
         time = np.arange(len(speech)) * 1 / self.fs
-        noise = np.sin(2*np.pi*freq * self.time + phase)
-        speech = speech / np.std(sig1)
-        noise = noise / np.std(sig2)
+        noise = np.sin(2*np.pi*freq * time + phase)
+        speech = speech / np.std(speech)
+        noise = noise / np.std(noise)
         mix = speech + (1 / self.snr) * noise
         mix = mix / np.std(mix)
         return {'mixture': mix, 'target': speech, 'interference': noise}
 
     def __len__(self):
-        return self.size
+        return len(self.mixes)
 
 def collate_and_trim(batch, axis=0, hop=1, dtype=torch.float):
     keys = list(batch[0].keys())

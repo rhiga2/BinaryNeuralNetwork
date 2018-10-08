@@ -150,9 +150,9 @@ class BLRSampler(Function):
         return torch.tanh((torch.log(1/(1-q+eps)-1+eps) + L)/temp)
 
 class Scaler(nn.Module):
-    def __init__(self, num_features):
+    def __init__(self, num_features, requires_grad=True):
         super(Scaler, self).__init__()
-        self.gamma = nn.Parameter(torch.ones(num_features), requires_grad=True)
+        self.gamma = nn.Parameter(torch.ones(num_features), requires_grad=requires_grad)
 
     def forward(self, x):
-        return torch.abs(self.gamma) * x / (torch.std(x) + 1e-5)
+        return torch.abs(self.gamma) * x / (torch.std(x, dim=0)+ 1e-5)

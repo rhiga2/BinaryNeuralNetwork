@@ -24,9 +24,11 @@ class BitwiseNetwork(nn.Module):
         for i, out_size in enumerate(fc_sizes):
             self.linear_list.append(BitwiseLinear(in_size, out_size))
             in_size = out_size
-            self.scaler_list.append(Scaler(out_size))
+            scaler = Scaler(out_size)
             if i < self.num_layers - 1:
+                # scaler = Scaler(out_size, requires_grad=False)
                 self.dropout_list.append(nn.Dropout(dropout))
+            self.scaler_list.append(scaler)
         self.sparsity = sparsity
 
     def forward(self, x):
