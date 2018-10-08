@@ -22,7 +22,7 @@ class BitwiseParams(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        return grad_output, None
+        return grad_output*(torch.abs(x) <= 1).to(grad_output.dtype), None
 
 class Binarize(Function):
     @staticmethod
@@ -107,22 +107,27 @@ class BinLinear(nn.Module):
 
 class BinConv2d(nn.Module):
     def __init__(self, input_channels, output_channels, kernel_size,
-        biased=True, stride=1, padding=0):
+        biased=True, stride=1, padding=0, groups=1):
         super(BinConv2d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
+        self.groups = groups
         self.kernel_size = kernel_size
         self.stride = stride
         self.padding = padding
         self.biased = biased
-        self.weight, self.bias = init_params((output_size, input_size), biased, True)
+        if isinstance(kernel_size, int):
+            weight_size = (output_channels, input_channels/self.groups, kernel_size, kernel_size)
+        else:
+            weight_size = (output_channels, input_channels/self.groups, kernel_size[0], kernel_size[1])
+        self.weight, self.bias = init_params(weight_size, biased, True)
 
     def forward(self, x):
         w = binarize(self.weight)
         b = None
         if biased:
             b = binarize(self.bias)
-        return F.conv2d(x, w, b, stride=self.stride, padding=self.padding)
+        return F.conv2d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
 
 class BLRLinear(nn.Module):
     def __init__(self, input_size, output_size):
