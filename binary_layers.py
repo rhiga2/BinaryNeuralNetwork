@@ -90,6 +90,9 @@ class BitwiseLinear(nn.Module):
         self.weight = nn.Parameter(bitwise_params(self.weight, self.beta), requires_grad=False)
         self.bias = nn.Parameter(bitwise_params(self.bias, self.beta), requires_grad=False)
 
+    def __str__(self):
+        return 'BitwiseLinear(%d, %d)' % (self.input_size, self.output_size)
+
 class BinLinear(nn.Module):
     def __init__(self, input_size, output_size, biased=True):
         super(BinLinear, self).__init__()
@@ -104,6 +107,9 @@ class BinLinear(nn.Module):
         if self.biased:
             b = binarize(self.bias)
         return F.linear(x, w, b)
+
+    def __str__(self):
+        return 'BinLinear(%d, %d)' % (self.input_size, self.output_size)
 
 class BinConv1d(nn.Module):
     def __init__(self, input_channels, output_channels, kernel_size,
@@ -125,6 +131,11 @@ class BinConv1d(nn.Module):
         if self.biased:
             b = binarize(self.bias)
         return F.conv1d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
+
+    def __str__(self):
+        return 'BinLinear(%d, %d, %d, stride=%d, padding=%d, self.groups=%d)' %
+            (self.input_size, self.output_size, self.kernel_size,
+            self.stride, self.padding, self.groups)
 
 class BinConv2d(nn.Module):
     def __init__(self, input_channels, output_channels, kernel_size,
