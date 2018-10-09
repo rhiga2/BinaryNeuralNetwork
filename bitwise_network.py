@@ -10,7 +10,7 @@ from binary_layers import *
 import argparse
 
 class BitwiseNetwork(nn.Module):
-    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, sparsity=95):
+    def __init__(self, input_size, output_size, fc_sizes = [], dropout=0, sparsity=95, regress=False):
         super(BitwiseNetwork, self).__init__()
         self.params = {}
         self.mode = 'real'
@@ -24,11 +24,12 @@ class BitwiseNetwork(nn.Module):
         for i, out_size in enumerate(fc_sizes):
             self.linear_list.append(BitwiseLinear(in_size, out_size))
             in_size = out_size
-            scaler = Scaler(out_size)
             if i < self.num_layers - 1:
-                # scaler = Scaler(out_size, requires_grad=False)
+                self.scaler_list.append(Scaler(out_size))
                 self.dropout_list.append(nn.Dropout(dropout))
-            self.scaler_list.append(scaler)
+        self.output_transform = lambda x : x / 10 # temperature parameter
+        if regress:
+            self.output_transform = self.activation
         self.sparsity = sparsity
 
     def forward(self, x):
@@ -40,11 +41,12 @@ class BitwiseNetwork(nn.Module):
         h = x.permute(0, 2, 1).contiguous().view(-1, x.size(1))
         for i in range(self.num_layers):
             h = self.linear_list[i](h)
-            if self.mode != 'inference':
-                h = self.scaler_list[i](h)
             if i < self.num_layers - 1:
+                if self.mode != 'inference':
+                    h = self.scaler_list[i](h)
                 h = self.activation(h)
                 h = self.dropout_list[i](h)
+        h = self.output_transform(h)
         # Unflatten (NT, F) -> (N, F, T)
         y = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
         return y
@@ -66,14 +68,15 @@ class BitwiseNetwork(nn.Module):
             if layer.mode == 'noisy':
                 layer.update_beta(sparsity=self.sparsity)
 
-def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False):
+def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, regress=False):
     if toy:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024], dropout=dropout)
+        model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024], dropout=dropout, 
+            regress=regress)
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
     else:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[4096, 4096],
-            dropout=dropout, sparsity=sparsity)
+        model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
+            dropout=dropout, sparsity=sparsity, regress=regress)
         real_model = 'models/real_network.model'
         bitwise_model = 'models/bitwise_network.model'
 
@@ -103,6 +106,7 @@ def main():
     parser.add_argument('--sparsity', '-sparsity', type=float, default=95.0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     parser.add_argument('--toy', action='store_true')
+    parser.add_argument('--mse', action='store_true')
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -111,16 +115,20 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize, toy=args.toy)
-    model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy, toy=args.toy)
+    model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy, toy=args.toy, regress=args.mse)
     model.to(device)
     print(model)
     loss = nn.BCEWithLogitsLoss()
+    if args.mse:
+        loss = nn.MSELoss()
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
     def model_loss(model, binary_batch, compute_bss=False):
         bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
         premask = model(2*bmag-1)
+        if args.mse:
+            ibm = 2*ibm -1
         cost = loss(premask, ibm)
         if args.l1_reg:
             for p in model.parameters():
