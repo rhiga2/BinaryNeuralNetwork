@@ -70,7 +70,7 @@ class BitwiseNetwork(nn.Module):
 
 def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, regress=False):
     if toy:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024], dropout=dropout, 
+        model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024], dropout=dropout,
             regress=regress)
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
@@ -90,6 +90,15 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, regress=Fals
         model.noisy()
 
     return model, model_name
+
+def model_loss(model, batch, mse=False):
+    bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
+    premask = model(2*bmag-1)
+    if mse:
+        loss = F.mse(premask, 2*ibm - 1)
+    else:
+        loss = F.binary_cross_entropy_with_logits(premask, ibm)
+    return loss
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
@@ -115,25 +124,12 @@ def main():
         device = torch.device('cpu')
 
     train_dl, val_dl = make_dataset(args.batchsize, toy=args.toy)
-    model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy, toy=args.toy, regress=args.mse)
+    model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy,
+        toy=args.toy, regress=args.mse)
     model.to(device)
     print(model)
-    loss = nn.BCEWithLogitsLoss()
-    if args.mse:
-        loss = nn.MSELoss()
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
-
-    def model_loss(model, binary_batch, compute_bss=False):
-        bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
-        premask = model(2*bmag-1)
-        if args.mse:
-            ibm = 2*ibm -1
-        cost = loss(premask, ibm)
-        if args.l1_reg:
-            for p in model.parameters():
-                cost += args.l1_reg * torch.norm(p, 1)
-        return cost
 
     for epoch in range(args.epochs):
         total_cost = 0
@@ -141,14 +137,14 @@ def main():
         model.train()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()
-            cost = model_loss(model, batch)
+            cost = model_loss(model, batch, args.mse)
             total_cost += cost.data
             cost.backward()
             optimizer.step()
         avg_cost = total_cost / (count + 1)
 
         if epoch % args.output_period == 0:
-            print('Epoch %d Training Cost: ' % epoch, avg_cost)
+            print('Epoch %d Training Cost: ' % epoch, avg_cost, args.mse)
             total_cost = 0
             model.eval()
             for count, batch in enumerate(val_dl):
