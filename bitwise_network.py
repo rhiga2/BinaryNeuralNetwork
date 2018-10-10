@@ -91,7 +91,7 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, regress=Fals
 
     return model, model_name
 
-def model_loss(model, batch, mse=False):
+def model_loss(model, batch, mse=False, device=torch.device('cpu')):
     bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
     premask = model(2*bmag-1)
     if mse:
@@ -137,7 +137,7 @@ def main():
         model.train()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()
-            cost = model_loss(model, batch, args.mse)
+            cost = model_loss(model, batch, args.mse, device)
             total_cost += cost.data
             cost.backward()
             optimizer.step()
@@ -148,7 +148,7 @@ def main():
             total_cost = 0
             model.eval()
             for count, batch in enumerate(val_dl):
-                cost = model_loss(model, batch)
+                cost = model_loss(model, batch, args.mse, device)
                 total_cost += cost.data
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)
