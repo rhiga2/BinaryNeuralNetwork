@@ -16,7 +16,6 @@ class TwoSourceMixtureDataset(Dataset):
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
         self.hop = hop
-        self.length = length
 
     def __len__(self):
         return len(self.mixes)
@@ -29,9 +28,6 @@ class TwoSourceMixtureDataset(Dataset):
 
         if self.hop:
             sig = sig[:len(sig)//self.hop*self.hop]
-
-        if self.length:
-            sig = sig[:self.length]
 
         inter, _ = sf.read(interf, frames=sig.shape[0], fill_value=0)
         if len(inter.shape) != 1:
