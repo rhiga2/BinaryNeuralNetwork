@@ -72,7 +72,7 @@ def main():
         train_dir = dataset_dir + 'train/'
         val_dir = dataset_dir + 'val/'
         mode = 'normal'
-        if args.denoise:
+        if args.denoising:
             mode = 'denoising'
     else:
         mode = 'toy'

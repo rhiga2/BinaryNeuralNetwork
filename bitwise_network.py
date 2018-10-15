@@ -27,7 +27,7 @@ class BitwiseNetwork(nn.Module):
             if i < self.num_layers - 1:
                 self.scaler_list.append(Scaler(out_size))
                 self.dropout_list.append(nn.Dropout(dropout))
-        self.output_transform = lambda x : x / 10 # temperature parameter
+        self.output_transform = Scaler(out_size) # temperature parameter
         if regress:
             self.output_transform = self.activation
         self.sparsity = sparsity
@@ -95,7 +95,7 @@ def model_loss(model, batch, mse=False, device=torch.device('cpu')):
     bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
     premask = model(2*bmag-1)
     if mse:
-        loss = F.mse(premask, 2*ibm - 1)
+        loss = F.mse_loss(premask, 2*ibm - 1)
     else:
         loss = F.binary_cross_entropy_with_logits(premask, ibm)
     return loss
@@ -107,7 +107,7 @@ def main():
     parser.add_argument('--batchsize', '-b', type=int, default=32,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
-    parser.add_argument('--lr_decay', '-lrd', type=float, default=0.95)
+    parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', action='store_true')
@@ -144,7 +144,7 @@ def main():
         avg_cost = total_cost / (count + 1)
 
         if epoch % args.output_period == 0:
-            print('Epoch %d Training Cost: ' % epoch, avg_cost, args.mse)
+            print('Epoch %d Training Cost: ' % epoch, avg_cost)
             total_cost = 0
             model.eval()
             for count, batch in enumerate(val_dl):
