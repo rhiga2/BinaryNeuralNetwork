@@ -30,8 +30,19 @@ def make_mixture_set(mode='normal'):
     train_speeches, val_speeches = get_speech_files(speaker_path, targets, num_train=7)
 
     if mode == 'toy':
-        trainset = SineSpeechData(train_speeches, 10, hop=256)
-        valset = SineSpeechData(val_speeches, 10, hop=256)
+        # trainset = SineSpeechData(train_speeches, 10, hop=256)
+        # valset = SineSpeechData(val_speeches, 10, hop=256)
+        noise_path = '/media/data/Nonspeech'
+        interferences = ['n81.wav', # chimes
+                         'n97.wav', # eating chips
+                         'n21.wav', # motorcycle
+                         'n46.wav', # ocean
+                         'n47.wav', # birds
+                         'n55.wav', # cicadas?
+                         ]
+        train_noises, val_noises = get_noise_files(noise_path, interferences, 7)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=256)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=256)
     elif mode == 'denoising':
         noise_path = '/media/data/noises-16k'
         interferences = ['babble-16k.wav', 'restaurant-16k.wav',
