@@ -49,7 +49,7 @@ class TwoSourceMixtureDataset(Dataset):
         return self._getmix(sigf, interf)
 
 class SineSpeechData(Dataset):
-    def __init__(self, speeches, num_sines, fs = 16000, noise_range = [2000, 4000], snr = 0,
+    def __init__(self, speeches, num_sines, fs = 16000, noise_range = [3000, 8000], snr = 0,
         hop=None):
         self.fs = fs
         self.hop = hop
