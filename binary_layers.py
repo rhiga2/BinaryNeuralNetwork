@@ -132,7 +132,7 @@ class BinConv1d(nn.Module):
         return F.conv1d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
 
     def __str__(self):
-        return 'BinLinear(%d, %d, %d, stride=%d, padding=%d, self.groups=%d)' % (self.input_size, 
+        return 'BinLinear(%d, %d, %d, stride=%d, padding=%d, self.groups=%d)' % (self.input_size,
             self.output_size, self.kernel_size,
             self.stride, self.padding, self.groups)
 
@@ -191,4 +191,4 @@ class Scaler(nn.Module):
         self.gamma = nn.Parameter(torch.ones(num_features), requires_grad=requires_grad)
 
     def forward(self, x):
-        return torch.abs(self.gamma) * x / (torch.std(x) + 1e-5)
+        return torch.abs(self.gamma) * x / (torch.std(x, dim=0) + 1e-5)
