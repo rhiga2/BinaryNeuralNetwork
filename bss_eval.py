@@ -116,7 +116,7 @@ def bss_eval_test( sep, sources, i=0):
     sar = 10*log10( sum( (s_target + e_interf)**2) / sum( e_artif**2));
 
     # Done!
-    return (sdr, sir, sar)
+    return BSSMetrics(sdr, sir, sar)
 
 def test_metrics():
     # test code
@@ -132,13 +132,13 @@ def test_metrics():
     trainset = TwoSourceMixtureDataset(speeches, noises)
     for i in range(len(trainset)):
         sample = trainset[i]
-        pred = sample['mixture'] + np.random.random(sample['mixture'].shape())*0.01
+        pred = sample['mixture'] + np.random.random(sample['mixture'].shape)*0.01
         sources = np.stack([sample['target'], sample['interference']], axis=1)
         metric = bss_eval(pred, sources)
-        sdr, sir, sar = bss_eval_test(pred.numpy(), sources.numpy().T)
-        print('SDR Error: ', (sdr - metric.sdr.numpy())**2, sdr, metric.sdr.numpy())
-        print('SIR Error: ', (sir - metric.sir.numpy())**2, sir, metric.sir.numpy())
-        print('SAR Error: ', (sar - metric.sar.numpy())**2, sar, metric.sar.numpy())
+        metric_test = bss_eval_test(pred, sources.T)
+        print('SDR Error: ', (metric.sdr - metric_test.sdr)**2)
+        print('SIR Error: ', (metric.sir - metric_test.sir)**2)
+        print('SAR Error: ', (metric.sar - metric_test.sar)**2)
 
 if __name__=='__main__':
     test_metrics()
