@@ -35,7 +35,8 @@ class Binarize(Function):
         # There are two options:
         # 1. Clamp gradients exceeding +/- 1
         # 2. Zero gradients exceeding +/- 1
-        return grad_output * (torch.abs(grad_output) <= 1).to(grad_output.dtype)
+        x = ctx.saved_tensors[0]
+        return grad_output * (torch.abs(x) <= 1).to(grad_output.dtype)
 
 bitwise_activation = BitwiseActivation.apply
 bitwise_params = BitwiseParams.apply
@@ -50,6 +51,12 @@ def init_params(size, biased=True, requires_grad=True):
         b = torch.zeros(size[0])
         b = nn.Parameter(b, requires_grad=requires_grad)
     return w, b
+
+def clip_params(mod, min=-1, max=1):
+    state_dict = mod.state_dict()
+    for name, param in state_dict.items():
+        if name.endswith('weight') or name.endswith('bias'):
+            state_dict[name] = torch.clamp(param, min, max)
 
 class BitwiseLinear(nn.Module):
     def __init__(self, input_size, output_size):

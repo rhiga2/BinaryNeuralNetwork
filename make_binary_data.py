@@ -39,8 +39,9 @@ def make_mixture_set(mode='normal'):
                          'n46.wav', # ocean
                          'n47.wav', # birds
                          'n55.wav', # cicadas?
+                         'n59.wav', # jungle?
                          ]
-        train_noises, val_noises = get_noise_files(noise_path, interferences, 7)
+        train_noises, val_noises = get_noise_files(noise_path, interferences)
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=256)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=256)
     elif mode == 'denoising':

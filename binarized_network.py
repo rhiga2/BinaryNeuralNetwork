@@ -60,6 +60,18 @@ def make_model(dropout=0, toy=False):
 
     return model, model_name
 
+def model_loss(model, batch, mse=False, device=torch.device('cpu')):
+    bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
+    premask = model(2*bmag-1)
+    if mse:
+        loss = F.mse_loss(premask, 2*ibm - 1)
+    else:
+        loss = F.binary_cross_entropy_with_logits(premask, ibm)
+    return loss
+
+def clip(state_dict, min, max):
+    pass
+
 def main():
     parser = argparse.ArgumentParser(description='binarized network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
@@ -88,15 +100,6 @@ def main():
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
-    def model_loss(model, binary_batch, compute_bss=False):
-        bmag, ibm = batch['bmag'].cuda(device), batch['ibm'].cuda(device)
-        premask = model(2*bmag-1)
-        cost = loss(premask, ibm)
-        if args.l1_reg:
-            for p in model.parameters():
-                cost += args.l1_reg * torch.norm(p, 1)
-        return cost
-
     for epoch in range(args.epochs):
         total_cost = 0
         model.train()
@@ -106,6 +109,7 @@ def main():
             total_cost += cost.data
             cost.backward()
             optimizer.step()
+            clip_params(model)
         avg_cost = total_cost / (count + 1)
 
         if epoch % args.output_period == 0:
