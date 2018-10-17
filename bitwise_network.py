@@ -71,7 +71,7 @@ class BitwiseNetwork(nn.Module):
 def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, regress=False):
     if toy:
         model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024], dropout=dropout,
-            regress=regress)
+            regress=regress, sparsity=sparsity)
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
     else:
@@ -139,7 +139,7 @@ def main():
             optimizer.zero_grad()
             cost = model_loss(model, batch, args.mse, device)
             total_cost += cost.data
-            cost.backward()
+            cost.backward() 
             optimizer.step()
         avg_cost = total_cost / (count + 1)
 

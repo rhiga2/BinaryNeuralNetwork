@@ -52,7 +52,7 @@ class BinarizedNetwork(nn.Module):
 
 def make_model(dropout=0, toy=False):
     if toy:
-        model = BinarizedNetwork(2052, 513, fc_sizes=[1024], dropout=dropout)
+        model = BinarizedNetwork(2052, 513, fc_sizes=[1024, 1024], dropout=dropout)
         model_name = 'models/toy_bin_network.model'
     else:
         model = BinarizedNetwork(2052, 513, fc_sizes=[2048, 2048], dropout=dropout)
@@ -105,7 +105,7 @@ def main():
         model.train()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()
-            cost = model_loss(model, batch)
+            cost = model_loss(model, batch, device=device)
             total_cost += cost.data
             cost.backward()
             optimizer.step()
@@ -117,7 +117,7 @@ def main():
             total_cost = 0
             model.eval()
             for count, batch in enumerate(val_dl):
-                cost = model_loss(model, batch)
+                cost = model_loss(model, batch, device=device)
                 total_cost += cost.data
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)

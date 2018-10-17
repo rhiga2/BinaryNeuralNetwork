@@ -79,6 +79,8 @@ class BitwiseLinear(nn.Module):
         return F.linear(x, w, b)
 
     def update_beta(self, sparsity):
+        if sparsity == 0:
+            return
         w = self.weight.cpu().data.numpy()
         b = self.bias.cpu().data.numpy()
         params = np.abs(np.concatenate((w, np.expand_dims(b, axis=1)), axis=1))
