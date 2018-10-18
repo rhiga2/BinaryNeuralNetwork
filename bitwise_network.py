@@ -28,8 +28,8 @@ class BitwiseNetwork(nn.Module):
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
-        fc_sizes = fc_sizes + [kernel_size,]
-        in_size = kernel_size
+        fc_sizes = fc_sizes + [self.cutoff,]
+        in_size = self.cutoff
         self.linear_list = nn.ModuleList()
         self.scaler_list = nn.ModuleList()
         self.dropout_list = nn.ModuleList()
@@ -59,13 +59,13 @@ class BitwiseNetwork(nn.Module):
         # (N, T) -> (N, 1, T)
         x = x.unsqueeze(1)
         transformed_x = self.conv1(x)
-        real_part = transformed_x[:, :513, :]
-        imag_part = transformed_x[:, 513:, :]
+        real_part = transformed_x[:, :self.cutoff, :]
+        imag_part = transformed_x[:, self.cutoff:, :]
         mag = torch.sqrt(real_part**2 + imag_part**2)
         phase = torch.atan2(imag_part.data, real_part.data)
-
+        
         # Flatten (N, F, T') -> (NT', F)
-        h = mag.permute(0, 2, 1).contiguous().view(-1, x.size(1))
+        h = mag.permute(0, 2, 1).contiguous().view(-1, mag.size(1))
         for i in range(self.num_layers):
             h = self.linear_list[i](h)
             if i < self.num_layers - 1:
@@ -75,8 +75,8 @@ class BitwiseNetwork(nn.Module):
                 h = self.dropout_list[i](h)
         h = (self.output_transform(h) + 1) / 2
 
-        # Unflatten (NT, F) -> (N, F, T)
-        mask = h.view(x.size(0), x.size(2), -1).permute(0, 2, 1)
+        # Unflatten (NT', F) -> (N, F, T')
+        mask = h.view(mag.size(0), mag.size(2), -1).permute(0, 2, 1)
         mag = mag * mask
         reconstructed_x = torch.cat([mag*torch.cos(phase), mag*torch.sin(phase)], dim=1)
         y_hat = self.conv1_transpose(reconstructed_x)
@@ -99,21 +99,22 @@ class BitwiseNetwork(nn.Module):
             if layer.mode == 'noisy':
                 layer.update_beta(sparsity=self.sparsity)
 
-def make_dataset(batchsize, toy=False):
+def make_data(batchsize, toy=False):
     trainset, valset = make_mixture_set(toy=toy)
-    collate = lambda x: collate_and_trim(x, dim=0)
+    collate = lambda x: collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
-        collate_fn=collate_and_trim)
-    val_dl = DataLoader(valset, batch_size=batchsize)
+        collate_fn=collate)
+    val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
+    return train_dl, val_dl
 
 def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, adapt=True):
     if toy:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024],
+        model = BitwiseNetwork(1024, 256, fc_sizes=[1024, 1024],
             dropout=dropout, adapt=adapt, sparsity=sparsity)
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
     else:
-        model = BitwiseNetwork(2052, 513, fc_sizes=[2048, 2048],
+        model = BitwiseNetwork(1024, 256, fc_sizes=[2048, 2048],
             dropout=dropout, sparsity=sparsity, adapt=adapt)
         real_model = 'models/real_network.model'
         bitwise_model = 'models/bitwise_network.model'
@@ -158,7 +159,7 @@ def main():
     else:
         device = torch.device('cpu')
 
-    train_dl, val_dl = make_dataset(args.batchsize, toy=args.toy)
+    train_dl, val_dl = make_data(args.batchsize, toy=args.toy)
     model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy,
         toy=args.toy, adapt=not args.no_adapt)
     model.to(device)

@@ -17,7 +17,7 @@ class TwoSourceMixtureDataset(Dataset):
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
         self.hop = hop
-        slef.length = length
+        self.length = length
 
     def __len__(self):
         return len(self.mixes)
