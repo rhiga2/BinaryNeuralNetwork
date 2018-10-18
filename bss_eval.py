@@ -42,8 +42,8 @@ def compute_source_projection(pred, sources):
     pred (T)
     sources (T, S)
     '''
-    pinv_pred = torch.matmul(torch.linalg.pinv(sources), pred)
-    return torch.matmul(sources, pinv_pred)
+    pinv_pred = torch.mm(torch.pinverse(sources), pred)
+    return torch.mm(sources, pinv_pred)
 
 def compute_sdr(pred, s_target):
     e_total = pred - s_target
