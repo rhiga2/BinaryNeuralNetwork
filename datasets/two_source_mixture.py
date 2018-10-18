@@ -7,15 +7,17 @@ from torch.utils.data import Dataset
 import scipy.signal as signal
 import random
 import soundfile as sf
+import librosa
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
-        random_start=True, transform=None, hop=None, length=None):
+        random_start=True, transform=None, hop=None, length=None, random_shift=False):
         self.fs = fs
         self.snr = np.power(10, snr/20)
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
         self.hop = hop
+        slef.length = length
 
     def __len__(self):
         return len(self.mixes)

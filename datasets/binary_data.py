@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import glob
 import scipy.signal as signal
 from sklearn.cluster import KMeans
@@ -27,7 +28,13 @@ def kmeans_qlevels(x, levels=16):
 def get_bins(centers):
     return (centers[:-1] + centers[1:])/2
 
-def binarize(x, bins, num_bits=4):
+def bucketize(x, bins):
+    bucket_x = torch.zeros(x.size(), dtype=torch.uint8)
+    for bin in bins:
+        bucket_x[x >= bin] += 1
+    return bucket_x
+
+def binarize_stft(x, bins, num_bits=4):
     '''
     x is shape (F, T)
     F = frequency range

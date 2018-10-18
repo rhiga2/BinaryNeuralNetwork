@@ -1,4 +1,5 @@
 import unittest
+import torch
 from binary_data import *
 
 class TestQuantize(unittest.TestCase):
@@ -43,14 +44,13 @@ class TestQuantize(unittest.TestCase):
         print('Uniform Quantizer Error: ', uerror)
         self.assertLess(uerror, (xmax - xmin)/32)
 
-    def test_stft(self):
-        np.random.seed(0)
-        x = 100*np.sin(np.pi/8*np.arange(16128))
-        mag, phase = stft(x)
-        x_estimate = istft(mag, phase)
-        sq_error = np.sum((x - x_estimate)**2)
-        print('STFT Error: ', sq_error)
-        self.assertLess(sq_error, 1e-6)
+    def test_bucketize(self):
+        x = torch.FloatTensor([0.5, 3.5, 2.4, 1.9, 4.2, 3.1, 1.5])
+        bins = torch.FloatTensor([1.8, 2, 3, 4])
+        soln = torch.ByteTensor([0, 3, 2, 1, 4, 3, 0])
+        bucket_x = bucketize(x, bins)
+        all_match = torch.all(torch.eq(bucket_x, soln))
+        self.assertTrue(all_match)
 
 if __name__ == '__main__':
     unittest.main()

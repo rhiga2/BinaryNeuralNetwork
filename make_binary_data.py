@@ -22,14 +22,14 @@ def make_dataset(batchsize, seed=0, toy=False):
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
     return train_dl, val_dl
 
-def make_mixture_set(mode='normal'):
+def make_mixture_set(toy=False):
     speaker_path = '/media/data/timit-wav/train'
     targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
         'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0',
         'dr1/fsma0', 'dr1/ftbr0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targets, num_train=7)
 
-    if mode == 'toy':
+    if toy:
         # trainset = SineSpeechData(train_speeches, 10, hop=256)
         # valset = SineSpeechData(val_speeches, 10, hop=256)
         noise_path = '/media/data/Nonspeech'
@@ -42,15 +42,6 @@ def make_mixture_set(mode='normal'):
                          'n59.wav', # jungle?
                          ]
         train_noises, val_noises = get_noise_files(noise_path, interferences)
-        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=256)
-        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=256)
-    elif mode == 'denoising':
-        noise_path = '/media/data/noises-16k'
-        interferences = ['babble-16k.wav', 'restaurant-16k.wav',
-            'exhibition-16k.wav', 'street-16k.wav', 'street1-16k.wav',
-            'street2-16k.wav', 'car-16k.wav', 'bus-16k.wav',
-            'airport-16k.wav', 'subway-16k.wav']
-        train_noises, val_noises = get_noise_files(noise_path, interferences, 7)
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=256)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=256)
     else:
@@ -72,15 +63,13 @@ def main():
         config_name = 'config.npz'
         train_dir = dataset_dir + 'train/'
         val_dir = dataset_dir + 'val/'
-        mode = 'normal'
         if args.denoising:
             mode = 'denoising'
     else:
-        mode = 'toy'
         config_name = 'toy_config.npz'
         train_dir = dataset_dir + 'toy_train/'
         val_dir = dataset_dir + 'toy_val/'
-    trainset, valset = make_mixture_set(mode)
+    trainset, valset = make_mixture_set(args.toy)
     print('Train Length: ', len(trainset))
     print('Validation Length: ', len(valset))
 
@@ -105,7 +94,7 @@ def main():
         targ_mag, targ_phase = stft(target)
         inter_mag, inter_phase = stft(inter)
         ibm = make_binary_mask(targ_mag - inter_mag, dtype=np.uint8)
-        bmag = binarize(mix_mag, bins)
+        bmag = binarize_stft(mix_mag, bins)
         np.savez(
             binary_fname,
             bmag=bmag,

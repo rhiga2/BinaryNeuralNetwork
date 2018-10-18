@@ -58,7 +58,20 @@ def clip_params(mod, min=-1, max=1):
         if name.endswith('weight') or name.endswith('bias'):
             state_dict[name] = torch.clamp(param, min, max)
 
+def convert_param(param, beta=0, mode='real'):
+    '''
+    Converts parameter to binary using bitwise nn scheme
+    '''
+    if mode == 'real':
+        return torch.tanh(param)
+    elif mode == 'noisy':
+        return bitwise_params(param, beta)
+    return param
+
 class BitwiseLinear(nn.Module):
+    '''
+    Linear/affine operation using bitwise (Kim et al.) scheme
+    '''
     def __init__(self, input_size, output_size):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
@@ -68,14 +81,8 @@ class BitwiseLinear(nn.Module):
         self.mode = 'real'
 
     def forward(self, x):
-        w = self.weight
-        b = self.bias
-        if self.mode == 'real':
-            w = torch.tanh(self.weight)
-            b = torch.tanh(self.bias)
-        elif self.mode == 'noisy':
-            w = bitwise_params(self.weight, self.beta)
-            b = bitwise_params(self.bias, self.beta)
+        w = convert_param(self.weight, self.beta, self.mode)
+        b = convert_param(self.bias, self.beta, self.mode)
         return F.linear(x, w, b)
 
     def update_beta(self, sparsity):
@@ -96,8 +103,40 @@ class BitwiseLinear(nn.Module):
         self.weight = nn.Parameter(bitwise_params(self.weight, self.beta), requires_grad=False)
         self.bias = nn.Parameter(bitwise_params(self.bias, self.beta), requires_grad=False)
 
-    def __str__(self):
+    def __repr__(self):
         return 'BitwiseLinear(%d, %d)' % (self.input_size, self.output_size)
+
+class BitwiseConv1d(nn.Module):
+    '''
+    1D bitwise (Kim et. al) convolution
+    '''
+    def __init__(self, input_channels, output_channels, kernel_size,
+        stride=1, padding=0, groups=1):
+        self.input_channels = input_channels
+        self.output_channels = output_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.groups = groups
+        weight_size = (output_channels, input_channels//self.groups, kernel_size)
+        self.weight, self.bias = init_params(weight_size, True, True)
+        self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
+        self.mode = 'real'
+
+    def forward(self, x):
+        w = convert_param(self.weight, self.beta, self.mode)
+        b = convert_param(self.bias, self.beta, self.mode)
+        return F.conv1d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
+
+    def noisy(self):
+        self.mode = 'noisy'
+        self.weight = nn.Parameter(torch.tanh(self.weight), requires_grad=True)
+        self.bias = nn.Parameter(torch.tanh(self.bias), requires_grad=True)
+
+    def inference(self):
+        self.mode = 'inference'
+        self.weight = nn.Parameter(bitwise_params(self.weight, self.beta), requires_grad=False)
+        self.bias = nn.Parameter(bitwise_params(self.bias, self.beta), requires_grad=False)
 
 class BinLinear(nn.Module):
     def __init__(self, input_size, output_size, biased=True):
@@ -114,7 +153,7 @@ class BinLinear(nn.Module):
             b = binarize(self.bias)
         return F.linear(x, w, b)
 
-    def __str__(self):
+    def __repr__(self):
         return 'BinLinear(%d, %d)' % (self.input_size, self.output_size)
 
 class BinConv1d(nn.Module):
@@ -138,7 +177,7 @@ class BinConv1d(nn.Module):
             b = binarize(self.bias)
         return F.conv1d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
 
-    def __str__(self):
+    def __repr__(self):
         return 'BinLinear(%d, %d, %d, stride=%d, padding=%d, self.groups=%d)' % (self.input_size,
             self.output_size, self.kernel_size,
             self.stride, self.padding, self.groups)
@@ -168,6 +207,9 @@ class BinConv2d(nn.Module):
         return F.conv2d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
 
 class BLRLinear(nn.Module):
+    '''
+    Binary local reparameterization linear
+    '''
     def __init__(self, input_size, output_size):
         super(BLRLinear, self).__init__()
         w = torch.empty(out_size, in_size)
@@ -181,6 +223,9 @@ class BLRLinear(nn.Module):
         return mean, var
 
 class BLRSampler(Function):
+    '''
+    Binary local reparameterization activation
+    '''
     def __init__(self, temp=0.1, eps=1e-5):
         self.temp = temp
         self.eps = eps
@@ -193,6 +238,9 @@ class BLRSampler(Function):
         return torch.tanh((torch.log(1/(1-q+eps)-1+eps) + L)/temp)
 
 class Scaler(nn.Module):
+    '''
+    Batch normalization without shifting
+    '''
     def __init__(self, num_features, requires_grad=True):
         super(Scaler, self).__init__()
         self.gamma = nn.Parameter(torch.ones(num_features), requires_grad=requires_grad)
