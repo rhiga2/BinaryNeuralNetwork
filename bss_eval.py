@@ -24,9 +24,9 @@ class BSSMetricsList:
         self.sars.extend(metrics.sars)
 
     def mean(self):
-        sdr = np.mean(self.sdrs)
-        sir = np.mean(self.sirs)
-        sar = np.mean(self.sars)
+        sdr = torch.mean(self.sdrs)
+        sir = torch.mean(self.sirs)
+        sar = torch.mean(self.sars)
         return sdr, sir, sar
 
 def compute_s_target(pred, target):
@@ -34,27 +34,27 @@ def compute_s_target(pred, target):
     pred (T)
     target (T)
     '''
-    return np.mean(target*pred)/\
-        np.mean(target**2)*target
+    return torch.mean(target*pred)/\
+        torch.mean(target**2)*target
 
 def compute_source_projection(pred, sources):
     '''
     pred (T)
     sources (T, S)
     '''
-    pinv_pred = np.matmul(np.linalg.pinv(sources), pred)
-    return np.matmul(sources, pinv_pred)
+    pinv_pred = torch.matmul(torch.linalg.pinv(sources), pred)
+    return torch.matmul(sources, pinv_pred)
 
 def compute_sdr(pred, s_target):
     e_total = pred - s_target
-    return 10*np.log10(np.mean(s_target**2)/np.mean(e_total**2))
+    return 10*torch.log10(torch.mean(s_target**2)/torch.mean(e_total**2))
 
 def compute_sir(s_target, e_inter):
-    return 10*np.log10(np.mean(s_target**2)/np.mean(e_inter**2))
+    return 10*torch.log10(torch.mean(s_target**2)/torch.mean(e_inter**2))
 
 def compute_sar(s_target, e_inter, e_art):
     source_projection = s_target + e_inter
-    return 10*np.log10(np.mean(source_projection**2)/np.mean(e_art**2))
+    return 10*torch.log10(torch.mean(source_projection**2)/torch.mean(e_art**2))
 
 def bss_eval(pred, sources, target_idx=0):
     '''
@@ -63,6 +63,7 @@ def bss_eval(pred, sources, target_idx=0):
     sources (T, S) s.t. S is the number of sources in mixture
     target_idx (int) index of target in sources
     '''
+    sources = torch.t(sources)
     target = sources[:, target_idx]
     s_target = compute_s_target(pred, target)
     source_proj = compute_source_projection(pred, sources)
@@ -77,7 +78,7 @@ def bss_eval(pred, sources, target_idx=0):
 def bss_eval_batch(preds, source_tensor, target_idx=0):
     '''
     preds (N, T)
-    source_tensor (N, T, S)
+    source_tensor (N, S, T)
     '''
     metrics = BSSMetricsList()
     sdrs, sirs, sars = [], [], []
@@ -133,9 +134,9 @@ def test_metrics():
     for i in range(len(trainset)):
         sample = trainset[i]
         pred = sample['mixture'] + np.random.random(sample['mixture'].shape)*0.01
-        sources = np.stack([sample['target'], sample['interference']], axis=1)
-        metric = bss_eval(pred, sources)
-        metric_test = bss_eval_test(pred, sources.T)
+        sources = np.stack([sample['target'], sample['interference']], axis=0)
+        metric = bss_eval(torch.FloatTensor(pred), torch.FloatTensor(sources))
+        metric_test = bss_eval_test(pred, sources)
         print('SDR Error: ', (metric.sdr - metric_test.sdr)**2)
         print('SIR Error: ', (metric.sir - metric_test.sir)**2)
         print('SAR Error: ', (metric.sar - metric_test.sar)**2)
