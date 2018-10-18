@@ -109,7 +109,7 @@ def make_dataset(batchsize, toy=False):
 def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, adapt=True):
     if toy:
         model = BitwiseNetwork(2052, 513, fc_sizes=[1024, 1024],
-            dropout=dropout, adapt=adapt)
+            dropout=dropout, adapt=adapt, sparsity=sparsity)
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
     else:
