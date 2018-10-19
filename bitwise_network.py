@@ -13,12 +13,11 @@ class BitwiseNetwork(nn.Module):
     def __init__(self, kernel_size=1024, stride=256, fc_sizes = [], dropout=0, sparsity=95,
         adapt=True):
         super(BitwiseNetwork, self).__init__()
-
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.cutoff = kernel_size // 2 + 1
         self.conv1 = nn.Conv1d(1, 2*self.cutoff, kernel_size, stride=stride,
-            bias=False)
+            bias=False, padding=2*self.cutoff)
         fft = np.fft.fft(np.eye(kernel_size))
         real_fft = np.real(fft)
         im_fft = np.imag(fft)
@@ -46,8 +45,8 @@ class BitwiseNetwork(nn.Module):
         # Initialize inverse of front end transform
         self.scale = kernel_size / stride
         inv_basis = torch.FloatTensor(np.linalg.pinv(self.scale*basis).T)
-        self.conv1_transpose = nn.ConvTranspose1d(kernel_size, 1, kernel_size,
-            stride=stride, bias=False, padding=2*cutoff)
+        self.conv1_transpose = nn.ConvTranspose1d(2*self.cutoff, 1, kernel_size,
+            stride=stride, bias=False)
         self.conv1_transpose.weight = nn.Parameter(inv_basis.unsqueeze(1),
             requires_grad=adapt)
 
@@ -65,7 +64,7 @@ class BitwiseNetwork(nn.Module):
         real_part = transformed_x[:, :self.cutoff, :]
         imag_part = transformed_x[:, self.cutoff:, :]
         mag = torch.sqrt(real_part**2 + imag_part**2)
-        phase = torch.atan2(imag_part.data, real_part.data)
+        phase = torch.atan2(imag_part, real_part)
 
         # Flatten (N, F, T') -> (NT', F)
         h = mag.permute(0, 2, 1).contiguous().view(-1, mag.size(1))
@@ -83,8 +82,8 @@ class BitwiseNetwork(nn.Module):
         mag = mag * mask
         reconstructed_x = torch.cat([mag*torch.cos(phase), mag*torch.sin(phase)], dim=1)
         y_hat = self.conv1_transpose(reconstructed_x)
-        y_hat = y_hat.squeeze(1)[:, 2*self.cutoff:]
-        return y_hat[:, :x.size(1)]
+        y_hat = y_hat.squeeze(1)
+        return y_hat[:, 2*self.cutoff:x.size(1)+2*self.cutoff]
 
     def noisy(self):
         self.mode = 'noisy'
@@ -142,7 +141,7 @@ def model_loss(model, batch, inv_reg=0, device=torch.device('cpu')):
     estimate = model(mix)
     reconstruction_loss = F.smooth_l1_loss(estimate, targ)
     inv_loss = 0
-    if inv_reg:
+    if inv_reg != 0:
         w = model.conv1.weight.squeeze(1)
         winv = model.scale * torch.t(model.conv2.weight.squeeze(1))
         inv_loss = inv_reg * inverse_loss(winv, w)
@@ -156,7 +155,7 @@ def main():
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
-    parser.add_argument('--no_adapt', '-no_adapt', action='store_false')
+    parser.add_argument('--no_adapt', '-no_adapt', action='store_true')
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', action='store_true')
@@ -170,6 +169,7 @@ def main():
         device = torch.device('cuda:0')
     else:
         device = torch.device('cpu')
+    print('On device: ', device)
 
     train_dl, val_dl = make_data(args.batchsize, toy=args.toy)
     model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy,
@@ -185,7 +185,7 @@ def main():
         model.train()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()
-            cost = model_loss(model, batch, device)
+            cost = model_loss(model, batch, device=device)
             total_cost += cost.data
             cost.backward()
             optimizer.step()
@@ -196,7 +196,7 @@ def main():
             total_cost = 0
             model.eval()
             for count, batch in enumerate(val_dl):
-                cost = model_loss(model, batch, device)
+                cost = model_loss(model, batch, device=device)
                 total_cost += cost.data
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)

@@ -24,9 +24,12 @@ class BSSMetricsList:
         self.sars.extend(metrics.sars)
 
     def mean(self):
-        sdr = torch.mean(torch.FloatTensor(self.sdrs))
-        sir = torch.mean(torch.FloatTensor(self.sirs))
-        sar = torch.mean(torch.FloatTensor(self.sars))
+        sdrs = torch.FloatTensor(self.sdrs)
+        sirs = torch.FloatTensor(self.sirs)
+        sars = torch.FloatTensor(self.sars)
+        sdr = torch.mean(sdrs[torch.isfinite(sdrs)])
+        sir = torch.mean(sirs[torch.isfinite(sirs)])
+        sar = torch.mean(sars[torch.isfinite(sars)])
         return sdr, sir, sar
 
 def compute_s_target(pred, target):
