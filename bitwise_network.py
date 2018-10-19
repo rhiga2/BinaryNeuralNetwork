@@ -15,6 +15,7 @@ class BitwiseNetwork(nn.Module):
         super(BitwiseNetwork, self).__init__()
 
         # Initialize adaptive front end
+        self.kernel_size = kernel_size
         self.cutoff = kernel_size // 2 + 1
         self.conv1 = nn.Conv1d(1, 2*self.cutoff, kernel_size, stride=stride,
             bias=False)
@@ -43,10 +44,12 @@ class BitwiseNetwork(nn.Module):
         self.output_transform = self.activation
 
         # Initialize inverse of front end transform
-        inv_basis = torch.FloatTensor(np.linalg.pinv(4*basis).T)
+        self.scale = kernel_size / stride
+        inv_basis = torch.FloatTensor(np.linalg.pinv(self.scale*basis).T)
         self.conv1_transpose = nn.ConvTranspose1d(kernel_size, 1, kernel_size,
-            stride=stride, bias=False)
-        self.conv1_transpose.weight = nn.Parameter(inv_basis.unsqueeze(1), requires_grad=adapt)
+            stride=stride, bias=False, padding=2*cutoff)
+        self.conv1_transpose.weight = nn.Parameter(inv_basis.unsqueeze(1),
+            requires_grad=adapt)
 
         self.sparsity = sparsity
         self.mode = 'real'
@@ -57,13 +60,13 @@ class BitwiseNetwork(nn.Module):
         * Output is a tensor of shape (N, T)
         '''
         # (N, T) -> (N, 1, T)
-        x = x.unsqueeze(1)
-        transformed_x = self.conv1(x)
+        transformed_x = x.unsqueeze(1)
+        transformed_x = self.conv1(transformed_x)
         real_part = transformed_x[:, :self.cutoff, :]
         imag_part = transformed_x[:, self.cutoff:, :]
         mag = torch.sqrt(real_part**2 + imag_part**2)
         phase = torch.atan2(imag_part.data, real_part.data)
-        
+
         # Flatten (N, F, T') -> (NT', F)
         h = mag.permute(0, 2, 1).contiguous().view(-1, mag.size(1))
         for i in range(self.num_layers):
@@ -80,7 +83,8 @@ class BitwiseNetwork(nn.Module):
         mag = mag * mask
         reconstructed_x = torch.cat([mag*torch.cos(phase), mag*torch.sin(phase)], dim=1)
         y_hat = self.conv1_transpose(reconstructed_x)
-        return y_hat.squeeze(1)
+        y_hat = y_hat.squeeze(1)[:, 2*self.cutoff:]
+        return y_hat[:, :x.size(1)]
 
     def noisy(self):
         self.mode = 'noisy'
@@ -130,11 +134,19 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, adapt=True):
 
     return model, model_name
 
-def model_loss(model, batch, device=torch.device('cpu')):
+def inverse_loss(w, winv):
+    return torch.mse_loss(torch.mm(winv, w), torch.eye(w.size(1)))
+
+def model_loss(model, batch, inv_reg=0, device=torch.device('cpu')):
     mix, targ = batch['mixture'].cuda(device), batch['target'].cuda(device)
     estimate = model(mix)
-    loss = F.smooth_l1_loss(estimate, targ)
-    return loss
+    reconstruction_loss = F.smooth_l1_loss(estimate, targ)
+    inv_loss = 0
+    if inv_reg:
+        w = model.conv1.weight.squeeze(1)
+        winv = model.scale * torch.t(model.conv2.weight.squeeze(1))
+        inv_loss = inv_reg * inverse_loss(winv, w)
+    return reconstruction_loss + inv_loss
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
