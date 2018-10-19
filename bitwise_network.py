@@ -28,7 +28,7 @@ class BitwiseNetwork(nn.Module):
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
-        fc_sizes = fc_sizes + [self.cutoff,]
+        fc_sizes = fc_sizes + [2*self.cutoff,]
         in_size = self.cutoff
         self.linear_list = nn.ModuleList()
         self.scaler_list = nn.ModuleList()
@@ -61,13 +61,9 @@ class BitwiseNetwork(nn.Module):
         # (N, T) -> (N, 1, T)
         transformed_x = x.unsqueeze(1)
         transformed_x = self.conv1(transformed_x)
-        real_part = transformed_x[:, :self.cutoff, :]
-        imag_part = transformed_x[:, self.cutoff:, :]
-        mag = torch.sqrt(real_part**2 + imag_part**2)
-        phase = torch.atan2(imag_part, real_part)
 
         # Flatten (N, F, T') -> (NT', F)
-        h = mag.permute(0, 2, 1).contiguous().view(-1, mag.size(1))
+        h = transformed_x.permute(0, 2, 1).contiguous().view(-1, mag.size(1))
         for i in range(self.num_layers):
             h = self.linear_list[i](h)
             if i < self.num_layers - 1:
@@ -79,9 +75,9 @@ class BitwiseNetwork(nn.Module):
 
         # Unflatten (NT', F) -> (N, F, T')
         mask = h.view(mag.size(0), mag.size(2), -1).permute(0, 2, 1)
-        mag = mag * mask
-        reconstructed_x = torch.cat([mag*torch.cos(phase), mag*torch.sin(phase)], dim=1)
-        y_hat = self.conv1_transpose(reconstructed_x)
+        transformed_x[:, :self.cutoff, :] = transformed_x[:, :self.cutoff, :] * mask
+        transformed_x[:, self.cutoff:, :] = transformed_x[:, self.cutoff:, :] * mask
+        y_hat = self.conv1_transpose(transformed_x)
         y_hat = y_hat.squeeze(1)
         return y_hat[:, 2*self.cutoff:x.size(1)+2*self.cutoff]
 
