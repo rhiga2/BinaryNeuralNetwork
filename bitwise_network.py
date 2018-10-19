@@ -133,7 +133,7 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, adapt=True):
 def model_loss(model, batch, device=torch.device('cpu')):
     mix, targ = batch['mixture'].cuda(device), batch['target'].cuda(device)
     estimate = model(mix)
-    loss = F.mse_loss(estimate, targ)
+    loss = F.smooth_l1_loss(estimate, targ)
     return loss
 
 def main():

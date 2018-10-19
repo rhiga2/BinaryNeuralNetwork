@@ -24,9 +24,9 @@ class BSSMetricsList:
         self.sars.extend(metrics.sars)
 
     def mean(self):
-        sdr = torch.mean(self.sdrs)
-        sir = torch.mean(self.sirs)
-        sar = torch.mean(self.sars)
+        sdr = torch.mean(torch.FloatTensor(self.sdrs))
+        sir = torch.mean(torch.FloatTensor(self.sirs))
+        sar = torch.mean(torch.FloatTensor(self.sars))
         return sdr, sir, sar
 
 def compute_s_target(pred, target):
@@ -42,8 +42,8 @@ def compute_source_projection(pred, sources):
     pred (T)
     sources (T, S)
     '''
-    pinv_pred = torch.mm(torch.pinverse(sources), pred)
-    return torch.mm(sources, pinv_pred)
+    pinv_pred = torch.matmul(torch.pinverse(sources), pred)
+    return torch.matmul(sources, pinv_pred)
 
 def compute_sdr(pred, s_target):
     e_total = pred - s_target
