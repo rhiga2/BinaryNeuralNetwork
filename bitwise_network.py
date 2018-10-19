@@ -41,7 +41,7 @@ class BitwiseNetwork(nn.Module):
             if i < self.num_layers - 1:
                 self.scaler_list.append(Scaler(out_size))
                 self.dropout_list.append(nn.Dropout(dropout))
-        self.output_transform = self.activation
+        self.output_transform = bitwise_activation
 
         # Initialize inverse of front end transform
         self.scale = kernel_size / stride
