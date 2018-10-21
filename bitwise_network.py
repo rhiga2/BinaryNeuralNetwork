@@ -25,10 +25,12 @@ class BitwiseNetwork(nn.Module):
             np.concatenate([real_fft[:self.cutoff], im_fft[:self.cutoff]], axis=0)
         )
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
+        
+        self.combine = nn.Conv2d(2, 1, 1)
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
-        fc_sizes = fc_sizes + [2*self.cutoff,]
+        fc_sizes = fc_sizes + [self.cutoff,]
         in_size = self.cutoff
         self.linear_list = nn.ModuleList()
         self.scaler_list = nn.ModuleList()
@@ -37,8 +39,8 @@ class BitwiseNetwork(nn.Module):
         for i, out_size in enumerate(fc_sizes):
             self.linear_list.append(BitwiseLinear(in_size, out_size))
             in_size = out_size
+            self.scaler_list.append(Scaler(out_size))
             if i < self.num_layers - 1:
-                self.scaler_list.append(Scaler(out_size))
                 self.dropout_list.append(nn.Dropout(dropout))
         self.output_transform = bitwise_activation
 
@@ -61,23 +63,28 @@ class BitwiseNetwork(nn.Module):
         # (N, T) -> (N, 1, T)
         transformed_x = x.unsqueeze(1)
         transformed_x = self.conv1(transformed_x)
+ 
+        real_x = transformed_x[:, :self.cutoff, :]
+        imag_x = transformed_x[:, self.cutoff:, :]
+        spec_x = torch.stack([real_x, imag_x], dim=1)
+        spec_x = F.relu(self.combine(spec_x)).squeeze(1)
 
         # Flatten (N, F, T') -> (NT', F)
-        h = transformed_x.permute(0, 2, 1).contiguous().view(-1, mag.size(1))
+        h = spec_x.permute(0, 2, 1).contiguous().view(-1, spec_x.size(1))
         for i in range(self.num_layers):
             h = self.linear_list[i](h)
+            if self.mode != 'inference':
+                h = self.scaler_list[i](h)
             if i < self.num_layers - 1:
-                if self.mode != 'inference':
-                    h = self.scaler_list[i](h)
                 h = self.activation(h)
                 h = self.dropout_list[i](h)
         h = (self.output_transform(h) + 1) / 2
 
         # Unflatten (NT', F) -> (N, F, T')
-        mask = h.view(mag.size(0), mag.size(2), -1).permute(0, 2, 1)
-        transformed_x[:, :self.cutoff, :] = transformed_x[:, :self.cutoff, :] * mask
-        transformed_x[:, self.cutoff:, :] = transformed_x[:, self.cutoff:, :] * mask
-        y_hat = self.conv1_transpose(transformed_x)
+        mask = h.view(spec_x.size(0), spec_x.size(2), -1).permute(0, 2, 1)
+        mask = torch.cat([mask, mask], dim=1)
+        reconstructed_x = transformed_x * mask
+        y_hat = self.conv1_transpose(reconstructed_x)
         y_hat = y_hat.squeeze(1)
         return y_hat[:, 2*self.cutoff:x.size(1)+2*self.cutoff]
 
