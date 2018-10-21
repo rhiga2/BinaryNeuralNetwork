@@ -63,7 +63,7 @@ def bss_eval(pred, sources, target_idx=0):
     '''
     BSS eval metric calculation.
     pred (T) s.t. T is the number of time steps
-    sources (T, S) s.t. S is the number of sources in mixture
+    sources (S, T) s.t. S is the number of sources in mixture
     target_idx (int) index of target in sources
     '''
     sources = torch.t(sources)
