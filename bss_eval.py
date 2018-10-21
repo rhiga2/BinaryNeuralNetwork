@@ -37,8 +37,8 @@ def compute_s_target(pred, target):
     pred (T)
     target (T)
     '''
-    return torch.mean(target*pred)/\
-        torch.mean(target**2)*target
+    return torch.sum(target*pred)/\
+        torch.sum(target**2)*target
 
 def compute_source_projection(pred, sources):
     '''
@@ -50,14 +50,14 @@ def compute_source_projection(pred, sources):
 
 def compute_sdr(pred, s_target):
     e_total = pred - s_target
-    return 10*torch.log10(torch.mean(s_target**2)/torch.mean(e_total**2))
+    return 10*torch.log10(torch.sum(s_target**2)/torch.sum(e_total**2))
 
 def compute_sir(s_target, e_inter):
-    return 10*torch.log10(torch.mean(s_target**2)/torch.mean(e_inter**2))
+    return 10*torch.log10(torch.sum(s_target**2)/torch.sum(e_inter**2))
 
 def compute_sar(s_target, e_inter, e_art):
     source_projection = s_target + e_inter
-    return 10*torch.log10(torch.mean(source_projection**2)/torch.mean(e_art**2))
+    return 10*torch.log10(torch.sum(source_projection**2)/torch.sum(e_art**2))
 
 def bss_eval(pred, sources, target_idx=0):
     '''
@@ -84,7 +84,6 @@ def bss_eval_batch(preds, source_tensor, target_idx=0):
     source_tensor (N, S, T)
     '''
     metrics = BSSMetricsList()
-    sdrs, sirs, sars = [], [], []
     for i in range(preds.size()[0]):
         pred = preds[i]
         sources = source_tensor[i]
@@ -136,13 +135,13 @@ def test_metrics():
     trainset = TwoSourceMixtureDataset(speeches, noises)
     for i in range(len(trainset)):
         sample = trainset[i]
-        pred = sample['mixture'] + np.random.random(sample['mixture'].shape)*0.01
+        pred = sample['target'] + np.random.random(sample['mixture'].shape)*0.1 + sample['mixture']*0.1
         sources = np.stack([sample['target'], sample['interference']], axis=0)
         metric = bss_eval(torch.FloatTensor(pred), torch.FloatTensor(sources))
         metric_test = bss_eval_test(pred, sources)
-        print('SDR Error: ', (metric.sdr - metric_test.sdr)**2)
-        print('SIR Error: ', (metric.sir - metric_test.sir)**2)
-        print('SAR Error: ', (metric.sar - metric_test.sar)**2)
+        print('SDR Error: ', (metric.sdr - metric_test.sdr)**2, metric.sdr, metric_test.sdr)
+        print('SIR Error: ', (metric.sir - metric_test.sir)**2, metric.sir, metric_test.sir)
+        print('SAR Error: ', (metric.sar - metric_test.sar)**2, metric.sar, metric_test.sar)
 
 if __name__=='__main__':
     test_metrics()
