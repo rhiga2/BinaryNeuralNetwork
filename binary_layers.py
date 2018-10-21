@@ -113,7 +113,7 @@ class BitwiseConv1d(nn.Module):
     1D bitwise (Kim et. al) convolution
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
-        stride=1, padding=0, groups=1):
+        stride=1, padding=0, biased=False, groups=1):
         self.input_channels = input_channels
         self.output_channels = output_channels
         self.kernel_size = kernel_size
@@ -121,7 +121,7 @@ class BitwiseConv1d(nn.Module):
         self.padding = padding
         self.groups = groups
         weight_size = (output_channels, input_channels//self.groups, kernel_size)
-        self.weight, self.bias = init_params(weight_size, True, True)
+        self.weight, self.bias = init_params(weight_size, biased, True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 
@@ -129,6 +129,16 @@ class BitwiseConv1d(nn.Module):
         w = convert_param(self.weight, self.beta, self.mode)
         b = convert_param(self.bias, self.beta, self.mode)
         return F.conv1d(x, w, b, stride=self.stride, padding=self.padding, groups=self.groups)
+
+    def update_beta(self, sparsity):
+        if sparsity == 0:
+            return
+        w = self.weight.cpu().data.numpy().reshape(-1)
+        b = self.bias.cpu().data.numpy().reshape(-1)
+        params = np.abs(np.concatenate((w, np.expand_dims(b, axis=1)), axis=1))
+        beta = torch.tensor(np.percentile(params, sparsity), dtype=self.weight.dtype,
+            device=self.weight.device)
+        self.beta = nn.Parameter(beta, requires_grad=False)
 
     def noisy(self):
         self.mode = 'noisy'

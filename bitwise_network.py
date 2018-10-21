@@ -21,11 +21,12 @@ class BitwiseNetwork(nn.Module):
         fft = np.fft.fft(np.eye(kernel_size))
         real_fft = np.real(fft)
         im_fft = np.imag(fft)
-        basis = torch.FloatTensor(
+        wn = torch.FloatTensor(np.sqrt(np.hanning(kernel_size+1)[:-1]))
+        basis = wn * torch.FloatTensor(
             np.concatenate([real_fft[:self.cutoff], im_fft[:self.cutoff]], axis=0)
         )
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
-        
+
         self.combine = nn.Conv2d(2, 1, 1)
 
         # Initialize linear layers
@@ -46,7 +47,7 @@ class BitwiseNetwork(nn.Module):
 
         # Initialize inverse of front end transform
         self.scale = kernel_size / stride
-        inv_basis = torch.FloatTensor(np.linalg.pinv(self.scale*basis).T)
+        inv_basis = torch.t(torch.pinverse(self.scale*basis))
         self.conv1_transpose = nn.ConvTranspose1d(2*self.cutoff, 1, kernel_size,
             stride=stride, bias=False)
         self.conv1_transpose.weight = nn.Parameter(inv_basis.unsqueeze(1),
@@ -63,7 +64,7 @@ class BitwiseNetwork(nn.Module):
         # (N, T) -> (N, 1, T)
         transformed_x = x.unsqueeze(1)
         transformed_x = self.conv1(transformed_x)
- 
+
         real_x = transformed_x[:, :self.cutoff, :]
         imag_x = transformed_x[:, self.cutoff:, :]
         spec_x = torch.stack([real_x, imag_x], dim=1)
