@@ -6,6 +6,7 @@ import glob
 import numpy as np
 from datasets.binary_data import *
 from make_binary_data import *
+from sepcosts import *
 from binary_layers import *
 import argparse
 
@@ -21,18 +22,17 @@ class BitwiseNetwork(nn.Module):
         fft = np.fft.fft(np.eye(kernel_size))
         real_fft = np.real(fft)
         im_fft = np.imag(fft)
-        wn = torch.FloatTensor(np.sqrt(np.hanning(kernel_size+1)[:-1]))
-        basis = wn * torch.FloatTensor(
+        basis = torch.FloatTensor(
             np.concatenate([real_fft[:self.cutoff], im_fft[:self.cutoff]], axis=0)
         )
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
 
-        self.combine = nn.Conv2d(2, 1, 1)
+        self.combine = nn.Conv2d(2, 2, 1)
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
         fc_sizes = fc_sizes + [self.cutoff,]
-        in_size = self.cutoff
+        in_size = 2*self.cutoff
         self.linear_list = nn.ModuleList()
         self.scaler_list = nn.ModuleList()
         self.dropout_list = nn.ModuleList()
@@ -68,7 +68,8 @@ class BitwiseNetwork(nn.Module):
         real_x = transformed_x[:, :self.cutoff, :]
         imag_x = transformed_x[:, self.cutoff:, :]
         spec_x = torch.stack([real_x, imag_x], dim=1)
-        spec_x = F.relu(self.combine(spec_x)).squeeze(1)
+        spec_x = F.relu(self.combine(spec_x))
+        spec_x = torch.cat([spec_x[:, 0, :, :], spec_x[:, 1, :, :]], dim=1)
 
         # Flatten (N, F, T') -> (NT', F)
         h = spec_x.permute(0, 2, 1).contiguous().view(-1, spec_x.size(1))
@@ -140,10 +141,10 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, adapt=True):
 def inverse_loss(w, winv):
     return torch.mse_loss(torch.mm(winv, w), torch.eye(w.size(1)))
 
-def model_loss(model, batch, inv_reg=0, device=torch.device('cpu')):
-    mix, targ = batch['mixture'].cuda(device), batch['target'].cuda(device)
+def model_loss(model, batch, inv_reg=0, device=torch.device('cpu'), loss=F.mse_loss):
+    mix, targ, interference = batch['mixture'].cuda(device), batch['target'].cuda(device), batch['interference'].cuda(device)
     estimate = model(mix)
-    reconstruction_loss = F.smooth_l1_loss(estimate, targ)
+    reconstruction_loss = loss(estimate, targ, interference)
     inv_loss = 0
     if inv_reg != 0:
         w = model.conv1.weight.squeeze(1)
@@ -179,6 +180,7 @@ def main():
     model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy,
         toy=args.toy, adapt=not args.no_adapt)
     model.to(device)
+    loss = SignalDistortionRatio()
     print(model)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
@@ -189,7 +191,7 @@ def main():
         model.train()
         for count, batch in enumerate(train_dl):
             optimizer.zero_grad()
-            cost = model_loss(model, batch, device=device)
+            cost = model_loss(model, batch, loss=loss, device=device)
             total_cost += cost.data
             cost.backward()
             optimizer.step()
@@ -200,7 +202,7 @@ def main():
             total_cost = 0
             model.eval()
             for count, batch in enumerate(val_dl):
-                cost = model_loss(model, batch, device=device)
+                cost = model_loss(model, batch, loss=loss, device=device)
                 total_cost += cost.data
             avg_cost = total_cost / (count + 1)
             print('Validation Cost: ', avg_cost)
