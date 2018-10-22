@@ -8,6 +8,7 @@ from datasets.binary_data import *
 from make_binary_data import *
 from sepcosts import *
 from binary_layers import *
+from bss_eval import *
 import visdom
 import argparse
 
@@ -134,7 +135,7 @@ def make_data(batchsize, toy=False):
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
     return train_dl, val_dl
 
-def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, adapt=True):
+def make_model(dropout=0, sparsity=0, train_noisy=None, toy=False, adapt=True):
     '''
     Creates model dataset
     '''
@@ -155,7 +156,7 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, adapt=True):
     else:
         print('Noisy Network Training')
         model_name = bitwise_model
-        model.load_state_dict(torch.load(real_model))
+        model.load_state_dict(torch.load('models/' + train_noisy))
         model.noisy()
 
     return model, model_name
@@ -191,9 +192,9 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu')):
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
-        mix, target, inter = get_data_from_batch(batch)
-        estimate = model(mix)
-        reconst_loss = loss(estimate, target)
+        mix, target, inter = get_data_from_batch(batch, device)
+        estimates = model(mix)
+        reconst_loss = loss(estimates, target)
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
         optimizer.step()
@@ -203,14 +204,14 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu')):
     running_loss = 0
     bss_metrics = BSSMetricsList()
     for batch in dl:
-        mix, target, inter = get_data_from_batch(batch)
+        mix, target, inter = get_data_from_batch(batch, device)
         estimates = model(mix)
-        reconst_loss = loss(estimate, target)
+        reconst_loss = loss(estimates, target)
         running_loss += reconst_loss.item() * mix.size(0)
-        sources = torch.stack([target, inter], dim=0)
+        sources = torch.stack([target, inter], dim=1)
         metrics = bss_eval_batch(estimates, sources)
         bss_metrics.extend(metrics)
-    return running_loss, bss_metrics
+    return running_loss / len(dl), bss_metrics
 
 class LossMetrics(nn.Module):
     '''
@@ -225,17 +226,26 @@ class LossMetrics(nn.Module):
         self.sars = []
 
     def update(self, train_loss, val_loss, sdr, sir, sar, output_period=1):
-        self.time.append(self.times[-1] + output_period)
+        if self.time:
+            self.time.append(self.time[-1] + output_period)
+        else:
+            self.time = [0]
         self.train_loss.append(train_loss)
         self.val_loss.append(val_loss)
         self.sdrs.append(sdr)
         self.sirs.append(sir)
         self.sars.append(sar)
 
+<<<<<<< HEAD
 def train_plot(vis, loss_metrics, eid=None, train_win='Loss Window'):
     '''
     Plots loss and metrics during the training process
     '''
+||||||| merged common ancestors
+def train_plot(vis, loss_metrics, eid=None, train_win='Loss Window'):
+=======
+def train_plot(vis, loss_metrics, eid=None, win=[None, None]):
+>>>>>>> 1c6386f47bd2a5db9706d9d7be043c1f7c94ffcf
     # Loss plots
     data1 = [
         dict(
@@ -252,7 +262,7 @@ def train_plot(vis, loss_metrics, eid=None, train_win='Loss Window'):
         font=dict(family='Bell Gothic Std'),
         xaxis=dict(autorange=True, title='Training Epochs'),
         yaxis=dict(autorange=True, title='Loss'),
-        title=train_win
+        title=win[0]
     )
     vis._send(dict(data=data1, layout=layout1, win=win[0], eid=eid))
 
@@ -294,8 +304,8 @@ def main():
     parser.add_argument('--no_adapt', '-no_adapt', action='store_true')
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
-    parser.add_argument('--train_noisy', action='store_true')
-    parser.add_argument('--output_period', '-op', type=int, default=8)
+    parser.add_argument('--train_noisy', '-tn',  default=None)
+    parser.add_argument('--output_period', '-op', type=int, default=1)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=95.0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     parser.add_argument('--toy', action='store_true')
@@ -309,7 +319,7 @@ def main():
     print('On device: ', device)
 
     train_dl, val_dl = make_data(args.batchsize, toy=args.toy)
-    model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy,
+    model, model_name = make_model(args.dropout, args.sparsity, train_noisy=args.train_noisy,
         toy=args.toy, adapt=not args.no_adapt)
     vis = visdom.Visdom(port=5800)
     loss_metrics = LossMetrics()
@@ -337,7 +347,7 @@ def main():
             print('Val SDR: ', sdr)
             print('Val SIR: ', sir)
             print('Val SAR: ', sar)
-            torch.save(model.state_dict(), args.model_file)
+            torch.save(model.state_dict(), 'models/' + args.model_file)
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)
