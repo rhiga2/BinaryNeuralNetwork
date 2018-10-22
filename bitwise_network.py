@@ -8,6 +8,7 @@ from datasets.binary_data import *
 from make_binary_data import *
 from sepcosts import *
 from binary_layers import *
+from bss_eval import *
 import visdom
 import argparse
 
@@ -163,9 +164,9 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu')):
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
-        mix, target, inter = get_data_from_batch(batch)
-        estimate = model(mix)
-        reconst_loss = loss(estimate, target)
+        mix, target, inter = get_data_from_batch(batch, device)
+        estimates = model(mix)
+        reconst_loss = loss(estimates, target)
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
         optimizer.step()
@@ -175,14 +176,14 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu')):
     running_loss = 0
     bss_metrics = BSSMetricsList()
     for batch in dl:
-        mix, target, inter = get_data_from_batch(batch)
+        mix, target, inter = get_data_from_batch(batch, device)
         estimates = model(mix)
-        reconst_loss = loss(estimate, target)
+        reconst_loss = loss(estimates, target)
         running_loss += reconst_loss.item() * mix.size(0)
-        sources = torch.stack([target, inter], dim=0)
+        sources = torch.stack([target, inter], dim=1)
         metrics = bss_eval_batch(estimates, sources)
         bss_metrics.extend(metrics)
-    return running_loss, bss_metrics
+    return running_loss / len(dl), bss_metrics
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
