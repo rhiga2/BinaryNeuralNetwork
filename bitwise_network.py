@@ -16,7 +16,7 @@ class BitwiseNetwork(nn.Module):
     '''
     Adaptive transform network inspired by Minje Kim
     '''
-    def __init__(self, kernel_size=1024, stride=256, fc_sizes = [], dropout=0, sparsity=95,
+    def __init__(self, kernel_size=1024, stride=256, combine_hidden=8, fc_sizes = [], dropout=0, sparsity=95,
         adapt=True):
         super(BitwiseNetwork, self).__init__()
         # Initialize adaptive front end
@@ -32,12 +32,13 @@ class BitwiseNetwork(nn.Module):
         )
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
 
-        self.combine = nn.Conv2d(2, 2, 1)
+        self.combine1 = nn.Conv2d(2, combine_hidden, 1)
+        self.combine2 = nn.Conv2d(combine_hidden, 1, 0)
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
         fc_sizes = fc_sizes + [self.cutoff,]
-        in_size = 2*self.cutoff
+        in_size = self.cutoff
         self.linear_list = nn.ModuleList()
         self.scaler_list = nn.ModuleList()
         self.dropout_list = nn.ModuleList()
@@ -76,8 +77,8 @@ class BitwiseNetwork(nn.Module):
         real_x = transformed_x[:, :self.cutoff, :]
         imag_x = transformed_x[:, self.cutoff:, :]
         spec_x = torch.stack([real_x, imag_x], dim=1)
-        spec_x = F.relu(self.combine(spec_x))
-        spec_x = torch.cat([spec_x[:, 0, :, :], spec_x[:, 1, :, :]], dim=1)
+        spec_x = F.relu(self.combine1(spec_x))
+        spec_x = F.relu(self.combine2(spec_x)).squeeze(1)
 
         # Flatten (N, F, T') -> (NT', F)
         h = spec_x.permute(0, 2, 1).contiguous().view(-1, spec_x.size(1))
