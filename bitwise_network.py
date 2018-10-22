@@ -12,6 +12,9 @@ import visdom
 import argparse
 
 class BitwiseNetwork(nn.Module):
+    '''
+    Adaptive transform network inspired by Minje Kim
+    '''
     def __init__(self, kernel_size=1024, stride=256, fc_sizes = [], dropout=0, sparsity=95,
         adapt=True):
         super(BitwiseNetwork, self).__init__()
@@ -59,8 +62,11 @@ class BitwiseNetwork(nn.Module):
 
     def forward(self, x):
         '''
+        Bitwise neural network forward
         * Input is a tensor of shape (N, T)
         * Output is a tensor of shape (N, T)
+            * N is the batch size
+            * T is the sequence length
         '''
         # (N, T) -> (N, 1, T)
         transformed_x = x.unsqueeze(1)
@@ -92,23 +98,35 @@ class BitwiseNetwork(nn.Module):
         return y_hat[:, 2*self.cutoff:x.size(1)+2*self.cutoff]
 
     def noisy(self):
+        '''
+        Converts real network to noisy training network
+        '''
         self.mode = 'noisy'
         self.activation = bitwise_activation
         for layer in self.linear_list:
             layer.noisy()
 
     def inference(self):
+        '''
+        Converts noisy training network to bitwise network
+        '''
         self.mode = 'inference'
         self.activation = bitwise_activation
         for layer in self.linear_list:
             layer.inference()
 
     def update_betas(self):
+        '''
+        Updates sparsity parameter beta
+        '''
         for layer in self.linear_list:
             if layer.mode == 'noisy':
                 layer.update_beta(sparsity=self.sparsity)
 
 def make_data(batchsize, toy=False):
+    '''
+    Make two mixture dataset
+    '''
     trainset, valset = make_mixture_set(toy=toy)
     collate = lambda x: collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
@@ -117,6 +135,9 @@ def make_data(batchsize, toy=False):
     return train_dl, val_dl
 
 def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, adapt=True):
+    '''
+    Creates model dataset
+    '''
     if toy:
         model = BitwiseNetwork(1024, 256, fc_sizes=[1024, 1024],
             dropout=dropout, adapt=adapt, sparsity=sparsity)
@@ -139,15 +160,22 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, adapt=True):
 
     return model, model_name
 
-def inverse_loss(w, winv):
+def biortho_loss(w, winv):
+    '''
+    Forces the back end transform to be a biorthogonal projection of the front
+    end transform
+    '''
     return torch.mse_loss(torch.mm(winv, w), torch.eye(w.size(1)))
 
+@DeprecationWarning
 def model_loss(model, batch, biortho_reg=0, loss=F.mse_loss, device=torch.device('cpu')):
-    mix, targ, interference = batch['mixture'].cuda(device), batch['target'].cuda(device), batch['interference'].cuda(device)
+    mix = batch['mixture'].cuda(device)
+    targ = batch['target'].cuda(device)
+    interference = batch['interference'].cuda(device)
     estimate = model(mix)
     reconstruction_loss = loss(estimate, targ, interference)
-    inv_loss = 0
-    if inv_reg != 0:
+    biortho_loss = 0
+    if biortho_reg != 0:
         w = model.conv1.weight.squeeze(1)
         winv = model.scale * torch.t(model.conv2.weight.squeeze(1))
         inv_loss = biortho_reg * biortho_loss(winv, w)
@@ -185,6 +213,9 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu')):
     return running_loss, bss_metrics
 
 class LossMetrics(nn.Module):
+    '''
+    Data struct that keeps track of all losses and metrics during the training process
+    '''
     def __init__(self):
         self.time = []
         self.train_loss = []
@@ -202,6 +233,9 @@ class LossMetrics(nn.Module):
         self.sars.append(sar)
 
 def train_plot(vis, loss_metrics, eid=None, train_win='Loss Window'):
+    '''
+    Plots loss and metrics during the training process
+    '''
     # Loss plots
     data1 = [
         dict(

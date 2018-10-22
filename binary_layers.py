@@ -18,11 +18,13 @@ class BitwiseActivation(Function):
 class BitwiseParams(Function):
     @staticmethod
     def forward(ctx, x, beta):
+        ctx.save_for_backward(x)
         return (x > beta).to(dtype=x.dtype, device=x.device) - (x < -beta).to(dtype=x.dtype, device=x.device)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return grad_output, None
+        # relax as tanh or use straight through estimator?
+        return grad_output * (1 - torch.tanh(x)**2), None
 
 class Binarize(Function):
     @staticmethod
