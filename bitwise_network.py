@@ -184,6 +184,71 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu')):
         bss_metrics.extend(metrics)
     return running_loss, bss_metrics
 
+class LossMetrics(nn.Module):
+    def __init__(self):
+        self.time = []
+        self.train_loss = []
+        self.val_loss = []
+        self.sdrs = []
+        self.sirs = []
+        self.sars = []
+
+    def update(self, train_loss, val_loss, sdr, sir, sar, output_period=1):
+        self.time.append(self.times[-1] + output_period)
+        self.train_loss.append(train_loss)
+        self.val_loss.append(val_loss)
+        self.sdrs.append(sdr)
+        self.sirs.append(sir)
+        self.sars.append(sar)
+
+def train_plot(vis, loss_metrics, eid=None, train_win='Loss Window'):
+    # Loss plots
+    data1 = [
+        dict(
+            x=loss_metrics.time, y=loss_metrics.train_loss, name='Training Loss',
+            hoverinfo='y', line=dict(width=1), mode='lines', type='scatter'),
+        dict(
+            x=loss_metrics.time, y=loss_metrics.val_loss, name='Validation Loss',
+            hoverinfo='y', line=dict( width=1), mode='lines', type='scatter')
+    ]
+    layout1 = dict(
+        showlegend=True,
+        legend=dict(orientation='h', y=1.1, bgcolor='rgba(0,0,0,0)'),
+        margin=dict(r=30, b=40, l=50, t=50),
+        font=dict(family='Bell Gothic Std'),
+        xaxis=dict(autorange=True, title='Training Epochs'),
+        yaxis=dict(autorange=True, title='Loss'),
+        title=train_win
+    )
+    vis._send(dict(data=data1, layout=layout1, win=win[0], eid=eid))
+
+    # BSS_EVAL plots
+    data2 = [
+        # SDR
+        dict(
+            x=loss_metrics.time, y=loss_metrics.sdrs, name='SDR',
+            hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
+        # SIR
+        dict(
+            x=loss_metrics.time, y=loss_metrics.sirs, name='SIR',
+            hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
+        # SAR
+        dict(
+            x=loss_metrics.time, y=loss_metrics.sars, name='SAR',
+            hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
+    ]
+    layout2 = dict(
+        showlegend=True,
+        legend=dict(orientation='h', y=1.05, bgcolor='rgba(0,0,0,0)'),
+        margin=dict(r=30, b=40, l=50, t=50),
+        font=dict(family='Bell Gothic Std'),
+        xaxis=dict(autorange=True, title='Training samples'),
+        yaxis=dict(autorange=True, title='dB'),
+        yaxis2=dict(autorange=True, title='STOI', overlaying='y', side='right'),
+        title=win[1]
+    )
+    vis._send(dict(data=data2, layout=layout2, win=win[1], eid=eid))
+
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
@@ -213,6 +278,7 @@ def main():
     model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy,
         toy=args.toy, adapt=not args.no_adapt)
     vis = visdom.Visdom(port=5800)
+    loss_metrics = LossMetrics()
     model.to(device)
     loss = SignalDistortionRatio()
     print(model)
@@ -223,17 +289,20 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
-        avg_loss = train(model, train_dl, optimizer, loss=loss, device=device)
-        print('Epoch %d Training Cost: ' % epoch, avg_loss)
-        model.eval()
-        avg_loss, bss_metrics = val(model, val_dl, loss=loss, device=device)
-        sdr, sir, sar = bss_metrics.mean()
-        print('Validation Cost: ', avg_loss)
-        print('Val SDR: ', sdr)
-        print('Val SIR: ', sir)
-        print('Val SAR: ', sar)
+        train_loss = train(model, train_dl, optimizer, loss=loss, device=device)
 
         if epoch % args.output_period == 0:
+            print('Epoch %d Training Cost: ' % epoch, train_loss)
+            model.eval()
+            val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device)
+            sdr, sir, sar = bss_metrics.mean()
+            loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
+                output_period=args.output_period)
+            train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', 'BSS Eval'])
+            print('Validation Cost: ', val_loss)
+            print('Val SDR: ', sdr)
+            print('Val SIR: ', sir)
+            print('Val SAR: ', sar)
             torch.save(model.state_dict(), args.model_file)
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
