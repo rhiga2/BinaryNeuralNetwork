@@ -8,6 +8,7 @@ from datasets.binary_data import *
 from make_binary_data import *
 from sepcosts import *
 from binary_layers import *
+import visdom
 import argparse
 
 class BitwiseNetwork(nn.Module):
@@ -141,7 +142,7 @@ def make_model(dropout=0, sparsity=0, train_noisy=False, toy=False, adapt=True):
 def inverse_loss(w, winv):
     return torch.mse_loss(torch.mm(winv, w), torch.eye(w.size(1)))
 
-def model_loss(model, batch, inv_reg=0, device=torch.device('cpu'), loss=F.mse_loss):
+def model_loss(model, batch, biortho_reg=0, loss=F.mse_loss, device=torch.device('cpu')):
     mix, targ, interference = batch['mixture'].cuda(device), batch['target'].cuda(device), batch['interference'].cuda(device)
     estimate = model(mix)
     reconstruction_loss = loss(estimate, targ, interference)
@@ -149,8 +150,39 @@ def model_loss(model, batch, inv_reg=0, device=torch.device('cpu'), loss=F.mse_l
     if inv_reg != 0:
         w = model.conv1.weight.squeeze(1)
         winv = model.scale * torch.t(model.conv2.weight.squeeze(1))
-        inv_loss = inv_reg * inverse_loss(winv, w)
-    return reconstruction_loss + inv_loss
+        inv_loss = biortho_reg * biortho_loss(winv, w)
+    return reconstruction_loss + biortho_loss
+
+def get_data_from_batch(batch, device=torch.device('cpu')):
+    mix = batch['mixture'].cuda(device)
+    target = batch['target'].cuda(device)
+    inter = batch['interference'].cuda(device)
+    return mix, target, inter
+
+def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu')):
+    running_loss = 0
+    for batch in dl:
+        optimizer.zero_grad()
+        mix, target, inter = get_data_from_batch(batch)
+        estimate = model(mix)
+        reconst_loss = loss(estimate, target)
+        running_loss += reconst_loss.item() * mix.size(0)
+        reconst_loss.backward()
+        optimizer.step()
+    return running_loss / len(dl)
+
+def val(model, dl, loss=F.mse_loss, device=torch.device('cpu')):
+    running_loss = 0
+    bss_metrics = BSSMetricsList()
+    for batch in dl:
+        mix, target, inter = get_data_from_batch(batch)
+        estimates = model(mix)
+        reconst_loss = loss(estimate, target)
+        running_loss += reconst_loss.item() * mix.size(0)
+        sources = torch.stack([target, inter], dim=0)
+        metrics = bss_eval_batch(estimates, sources)
+        bss_metrics.extend(metrics)
+    return running_loss, bss_metrics
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
@@ -168,6 +200,7 @@ def main():
     parser.add_argument('--sparsity', '-sparsity', type=float, default=95.0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     parser.add_argument('--toy', action='store_true')
+    parser.add_argument('--model_file', '-mf', default='temp_model.model')
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -179,6 +212,7 @@ def main():
     train_dl, val_dl = make_data(args.batchsize, toy=args.toy)
     model, model_name = make_model(args.dropout, args.sparsity, args.train_noisy,
         toy=args.toy, adapt=not args.no_adapt)
+    vis = visdom.Visdom(port=5800)
     model.to(device)
     loss = SignalDistortionRatio()
     print(model)
@@ -189,24 +223,18 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
-        for count, batch in enumerate(train_dl):
-            optimizer.zero_grad()
-            cost = model_loss(model, batch, loss=loss, device=device)
-            total_cost += cost.data
-            cost.backward()
-            optimizer.step()
-        avg_cost = total_cost / (count + 1)
+        avg_loss = train(model, train_dl, optimizer, loss=loss, device=device)
+        print('Epoch %d Training Cost: ' % epoch, avg_loss)
+        model.eval()
+        avg_loss, bss_metrics = val(model, val_dl, loss=loss, device=device)
+        sdr, sir, sar = bss_metrics.mean()
+        print('Validation Cost: ', avg_loss)
+        print('Val SDR: ', sdr)
+        print('Val SIR: ', sir)
+        print('Val SAR: ', sar)
 
         if epoch % args.output_period == 0:
-            print('Epoch %d Training Cost: ' % epoch, avg_cost)
-            total_cost = 0
-            model.eval()
-            for count, batch in enumerate(val_dl):
-                cost = model_loss(model, batch, loss=loss, device=device)
-                total_cost += cost.data
-            avg_cost = total_cost / (count + 1)
-            print('Validation Cost: ', avg_cost)
-            torch.save(model.state_dict(), model_name)
+            torch.save(model.state_dict(), args.model_file)
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)

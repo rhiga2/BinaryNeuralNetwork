@@ -13,7 +13,7 @@ class MSELoss(nn.Module):
         super(MSELoss, self).__init__()
         self.mse = nn.MSELoss()
 
-    def forward(self, prediction, target, interference):
+    def forward(self, prediction, target, interference=None):
         mse = self.mse(prediction, target)
         return mse
 
@@ -22,7 +22,7 @@ class SignalDistortionRatio(nn.Module):
         super(SignalDistortionRatio, self).__init__()
         self.epsilon = epsilon
 
-    def forward(self, prediction, target, interference):
+    def forward(self, prediction, target, interference=None):
         #sdr = torch.mean(prediction**2) / torch.mean(prediction * target)**2
         sdr = -torch.mean(prediction * target)**2 / (torch.mean(prediction**2) + self.epsilon)
         return sdr
