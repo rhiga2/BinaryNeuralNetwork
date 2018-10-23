@@ -24,6 +24,7 @@ class BitwiseParams(Function):
     @staticmethod
     def backward(ctx, grad_output):
         # relax as tanh or use straight through estimator?
+        x = ctx.saved_tensors[0]
         return grad_output * (1 - torch.tanh(x)**2), None
 
 class Binarize(Function):

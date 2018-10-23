@@ -33,7 +33,7 @@ class BitwiseNetwork(nn.Module):
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
 
         self.combine1 = nn.Conv2d(2, combine_hidden, 1)
-        self.combine2 = nn.Conv2d(combine_hidden, 1, 0)
+        self.combine2 = nn.Conv2d(combine_hidden, 1, 1)
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
@@ -146,7 +146,7 @@ def make_model(dropout=0, sparsity=0, train_noisy=None, toy=False, adapt=True):
         real_model = 'models/toy_real_network.model'
         bitwise_model = 'models/toy_bitwise_network.model'
     else:
-        model = BitwiseNetwork(1024, 256, fc_sizes=[2048, 2048],
+        model = BitwiseNetwork(1024, 128, fc_sizes=[2048, 2048],
             dropout=dropout, sparsity=sparsity, adapt=adapt)
         real_model = 'models/real_network.model'
         bitwise_model = 'models/bitwise_network.model'
@@ -237,16 +237,10 @@ class LossMetrics(nn.Module):
         self.sirs.append(sir)
         self.sars.append(sar)
 
-<<<<<<< HEAD
-def train_plot(vis, loss_metrics, eid=None, train_win='Loss Window'):
+def train_plot(vis, loss_metrics, eid=None, win=[None, None]):
     '''
     Plots loss and metrics during the training process
     '''
-||||||| merged common ancestors
-def train_plot(vis, loss_metrics, eid=None, train_win='Loss Window'):
-=======
-def train_plot(vis, loss_metrics, eid=None, win=[None, None]):
->>>>>>> 1c6386f47bd2a5db9706d9d7be043c1f7c94ffcf
     # Loss plots
     data1 = [
         dict(
