@@ -88,57 +88,76 @@ def bss_eval_batch(preds, source_tensor, target_idx=0):
         metrics.append(metric)
     return metrics
 
-def bss_eval_test( sep, sources, i=0):
-    # Current target
-    from numpy import dot, linalg, log10
-    min_len = min([len(sep), len(sources[i])])
-    sources = sources[:,:min_len]
-    sep = sep[:min_len]
-    target = sources[i]
+class LossMetrics():
+    '''
+    Data struct that keeps track of all losses and metrics during the training process
+    '''
+    def __init__(self):
+        self.time = []
+        self.train_loss = []
+        self.val_loss = []
+        self.sdrs = []
+        self.sirs = []
+        self.sars = []
 
-    # Target contribution
-    s_target = target * dot( target, sep.T) / dot( target, target.T)
+    def update(self, train_loss, val_loss, sdr, sir, sar, output_period=1):
+        if self.time:
+            self.time.append(self.time[-1] + output_period)
+        else:
+            self.time = [0]
+        self.train_loss.append(train_loss)
+        self.val_loss.append(val_loss)
+        self.sdrs.append(sdr)
+        self.sirs.append(sir)
+        self.sars.append(sar)
 
-    # Interference contribution
-    pse = dot( dot( sources, sep.T), \
-    linalg.inv( dot( sources, sources.T))).T.dot( sources)
-    e_interf = pse - s_target
+def train_plot(vis, loss_metrics, eid=None, win=[None, None]):
+    '''
+    Plots loss and metrics during the training process
+    '''
+    # Loss plots
+    data1 = [
+        dict(
+            x=loss_metrics.time, y=loss_metrics.train_loss, name='Training Loss',
+            hoverinfo='y', line=dict(width=1), mode='lines', type='scatter'),
+        dict(
+            x=loss_metrics.time, y=loss_metrics.val_loss, name='Validation Loss',
+            hoverinfo='y', line=dict( width=1), mode='lines', type='scatter')
+    ]
+    layout1 = dict(
+        showlegend=True,
+        legend=dict(orientation='h', y=1.1, bgcolor='rgba(0,0,0,0)'),
+        margin=dict(r=30, b=40, l=50, t=50),
+        font=dict(family='Bell Gothic Std'),
+        xaxis=dict(autorange=True, title='Training Epochs'),
+        yaxis=dict(autorange=True, title='Loss'),
+        title=win[0]
+    )
+    vis._send(dict(data=data1, layout=layout1, win=win[0], eid=eid))
 
-    # Artifact contribution
-    e_artif= sep - pse;
-
-    # Interference + artifacts contribution
-    e_total = e_interf + e_artif;
-
-    # Computation of the log energy ratios
-    sdr = 10*log10( sum( s_target**2) / sum( e_total**2));
-    sir = 10*log10( sum( s_target**2) / sum( e_interf**2));
-    sar = 10*log10( sum( (s_target + e_interf)**2) / sum( e_artif**2));
-
-    # Done!
-    return BSSMetrics(sdr, sir, sar)
-
-def test_metrics():
-    # test code
-    speaker_path = '/media/data/timit-wav/train'
-    noise_path = '/media/data/noises-16k'
-
-    # get training and validation files
-    speakers = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0']
-    noises = ['car-16k.wav', 'babble-16k.wav', 'street-16k.wav']
-    speeches, _ = get_speech_files(speaker_path, speakers)
-    noises, _ = get_noise_files(noise_path, noises)
-
-    trainset = TwoSourceMixtureDataset(speeches, noises)
-    for i in range(len(trainset)):
-        sample = trainset[i]
-        pred = sample['target'] + np.random.random(sample['mixture'].shape)*0.1 + sample['mixture']*0.1
-        sources = np.stack([sample['target'], sample['interference']], axis=0)
-        metric = bss_eval(torch.FloatTensor(pred), torch.FloatTensor(sources))
-        metric_test = bss_eval_test(pred, sources)
-        print('SDR Error: ', (metric.sdr - metric_test.sdr)**2, metric.sdr, metric_test.sdr)
-        print('SIR Error: ', (metric.sir - metric_test.sir)**2, metric.sir, metric_test.sir)
-        print('SAR Error: ', (metric.sar - metric_test.sar)**2, metric.sar, metric_test.sar)
-
-if __name__=='__main__':
-    test_metrics()
+    # BSS_EVAL plots
+    data2 = [
+        # SDR
+        dict(
+            x=loss_metrics.time, y=loss_metrics.sdrs, name='SDR',
+            hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
+        # SIR
+        dict(
+            x=loss_metrics.time, y=loss_metrics.sirs, name='SIR',
+            hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
+        # SAR
+        dict(
+            x=loss_metrics.time, y=loss_metrics.sars, name='SAR',
+            hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
+    ]
+    layout2 = dict(
+        showlegend=True,
+        legend=dict(orientation='h', y=1.05, bgcolor='rgba(0,0,0,0)'),
+        margin=dict(r=30, b=40, l=50, t=50),
+        font=dict(family='Bell Gothic Std'),
+        xaxis=dict(autorange=True, title='Training samples'),
+        yaxis=dict(autorange=True, title='dB'),
+        yaxis2=dict(autorange=True, title='STOI', overlaying='y', side='right'),
+        title=win[1]
+    )
+    vis._send(dict(data=data2, layout=layout2, win=win[1], eid=eid))
