@@ -16,14 +16,19 @@ class BitwiseNetwork(nn.Module):
     '''
     Adaptive transform network inspired by Minje Kim
     '''
-    def __init__(self, kernel_size=1024, stride=256, combine_hidden=8, fc_sizes = [], dropout=0, sparsity=95,
-        adapt=True):
+    def __init__(self, kernel_size=1024, stride=256, in_channels=1,
+        combine_hidden=8, fc_sizes = [], dropout=0, sparsity=95,
+        adapt=True, autoencode=False):
         super(BitwiseNetwork, self).__init__()
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.cutoff = kernel_size // 2 + 1
-        self.conv1 = nn.Conv1d(1, 2*self.cutoff, kernel_size, stride=stride,
-            bias=False, padding=2*self.cutoff)
+        self.in_channels = in_channels
+        transform_channels = 2*self.cutoff
+        self.transform_channels = transform_channels
+        self.conv1 = BitwiseConv1d(in_channels, transform_channels,
+            kernel_size, stride=stride, biased=False,
+            padding=transform_channels)
         fft = np.fft.fft(np.eye(kernel_size))
         real_fft = np.real(fft)
         im_fft = np.imag(fft)
@@ -31,31 +36,35 @@ class BitwiseNetwork(nn.Module):
             np.concatenate([real_fft[:self.cutoff], im_fft[:self.cutoff]], axis=0)
         )
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
+        self.in_scaler = Scaler(self.transform_channels)
+        self.autoencode = autoencode
 
-        self.combine1 = nn.Conv2d(2, combine_hidden, 1)
-        self.combine2 = nn.Conv2d(combine_hidden, 1, 1)
+        # dense layers for denoising
+        if self.autoencode:
+            self.combine1 = nn.Conv2d(2, combine_hidden, 1)
+            self.combine2 = nn.Conv2d(combine_hidden, 1, 1)
 
-        # Initialize linear layers
-        self.num_layers = len(fc_sizes) + 1
-        fc_sizes = fc_sizes + [self.cutoff,]
-        in_size = self.cutoff
-        self.linear_list = nn.ModuleList()
-        self.scaler_list = nn.ModuleList()
-        self.dropout_list = nn.ModuleList()
-        self.activation = torch.tanh
-        for i, out_size in enumerate(fc_sizes):
-            self.linear_list.append(BitwiseLinear(in_size, out_size))
-            in_size = out_size
-            self.scaler_list.append(Scaler(out_size))
-            if i < self.num_layers - 1:
-                self.dropout_list.append(nn.Dropout(dropout))
-        self.output_transform = bitwise_activation
+            # Initialize linear layers
+            self.num_layers = len(fc_sizes) + 1
+            fc_sizes = fc_sizes + [self.cutoff,]
+            in_size = self.cutoff
+            self.linear_list = nn.ModuleList()
+            self.scaler_list = nn.ModuleList()
+            self.dropout_list = nn.ModuleList()
+            self.activation = torch.tanh
+            for i, out_size in enumerate(fc_sizes):
+                self.linear_list.append(BitwiseLinear(in_size, out_size))
+                in_size = out_size
+                self.scaler_list.append(Scaler(out_size))
+                if i < self.num_layers - 1:
+                    self.dropout_list.append(nn.Dropout(dropout))
+            self.output_transform = bitwise_activation
 
         # Initialize inverse of front end transform
         self.scale = kernel_size / stride
         inv_basis = torch.t(torch.pinverse(self.scale*basis))
-        self.conv1_transpose = nn.ConvTranspose1d(2*self.cutoff, 1, kernel_size,
-            stride=stride, bias=False)
+        self.conv1_transpose = BitwiseConv1d(transform_channels, in_channels,
+            kernel_size, stride=stride, biased=False)
         self.conv1_transpose.weight = nn.Parameter(inv_basis.unsqueeze(1),
             requires_grad=adapt)
 
@@ -65,39 +74,40 @@ class BitwiseNetwork(nn.Module):
     def forward(self, x):
         '''
         Bitwise neural network forward
-        * Input is a tensor of shape (N, T)
-        * Output is a tensor of shape (N, T)
+        * Input is a tensor of shape (N, C, T)
+        * Output is a tensor of shape (N, C, T)
             * N is the batch size
             * T is the sequence length
+            * C is the number of input channels
         '''
-        # (N, T) -> (N, 1, T)
-        transformed_x = x.unsqueeze(1)
-        transformed_x = self.conv1(transformed_x)
+        # (N, C, T)
+        transformed_x = self.activation(self.in_scaler(self.conv1(transformed_x)))
 
-        real_x = transformed_x[:, :self.cutoff, :]
-        imag_x = transformed_x[:, self.cutoff:, :]
-        spec_x = torch.stack([real_x, imag_x], dim=1)
-        spec_x = F.relu(self.combine1(spec_x))
-        spec_x = F.relu(self.combine2(spec_x)).squeeze(1)
+        if self.autoencode:
+            real_x = transformed_x[:, :self.cutoff, :]
+            imag_x = transformed_x[:, self.cutoff:, :]
+            spec_x = torch.stack([real_x, imag_x], dim=1)
+            spec_x = F.relu(self.combine1(spec_x))
+            spec_x = F.relu(self.combine2(spec_x)).squeeze(1)
 
-        # Flatten (N, F, T') -> (NT', F)
-        h = spec_x.permute(0, 2, 1).contiguous().view(-1, spec_x.size(1))
-        for i in range(self.num_layers):
-            h = self.linear_list[i](h)
-            if self.mode != 'inference':
-                h = self.scaler_list[i](h)
-            if i < self.num_layers - 1:
-                h = self.activation(h)
-                h = self.dropout_list[i](h)
-        h = (self.output_transform(h) + 1) / 2
+            # Flatten (N, F, T') -> (NT', F)
+            h = spec_x.permute(0, 2, 1).contiguous().view(-1, spec_x.size(1))
+            for i in range(self.num_layers):
+                h = self.linear_list[i](h)
+                if self.mode != 'inference':
+                    h = self.scaler_list[i](h)
+                if i < self.num_layers - 1:
+                    h = self.activation(h)
+                    h = self.dropout_list[i](h)
+            h = (self.output_transform(h) + 1) / 2
 
-        # Unflatten (NT', F) -> (N, F, T')
-        mask = h.view(spec_x.size(0), spec_x.size(2), -1).permute(0, 2, 1)
-        mask = torch.cat([mask, mask], dim=1)
-        reconstructed_x = transformed_x * mask
-        y_hat = self.conv1_transpose(reconstructed_x)
-        y_hat = y_hat.squeeze(1)
-        return y_hat[:, 2*self.cutoff:x.size(1)+2*self.cutoff]
+            # Unflatten (NT', F) -> (N, F, T')
+            mask = h.view(spec_x.size(0), spec_x.size(2), -1).permute(0, 2, 1)
+            mask = torch.cat([mask, mask], dim=1)
+            reconstructed_x = transformed_x * mask
+
+        y_hat = self.activation(self.conv1_transpose(reconstructed_x))
+        return y_hat[:, :, self.transform_channels:x.size(1)+self.transform_channels]
 
     def noisy(self):
         '''
@@ -105,6 +115,8 @@ class BitwiseNetwork(nn.Module):
         '''
         self.mode = 'noisy'
         self.activation = bitwise_activation
+        self.conv1.noisy()
+        self.conv1_transpose.noisy()
         for layer in self.linear_list:
             layer.noisy()
 
@@ -136,32 +148,6 @@ def make_data(batchsize, toy=False):
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
     return train_dl, val_dl
 
-def make_model(dropout=0, sparsity=0, train_noisy=None, toy=False, adapt=True):
-    '''
-    Creates model dataset
-    '''
-    if toy:
-        model = BitwiseNetwork(1024, 256, fc_sizes=[1024, 1024],
-            dropout=dropout, adapt=adapt, sparsity=sparsity)
-        real_model = 'models/toy_real_network.model'
-        bitwise_model = 'models/toy_bitwise_network.model'
-    else:
-        model = BitwiseNetwork(1024, 128, fc_sizes=[2048, 2048],
-            dropout=dropout, sparsity=sparsity, adapt=adapt)
-        real_model = 'models/real_network.model'
-        bitwise_model = 'models/bitwise_network.model'
-
-    if not train_noisy:
-        print('Real Network Training')
-        model_name = real_model
-    else:
-        print('Noisy Network Training')
-        model_name = bitwise_model
-        model.load_state_dict(torch.load('models/' + train_noisy))
-        model.noisy()
-
-    return model, model_name
-
 def biortho_loss(w, winv):
     '''
     Forces the back end transform to be a biorthogonal projection of the front
@@ -184,9 +170,9 @@ def model_loss(model, batch, biortho_reg=0, loss=F.mse_loss, device=torch.device
     return reconstruction_loss + biortho_loss
 
 def get_data_from_batch(batch, device=torch.device('cpu')):
-    mix = batch['mixture'].cuda(device)
-    target = batch['target'].cuda(device)
-    inter = batch['interference'].cuda(device)
+    mix = batch['mixture'].to(device)
+    target = batch['target'].to(device)
+    inter = batch['interference'].to(device)
     return mix, target, inter
 
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu')):
@@ -194,7 +180,7 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu')):
     for batch in dl:
         optimizer.zero_grad()
         mix, target, inter = get_data_from_batch(batch, device)
-        estimates = model(mix)
+        estimates = model(mix.unsqueeze(1)).squeeze(1)
         reconst_loss = loss(estimates, target)
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
@@ -206,7 +192,7 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu')):
     bss_metrics = BSSMetricsList()
     for batch in dl:
         mix, target, inter = get_data_from_batch(batch, device)
-        estimates = model(mix)
+        estimates = model(mix.unsqueeze(1)).squeeze(1)
         reconst_loss = loss(estimates, target)
         running_loss += reconst_loss.item() * mix.size(0)
         sources = torch.stack([target, inter], dim=1)
@@ -292,7 +278,8 @@ def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
                         help='Number of epochs')
-    parser.add_argument('--stride')
+    parser.add_argument('--kernel', '-k', type=int, default=1024)
+    parser.add_argument('--stride', '-s', type=int, default=128)
     parser.add_argument('--batchsize', '-b', type=int, default=32,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
@@ -308,20 +295,30 @@ def main():
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
     args = parser.parse_args()
 
+    # Initialize device
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
     else:
         device = torch.device('cpu')
     print('On device: ', device)
 
+    # Make model and dataset
     train_dl, val_dl = make_data(args.batchsize, toy=args.toy)
-    model, model_name = make_model(args.dropout, args.sparsity, train_noisy=args.train_noisy,
-        toy=args.toy, adapt=not args.no_adapt)
-    vis = visdom.Visdom(port=5800)
-    loss_metrics = LossMetrics()
+    model = BitwiseNetwork(args.kernel, args.stride, fc_sizes=[2048, 2048],
+        dropout=dropout, sparsity=sparsity, adapt=adapt)
+    if args.train_noisy:
+        print('Noisy Network Training')
+        model.load_state_dict(torch.load('models/' + args.train_noisy))
+        model.noisy()
+    else:
+        print('Real Network Training')
     model.to(device)
-    loss = SignalDistortionRatio()
     print(model)
+
+    # Initialize loss function and optimizer
+    loss = SignalDistortionRatio()
+    loss_metrics = LossMetrics()
+    vis = visdom.Visdom(port=5800)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 

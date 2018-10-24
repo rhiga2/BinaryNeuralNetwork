@@ -29,10 +29,16 @@ def get_bins(centers):
     return (centers[:-1] + centers[1:])/2
 
 def bucketize(x, bins):
+    '''
+    Quantize x according to bucket bins
+    '''
     bucket_x = torch.zeros(x.size(), dtype=torch.uint8)
     for bin in bins:
         bucket_x[x >= bin] += 1
     return bucket_x
+
+def quantize_and_disperse(x, bins, num_bits=4):
+    pass
 
 def binarize_stft(x, bins, num_bits=4):
     '''
