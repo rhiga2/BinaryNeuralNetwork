@@ -137,10 +137,10 @@ class BitwiseNetwork(nn.Module):
         '''
         if self.mode != 'noisy':
             return
-        
+
         self.conv1.update_beta(sparsity=self.sparsity)
         self.conv1_transpose.update_beta(sparsity=self.sparsity)
-        if self.autoencode:  
+        if self.autoencode:
             for layer in self.linear_list:
                 layer.update_beta(sparsity=self.sparsity)
 
@@ -182,11 +182,13 @@ def get_data_from_batch(batch, device=torch.device('cpu')):
     inter = batch['interference'].to(device)
     return mix, target, inter
 
-def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu')):
+def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False):
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
         mix, target, inter = get_data_from_batch(batch, device)
+        if autoencode:
+            mix = target
         estimates = model(mix.unsqueeze(1)).squeeze(1)
         reconst_loss = loss(estimates, target)
         running_loss += reconst_loss.item() * mix.size(0)
@@ -194,11 +196,13 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu')):
         optimizer.step()
     return running_loss / len(dl)
 
-def val(model, dl, loss=F.mse_loss, device=torch.device('cpu')):
+def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False):
     running_loss = 0
     bss_metrics = BSSMetricsList()
     for batch in dl:
         mix, target, inter = get_data_from_batch(batch, device)
+        if autoencode:
+            mix = target
         estimates = model(mix.unsqueeze(1)).squeeze(1)
         reconst_loss = loss(estimates, target)
         running_loss += reconst_loss.item() * mix.size(0)
@@ -299,6 +303,7 @@ def main():
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     parser.add_argument('--toy', action='store_true')
+    parser.add_argument('--autoencode', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
     args = parser.parse_args()
 
@@ -312,7 +317,8 @@ def main():
     # Make model and dataset
     train_dl, val_dl = make_data(args.batchsize, toy=args.toy)
     model = BitwiseNetwork(args.kernel, args.stride, fc_sizes=[2048, 2048],
-        dropout=args.dropout, sparsity=args.sparsity, adapt=not args.no_adapt)
+        dropout=args.dropout, sparsity=args.sparsity, adapt=not args.no_adapt,
+        autoencode=args.autoencode)
     if args.train_noisy:
         print('Noisy Network Training')
         model.load_state_dict(torch.load('models/' + args.train_noisy))
@@ -333,12 +339,14 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
-        train_loss = train(model, train_dl, optimizer, loss=loss, device=device)
+        train_loss = train(model, train_dl, optimizer, loss=loss, device=device,
+            autoencode=args.autoencode)
 
         if epoch % args.output_period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
-            val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device)
+            val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device,
+                autoencode=args.autoencode)
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 output_period=args.output_period)

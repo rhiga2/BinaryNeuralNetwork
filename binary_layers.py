@@ -75,25 +75,31 @@ class BitwiseLinear(nn.Module):
     '''
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, biased=False):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
-        self.weight, self.bias = init_params((output_size, input_size), True)
+        self.biased = biased
+        self.weight, self.bias = init_params((output_size, input_size),
+            biased=biased, requires_grad=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 
     def forward(self, x):
         w = convert_param(self.weight, self.beta, self.mode)
-        b = convert_param(self.bias, self.beta, self.mode)
+        b = None
+        if self.biased:
+            b = convert_param(self.bias, self.beta, self.mode)
         return F.linear(x, w, b)
 
     def update_beta(self, sparsity):
         if sparsity == 0:
             return
         w = self.weight.cpu().data.numpy()
-        b = self.bias.cpu().data.numpy()
-        params = np.abs(np.concatenate((w, np.expand_dims(b, axis=1)), axis=1))
+        params = np.abs(w)
+        if self.biased:
+            b = self.bias.cpu().data.numpy()
+            params = np.abs(np.concatenate((w, np.expand_dims(b, axis=1)), axis=1))
         beta = torch.tensor(np.percentile(params, sparsity), dtype=self.weight.dtype,
             device=self.weight.device)
         self.beta = nn.Parameter(beta, requires_grad=False)
@@ -101,12 +107,14 @@ class BitwiseLinear(nn.Module):
     def noisy(self):
         self.mode = 'noisy'
         self.weight = nn.Parameter(torch.tanh(self.weight), requires_grad=True)
-        self.bias = nn.Parameter(torch.tanh(self.bias), requires_grad=True)
+        if self.biased:
+            self.bias = nn.Parameter(torch.tanh(self.bias), requires_grad=True)
 
     def inference(self):
         self.mode = 'inference'
         self.weight = nn.Parameter(bitwise_params(self.weight, self.beta), requires_grad=False)
-        self.bias = nn.Parameter(bitwise_params(self.bias, self.beta), requires_grad=False)
+        if self.biased:
+            self.bias = nn.Parameter(bitwise_params(self.bias, self.beta), requires_grad=False)
 
     def __repr__(self):
         return 'BitwiseLinear(%d, %d)' % (self.input_size, self.output_size)
