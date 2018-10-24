@@ -38,6 +38,7 @@ class BitwiseNetwork(nn.Module):
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
         self.in_scaler = Scaler(self.transform_channels)
         self.autoencode = autoencode
+        self.activation = torch.tanh
 
         # dense layers for denoising
         if not self.autoencode:
@@ -51,7 +52,6 @@ class BitwiseNetwork(nn.Module):
             self.linear_list = nn.ModuleList()
             self.scaler_list = nn.ModuleList()
             self.dropout_list = nn.ModuleList()
-            self.activation = torch.tanh
             for i, out_size in enumerate(fc_sizes):
                 self.linear_list.append(BitwiseLinear(in_size, out_size))
                 in_size = out_size
@@ -104,9 +104,9 @@ class BitwiseNetwork(nn.Module):
             # Unflatten (NT', F) -> (N, F, T')
             mask = h.view(spec_x.size(0), spec_x.size(2), -1).permute(0, 2, 1)
             mask = torch.cat([mask, mask], dim=1)
-            reconstructed_x = transformed_x * mask
+            transformed_x = transformed_x * mask
 
-        y_hat = self.activation(self.conv1_transpose(reconstructed_x))
+        y_hat = self.activation(self.conv1_transpose(transformed_x))
         return y_hat[:, :, self.transform_channels:x.size(1)+self.transform_channels]
 
     def noisy(self):

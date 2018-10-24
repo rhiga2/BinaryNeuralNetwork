@@ -270,11 +270,19 @@ class BLRSampler(Function):
 
 class Scaler(nn.Module):
     '''
-    Batch normalization without shifting
+    Scale-only batch normalization
     '''
     def __init__(self, num_features, requires_grad=True):
         super(Scaler, self).__init__()
         self.gamma = nn.Parameter(torch.ones(num_features), requires_grad=requires_grad)
 
     def forward(self, x):
-        return torch.abs(self.gamma) * x / (torch.std(x, dim=0) + 1e-5)
+        '''
+        x is shape (N, C, T) or (N, C)
+        '''
+        std = torch.std(x, dim=0, keepdim=True)
+        gamma = self.gamma
+        if len(x.size()) == 3:
+            std = torch.std(std, dim=2, keepdim=True)
+            gamma = self.gamma.unsqueeze(1)
+        return torch.abs(gamma) * x / (std + 2e-7)
