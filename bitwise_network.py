@@ -40,7 +40,7 @@ class BitwiseNetwork(nn.Module):
         self.autoencode = autoencode
 
         # dense layers for denoising
-        if self.autoencode:
+        if not self.autoencode:
             self.combine1 = nn.Conv2d(2, combine_hidden, 1)
             self.combine2 = nn.Conv2d(combine_hidden, 1, 1)
 
@@ -81,9 +81,9 @@ class BitwiseNetwork(nn.Module):
             * C is the number of input channels
         '''
         # (N, C, T)
-        transformed_x = self.activation(self.in_scaler(self.conv1(transformed_x)))
+        transformed_x = self.activation(self.in_scaler(self.conv1(x)))
 
-        if self.autoencode:
+        if not self.autoencode:
             real_x = transformed_x[:, :self.cutoff, :]
             imag_x = transformed_x[:, self.cutoff:, :]
             spec_x = torch.stack([real_x, imag_x], dim=1)
@@ -117,8 +117,9 @@ class BitwiseNetwork(nn.Module):
         self.activation = bitwise_activation
         self.conv1.noisy()
         self.conv1_transpose.noisy()
-        for layer in self.linear_list:
-            layer.noisy()
+        if not self.autoencode:
+            for layer in self.linear_list:
+                layer.noisy()
 
     def inference(self):
         '''
@@ -126,15 +127,21 @@ class BitwiseNetwork(nn.Module):
         '''
         self.mode = 'inference'
         self.activation = bitwise_activation
-        for layer in self.linear_list:
-            layer.inference()
+        if not self.autoencode:
+            for layer in self.linear_list:
+                layer.inference()
 
     def update_betas(self):
         '''
         Updates sparsity parameter beta
         '''
-        for layer in self.linear_list:
-            if layer.mode == 'noisy':
+        if self.mode != 'noisy':
+            return
+        
+        self.conv1.update_beta(sparsity=self.sparsity)
+        self.conv1_transpose.update_beta(sparsity=self.sparsity)
+        if self.autoencode:  
+            for layer in self.linear_list:
                 layer.update_beta(sparsity=self.sparsity)
 
 def make_data(batchsize, toy=False):
@@ -289,7 +296,7 @@ def main():
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', '-tn',  default=None)
     parser.add_argument('--output_period', '-op', type=int, default=1)
-    parser.add_argument('--sparsity', '-sparsity', type=float, default=95.0)
+    parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     parser.add_argument('--toy', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
@@ -305,7 +312,7 @@ def main():
     # Make model and dataset
     train_dl, val_dl = make_data(args.batchsize, toy=args.toy)
     model = BitwiseNetwork(args.kernel, args.stride, fc_sizes=[2048, 2048],
-        dropout=dropout, sparsity=sparsity, adapt=adapt)
+        dropout=args.dropout, sparsity=args.sparsity, adapt=not args.no_adapt)
     if args.train_noisy:
         print('Noisy Network Training')
         model.load_state_dict(torch.load('models/' + args.train_noisy))
