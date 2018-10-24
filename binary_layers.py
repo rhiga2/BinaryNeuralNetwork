@@ -167,8 +167,8 @@ class BitwiseConv1d(BitwiseAbstractClass):
             padding=self.padding, groups=self.groups)
 
     def __repr__(self):
-        return 'BitwiseConv1d(%d, %d, %d, stride=%d, padding=%d, self.groups=%d)' % \
-            (self.input_size, self.output_size, self.kernel_size,
+        return 'BitwiseConv1d(%d, %d, kernel_size=%d, stride=%d, padding=%d, self.groups=%d)' % \
+            (self.input_channels, self.output_channels, self.kernel_size,
             self.stride, self.padding, self.groups)
 
 class BitwiseConvTranspose1d(BitwiseAbstractClass):
@@ -202,8 +202,8 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
             padding=self.padding, groups=self.groups)
 
     def __repr__(self):
-        return 'BitwiseConvTranspose1d(%d, %d, %d, stride=%d, padding=%d, self.groups=%d)' % \
-            (self.input_size, self.output_size, self.kernel_size,
+        return 'BitwiseConvTranspose1d(%d, %d, kernel_size=%d, stride=%d, padding=%d, self.groups=%d)' % \
+            (self.input_channels, self.output_channels, self.kernel_size,
             self.stride, self.padding, self.groups)
 
 class BinLinear(nn.Module):
@@ -313,6 +313,12 @@ class BLRSampler(Function):
         L = torch.log(U) - torch.log(1 - U)
         return torch.tanh((torch.log(1/(1-q+eps)-1+eps) + L)/temp)
 
+def scale_only_bn(gamma, x):
+    '''
+     x is shape(N, C)
+    '''
+    return torch.abs(gamma) * x / (torch.std(x, dim=0) + 2e-7)
+
 class Scaler(nn.Module):
     '''
     Scale-only batch normalization
@@ -323,11 +329,22 @@ class Scaler(nn.Module):
 
     def forward(self, x):
         '''
-        x is shape (N, C, T) or (N, C)
+        x is shape (N, C)
         '''
-        std = torch.std(x, dim=0, keepdim=True)
-        gamma = self.gamma
-        if len(x.size()) == 3:
-            std = torch.std(std, dim=2, keepdim=True)
-            gamma = self.gamma.unsqueeze(1)
-        return torch.abs(gamma) * x / (std + 2e-7)
+        return scale_only_bn(self.gamma, x)
+
+class ConvScaler1d(nn.Module):
+    def __init__(self, num_features, requires_grad=True):
+        super(ConvScaler1d, self).__init__()
+        self.gamma = nn.Parameter(torch.ones(num_features), requires_grad=requires_grad)
+
+    def forward(self, x):
+        '''
+        x is shape (N, C, T)
+        '''
+        N, C, T = x.size()
+        x = x.permute(0, 2, 1).contiguous().view(-1, C)
+        x = scale_only_bn(self.gamma, x)
+        return x.view(-1, T, C).permute(0, 2, 1)
+        
+        

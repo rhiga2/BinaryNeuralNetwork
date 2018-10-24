@@ -11,6 +11,7 @@ from binary_layers import *
 from bss_eval import *
 import visdom
 import argparse
+import pdb
 
 class BitwiseNetwork(nn.Module):
     '''
@@ -36,7 +37,7 @@ class BitwiseNetwork(nn.Module):
             np.concatenate([real_fft[:self.cutoff], im_fft[:self.cutoff]], axis=0)
         )
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
-        self.in_scaler = Scaler(self.transform_channels)
+        self.in_scaler = ConvScaler1d(self.transform_channels)
         self.autoencode = autoencode
         self.activation = torch.tanh
 
@@ -81,7 +82,10 @@ class BitwiseNetwork(nn.Module):
             * C is the number of input channels
         '''
         # (N, C, T)
-        transformed_x = self.activation(self.in_scaler(self.conv1(x)))
+        N, C, T = x.size()
+        transformed_x = self.conv1(x)
+        transformed_x = self.in_scaler(transformed_x)
+        transformed_x = self.activation(transformed_x)
 
         if not self.autoencode:
             real_x = transformed_x[:, :self.cutoff, :]
@@ -107,7 +111,7 @@ class BitwiseNetwork(nn.Module):
             transformed_x = transformed_x * mask
 
         y_hat = self.activation(self.conv1_transpose(transformed_x))
-        return y_hat[:, :, self.transform_channels:x.size(1)+self.transform_channels]
+        return y_hat[:, :, self.transform_channels:T+self.transform_channels]
 
     def noisy(self):
         '''
@@ -255,7 +259,7 @@ def main():
     print(model)
 
     # Initialize loss function and optimizer
-    loss = SignalDistortionRatio()
+    loss = nn.MSELoss()
     loss_metrics = LossMetrics()
     vis = visdom.Visdom(port=5800)
     lr = args.learning_rate
