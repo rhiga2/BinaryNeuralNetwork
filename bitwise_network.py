@@ -261,7 +261,7 @@ def main():
     # Initialize loss function and optimizer
     loss = nn.MSELoss()
     loss_metrics = LossMetrics()
-    vis = visdom.Visdom(port=5800)
+    # vis = visdom.Visdom(port=5800)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
@@ -280,7 +280,7 @@ def main():
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 output_period=args.output_period)
-            train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', 'BSS Eval'])
+            # train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', 'BSS Eval'])
             print('Validation Cost: ', val_loss)
             print('Val SDR: ', sdr)
             print('Val SIR: ', sir)

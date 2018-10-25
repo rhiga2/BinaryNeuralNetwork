@@ -40,7 +40,7 @@ def bucketize(x, bins):
 def quantize_and_disperse(x, bins, num_bits=4):
     pass
 
-def binarize_stft(x, bins, num_bits=4):
+def binarize(x, bins, num_bits=4):
     '''
     x is shape (F, T)
     F = frequency range

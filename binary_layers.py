@@ -345,6 +345,6 @@ class ConvScaler1d(nn.Module):
         N, C, T = x.size()
         x = x.permute(0, 2, 1).contiguous().view(-1, C)
         x = scale_only_bn(self.gamma, x)
-        return x.view(-1, T, C).permute(0, 2, 1)
+        return x.view(-1, T, C).permute(0, 2, 1).contiguous()
         
         
