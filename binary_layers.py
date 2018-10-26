@@ -317,7 +317,7 @@ def scale_only_bn(gamma, x):
     '''
      x is shape(N, C)
     '''
-    return torch.abs(gamma) * x / (torch.std(x, dim=0) + 2e-7)
+    return torch.abs(gamma) * x / torch.sqrt((torch.var(x, dim=0) + 1e-5))
 
 class Scaler(nn.Module):
     '''
@@ -343,6 +343,7 @@ class ConvScaler1d(nn.Module):
         x is shape (N, C, T)
         '''
         N, C, T = x.size()
+        # convert shape (N, C, T) to (NT, C)
         x = x.permute(0, 2, 1).contiguous().view(-1, C)
         x = scale_only_bn(self.gamma, x)
         return x.view(-1, T, C).permute(0, 2, 1).contiguous()

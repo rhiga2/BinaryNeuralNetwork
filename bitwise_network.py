@@ -259,7 +259,7 @@ def main():
     print(model)
 
     # Initialize loss function and optimizer
-    loss = nn.MSELoss()
+    loss = SignalDistortionRatio()
     loss_metrics = LossMetrics()
     # vis = visdom.Visdom(port=5800)
     lr = args.learning_rate
