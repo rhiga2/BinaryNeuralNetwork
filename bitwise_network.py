@@ -267,8 +267,8 @@ def main():
 
     # Initialize quantizer and dequantizer
     delta = 4/(2**args.num_bits)
-    quantizer = lambda x : quantize_and_disperse(x, -2, delta, args.num_bits)
-    dequantizer = lambda x : dequantize_and_accumulate(x, -2, delta, args.num_bits)
+    quantizer = QuantizeDisperser(-2, delta, args.num_bits, device=device, dtype=torch.float32)
+    dequantizer = DequantizerAccumulator(-2, delta, args.num_bits, device=device)
 
     # vis = visdom.Visdom(port=5800)
     lr = args.learning_rate

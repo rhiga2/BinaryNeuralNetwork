@@ -3,11 +3,15 @@ import torch
 from binary_data import *
 
 class TestQuantize(unittest.TestCase):
+    def setUp(self):
+        self.quantizer = QuantizeDisperser(0, 1, num_bits=4, dtype=torch.uint8)
+        self.dequantizer = DequantizeAccumulator(0, 1, num_bits=4)
+
     def test_qad_shape(self):
         torch.manual_seed(0)
         x = torch.rand((10, 10))
-        ans = torch.Size([10, 8, 10])
-        estimate = quantize_and_disperse(x, 0, 0.05, num_bits=8)
+        ans = torch.Size([10, 4, 10])
+        estimate = self.quantizer(x)
         self.assertEqual(ans, estimate.size())
 
     def test_quantize_and_disperse(self):
@@ -20,7 +24,7 @@ class TestQuantize(unittest.TestCase):
                 [0, 1, 0, 1, 0]]),
             dtype=torch.uint8
         )
-        estimate = quantize_and_disperse(x, 0, 1, num_bits=4).squeeze(0)
+        estimate = self.quantizer(x)
         self.assertTrue(torch.equal(estimate, ans))
 
     def test_dequantize_and_accumulate(self):
@@ -32,7 +36,7 @@ class TestQuantize(unittest.TestCase):
             dtype=torch.float32
         ).unsqueeze(0)
         ans = torch.tensor(np.array([1.5, 2.5, 5.5, 14.5, -0.5]), dtype=torch.float32)
-        estimate = dequantize_and_accumulate(x, 0, 1).squeeze(0)
+        estimate = self.dequantizer(x)
         self.assertTrue(torch.equal(estimate, ans))
 
     def test_bucketize(self):

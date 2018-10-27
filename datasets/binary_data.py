@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import glob
 import scipy.signal as signal
@@ -263,7 +264,7 @@ unpacked = torch.tensor([
   [1,1,1,1,1,1,0,1],
   [1,1,1,1,1,1,1,0],
   [1,1,1,1,1,1,1,1]
-], dtype=torch.float32, device=torch.device('cuda:0')) # Absolutely atrocious and hacky
+], dtype=torch.uint8)
 
 def uniform_qlevels(x, levels=16):
     '''
@@ -327,7 +328,7 @@ class DequantizeAccumulator(nn.Module):
             dtype=dtype, device=device).unsqueeze(1)
 
     def forward(self, x):
-        return delta*(torch.sum(x * self.weights, dim=1) - 0.5) + self.min
+        return self.delta*(torch.sum(x * self.weights, dim=1) - 0.5) + self.min
 
 def make_binary_mask(premask, dtype=np.float):
     return np.array(premask > 0, dtype=dtype)
