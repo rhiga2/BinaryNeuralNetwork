@@ -19,29 +19,39 @@ class BitwiseNetwork(nn.Module):
     '''
     def __init__(self, kernel_size=1024, stride=256, in_channels=1,
         combine_hidden=8, fc_sizes = [], dropout=0, sparsity=95,
-        adapt=True, autoencode=False):
+        adapt=True, autoencode=False, bit_groups=1):
         super(BitwiseNetwork, self).__init__()
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.cutoff = kernel_size // 2 + 1
         self.in_channels = in_channels
-        self.transform_channels = 2*self.cutoff*in_channels
+
+        self.transform_channels = 2*self.cutoff*bit_groups
         self.conv1 = BitwiseConv1d(in_channels, self.transform_channels,
             kernel_size, stride=stride, biased=False,
-            padding=kernel_size, groups=in_channels)
+            padding=kernel_size, groups=bit_groups)
         fft = np.fft.fft(np.eye(kernel_size))
         real_fft = np.real(fft)[:self.cutoff]
         im_fft = np.real(fft)[:self.cutoff]
-        fft_list = []
-        for _ in range(in_channels):
-            fft_list.append(real_fft)
-            fft_list.append(im_fft)
-        basis = torch.FloatTensor(np.concatenate(fft_list, axis=0))
-        print(basis.shape)
-        self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
+        fft = np.concatenate([real_fft, im_fft], axis=0)
+        basis_group = torch.cat([fft for _ in range(bit_groups)], dim=0)
+        basis = torch.stack([basis_group for i in range(in_channels // bit_groups)], dim=0)
+        basis = basis.permute(1, 0, 2).contiguous()
+        self.conv1.weight = nn.Parameter(basis, requires_grad=adapt)
         self.in_scaler = ConvScaler1d(self.transform_channels)
         self.autoencode = autoencode
         self.activation = torch.tanh
+
+        # Initialize inverse of front end transform
+        self.scale = kernel_size / stride
+        invbasis_group = torch.t(torch.pinverse(self.scale*basis_group))
+        invbasis = torch.stack([invbasis_group for i in range(in_channels // bit_groups)], dim=0)
+        basis = basis.permute(1, 0, 2).contiguous()
+        self.conv1_transpose = BitwiseConvTranspose1d( self.transform_channels,
+            in_channels, kernel_size, stride=stride, biased=False,
+            groups=bit_groups)
+        self.conv1_transpose.weight = nn.Parameter(invbasis,
+            requires_grad=adapt)
 
         # dense layers for denoising
         if not self.autoencode:
@@ -62,16 +72,6 @@ class BitwiseNetwork(nn.Module):
                 if i < self.num_layers - 1:
                     self.dropout_list.append(nn.Dropout(dropout))
             self.output_transform = bitwise_activation
-
-        # Initialize inverse of front end transform
-        self.scale = kernel_size / stride
-        inv_basis = torch.t(torch.pinverse(self.scale*basis))
-        self.conv1_transpose = BitwiseConvTranspose1d(
-            self.transform_channels,
-            in_channels, kernel_size, stride=stride, biased=False,
-            groups=in_channels)
-        self.conv1_transpose.weight = nn.Parameter(inv_basis.unsqueeze(1),
-            requires_grad=adapt)
 
         self.sparsity = sparsity
         self.mode = 'real'
@@ -236,6 +236,7 @@ def main():
     parser.add_argument('--autoencode', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
     parser.add_argument('--num_bits', '-nb', type=int, default=8)
+    parser.add_argument('--bit_groups', '-bg', type=int, default=1)
     args = parser.parse_args()
 
     # Initialize device
@@ -251,7 +252,7 @@ def main():
     model = BitwiseNetwork(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=args.num_bits, dropout=args.dropout,
         sparsity=args.sparsity, adapt=not args.no_adapt,
-        autoencode=args.autoencode)
+        autoencode=args.autoencode, bit_groups=args.bit_groups)
     if args.train_noisy:
         print('Noisy Network Training')
         model.load_state_dict(torch.load('models/' + args.train_noisy))
