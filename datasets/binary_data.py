@@ -302,6 +302,8 @@ def quantize(x, min, delta, num_bins=16):
     bucket_x = torch.ceil(x)
     return torch.clamp(bucket_x, 0, num_bins-1).to(dtype=torch.long)
 
+class Quantizer
+
 def quantize_and_disperse(x, min, delta, num_bits=4):
     '''
     Quantize and disperse x into a binary tensor
