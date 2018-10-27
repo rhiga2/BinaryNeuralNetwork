@@ -157,7 +157,7 @@ def make_data(batchsize, hop=256, toy=False, num_bits=8):
     Make two mixture dataset
     '''
     trainset, valset = make_mixture_set(hop=hop, toy=toy, num_bits=num_bits)
-    collate = lambda x: collate_and_trim(x, axis=1)
+    collate = lambda x: collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
@@ -268,7 +268,7 @@ def main():
     # Initialize quantizer and dequantizer
     delta = 4/(2**args.num_bits)
     quantizer = lambda x : quantize_and_disperse(x, -2, delta, args.num_bits)
-    dequantizer = lambda x : dequantize_and_disperse(x, -2, delta, args.num_bits)
+    dequantizer = lambda x : dequantize_and_accumulate(x, -2, delta, args.num_bits)
 
     # vis = visdom.Visdom(port=5800)
     lr = args.learning_rate
