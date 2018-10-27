@@ -1,9 +1,12 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 import glob
 import scipy.signal as signal
 from sklearn.cluster import KMeans
 import argparse
+
+unpacked = torch.tensor(np.load('unpacked.npy'), dtype=torch.uint8)
 
 def uniform_qlevels(x, levels=16):
     '''
@@ -32,25 +35,32 @@ def bucketize(x, bins):
     '''
     Quantize x according to bucket bins
     '''
-    bucket_x = torch.zeros(x.size(), dtype=torch.uint8)
+    bucket_x = torch.zeros(x.size(), dtype=torch.long)
     for bin in bins:
         bucket_x[x >= bin] += 1
     return bucket_x
 
-def quantize_and_disperse(x, bins, num_bits=4):
-    '''
-    x is shape (T)
-    T = time range
-    '''
-    assert len(bins)+1 == 2**num_bits
-    digit_x = np.digitize(x, bins).astype(np.uint8)
-    qad = np.unpackbits(np.expand_dims(digit_x, axis=0), axis=0)[-num_bits:]
-    return qad
+def quantize(x, min, delta, num_bins=16):
+    x = (x - min) / delta
+    bucket_x = torch.ceil(x)
+    return torch.clamp(bucket_x, 0, num_bins-1).to(dtype=torch.long)
 
-def quantize(x, bins, centers):
-    digit_x = np.digitize(x, bins).astype(np.int)
-    qx = centers[digit_x] # qx = quantized x
-    return qx
+def quantize_and_disperse(x, min, delta, num_bits=4):
+    '''
+    Quantize and disperse x into a binary tensor
+    x is shape (batch, length)
+    returns output of shape (batch, num_bits, length)
+    '''
+    digit_x = quantize(x, min, delta, num_bins=2**num_bits).view(-1)
+    qad = torch.index_select(unpacked, 0, digit_x)[:, -num_bits:]
+    return qad.view(x.size(0), x.size(1), -1).permute(0, 2, 1).contiguous()
+
+def dequantize_and_accumulate(x, min, delta, num_bits=4):
+    '''
+    Dequantize and accumulate a binary tensor
+    '''
+    weights = torch.tensor([2**(num_bits-i-1) for i in range(num_bits)], dtype=x.dtype).unsqueeze(1)
+    return delta*(torch.sum(x * weights, dim=1) - 0.5) + min
 
 def make_binary_mask(premask, dtype=np.float):
     return np.array(premask > 0, dtype=dtype)

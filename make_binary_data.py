@@ -12,8 +12,6 @@ def make_mixture_set(hop=256, toy=False, num_bits=8):
         'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0',
         'dr1/fsma0', 'dr1/ftbr0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targets, num_train=7)
-    bins = np.linspace(-1, 1, 2**num_bits+1)[1:-1] # evenly spaced buckets
-    qad = lambda x: quantize_and_disperse(x, bins, num_bits=num_bits)
 
     if toy:
         noise_path = '/media/data/Nonspeech'
@@ -26,18 +24,14 @@ def make_mixture_set(hop=256, toy=False, num_bits=8):
                          'n59.wav', # jungle?
                          ]
         train_noises, val_noises = get_noise_files(noise_path, interferences)
-        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
-            transform=qad)
-        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
-            transform=qad)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop)
     else:
         interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
                     'dr1/mwad0', 'dr1/mwar0']
         train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
-        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
-            transform=qad)
-        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
-            transform=qad)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop)
 
     return trainset, valset
 

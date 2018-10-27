@@ -174,29 +174,39 @@ def get_data_from_batch(batch, device=torch.device('cpu')):
     inter = batch['interference'].to(device)
     return mix, target, inter
 
-def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False):
+def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False,
+    quantizer=None, dequantizer=None):
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
         mix, target, inter = get_data_from_batch(batch, device)
         if autoencode:
             mix = target
-        estimates = model(mix)
-        reconst_loss = loss(estimates, target)
+        if quantizer:
+            mix = quantizer(mix)
+        estimate = model(mix)
+        if dequantizer:
+            estimate = dequantizer(estimate)
+        reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
         optimizer.step()
     return running_loss / len(dl)
 
-def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False):
+def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False,
+    quantizer=None, dequantizer=None):
     running_loss = 0
     bss_metrics = BSSMetricsList()
     for batch in dl:
         mix, target, inter = get_data_from_batch(batch, device)
         if autoencode:
             mix = target
-        estimates = model(mix.unsqueeze(1)).squeeze(1)
-        reconst_loss = loss(estimates, target)
+        if quantizer:
+            mix = quantizer(mix, -2, 4/2**4)
+        estimate = model(mix.unsqueeze(1)).squeeze(1)
+        if dequantizer:
+            estimate = dequantizer(estimate)
+        reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
         sources = torch.stack([target, inter], dim=1)
         metrics = bss_eval_batch(estimates, sources)
@@ -250,8 +260,14 @@ def main():
     print(model)
 
     # Initialize loss function and optimizer
-    loss = nn.BCEWithLogitsLoss()
+    loss = SignalDistortionRatio()
     loss_metrics = LossMetrics()
+
+    # Initialize quantizer and dequantizer
+    delta = 4/(2**args.num_bits)
+    quantizer = lambda x : quantize_and_disperse(x, -2, delta, args.num_bits)
+    dequantizer = lambda x : dequantize_and_disperse(x, -2, delta, args.num_bits)
+
     # vis = visdom.Visdom(port=5800)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
@@ -261,13 +277,13 @@ def main():
         model.update_betas()
         model.train()
         train_loss = train(model, train_dl, optimizer, loss=loss, device=device,
-            autoencode=args.autoencode)
+            autoencode=args.autoencode, quantizer=quantizer, dequantizer=dequantizer)
 
         if epoch % args.output_period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
             val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device,
-                autoencode=args.autoencode)
+                autoencode=args.autoencode, quantizer=quantizer, dequantizer=dequantizer)
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 output_period=args.output_period)
