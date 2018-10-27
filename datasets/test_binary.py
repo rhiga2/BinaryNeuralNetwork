@@ -3,19 +3,14 @@ import torch
 from binary_data import *
 
 class TestQuantize(unittest.TestCase):
-    def test_binarize(self):
-        x = np.array([[1.1, 2.1, 1.5],
-                     [3.4, 5.5, 6.9]])
+    def test_quantize_and_disperse(self):
+        x = np.array([1.1, 2.1, 5.5, 17, -43])
         bins = np.array(list(range(15)))
-        ans = np.array([[0, 0, 0],
-                        [0, 0, 0],
-                        [1, 1, 1],
-                        [0, 1, 0],
-                        [0, 0, 0],
-                        [1, 1, 1],
-                        [0, 1, 1],
-                        [0, 0, 1]], dtype=np.uint8)
-        estimate = binarize(x, bins)
+        ans = np.array([[0, 0, 0, 1, 0],
+                        [0, 0, 1, 1, 0],
+                        [1, 1, 1, 1, 0],
+                        [0, 1, 0, 1, 0]], dtype=np.uint8)
+        estimate = quantize_and_disperse(x, bins)
         np.testing.assert_equal(estimate, ans)
 
     def test_kmeans_quantizer(self):

@@ -6,32 +6,16 @@ from datasets.two_source_mixture import *
 from datasets.sinusoidal_data import *
 from torch.utils.data import Dataset, DataLoader
 
-def make_dataset(batchsize, seed=0, toy=False):
-    np.random.seed(seed)
-
-    train_dir = '/media/data/binary_audio/train'
-    val_dir = '/media/data/binary_audio/val'
-    if toy:
-        train_dir = '/media/data/binary_audio/toy_train'
-        val_dir = '/media/data/binary_audio/toy_val'
-
-    trainset = BinaryDataset(train_dir)
-    valset = BinaryDataset(val_dir)
-    collate_fn = lambda x: collate_and_trim(x, axis=1)
-    train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True, collate_fn=collate_fn)
-    val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate_fn)
-    return train_dl, val_dl
-
-def make_mixture_set(toy=False):
+def make_mixture_set(hop=256, toy=False, num_bits=8):
     speaker_path = '/media/data/timit-wav/train'
     targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
         'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0',
         'dr1/fsma0', 'dr1/ftbr0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targets, num_train=7)
+    bins = np.linspace(-1, 1, 65)[1:-1] # evenly spaced buckets
+    qad = lambda x: quantize_and_disperse(x, bins, num_bits=num_bits)
 
     if toy:
-        # trainset = SineSpeechData(train_speeches, 10, hop=256)
-        # valset = SineSpeechData(val_speeches, 10, hop=256)
         noise_path = '/media/data/Nonspeech'
         interferences = ['n81.wav', # chimes
                          'n97.wav', # eating chips
@@ -42,14 +26,18 @@ def make_mixture_set(toy=False):
                          'n59.wav', # jungle?
                          ]
         train_noises, val_noises = get_noise_files(noise_path, interferences)
-        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=256)
-        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=256)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
+            transform=qad)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
+            transform=qad)
     else:
         interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
                     'dr1/mwad0', 'dr1/mwar0']
         train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
-        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=256)
-        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=256)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
+            transform=qad)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
+            transform=qad)
 
     return trainset, valset
 

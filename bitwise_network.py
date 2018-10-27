@@ -25,16 +25,15 @@ class BitwiseNetwork(nn.Module):
         self.kernel_size = kernel_size
         self.cutoff = kernel_size // 2 + 1
         self.in_channels = in_channels
-        transform_channels = 2*self.cutoff
-        self.transform_channels = transform_channels
-        self.conv1 = BitwiseConv1d(in_channels, transform_channels,
+        self.transform_channels = 2*self.cutoff*in_channels
+        self.conv1 = BitwiseConv1d(in_channels, self.transform_channels,
             kernel_size, stride=stride, biased=False,
-            padding=transform_channels)
+            padding=self.transform_channels, groups=in_channels)
         fft = np.fft.fft(np.eye(kernel_size))
-        real_fft = np.real(fft)
-        im_fft = np.imag(fft)
+        real_ffts = [np.real(fft) for i in range(in_channels)]
+        im_ffts = [np.imag(fft) for i in range(in_channels)]
         basis = torch.FloatTensor(
-            np.concatenate([real_fft[:self.cutoff], im_fft[:self.cutoff]], axis=0)
+            np.concatenate(real_ffts + im_ffts, axis=0)
         )
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
         self.in_scaler = ConvScaler1d(self.transform_channels)
@@ -64,8 +63,10 @@ class BitwiseNetwork(nn.Module):
         # Initialize inverse of front end transform
         self.scale = kernel_size / stride
         inv_basis = torch.t(torch.pinverse(self.scale*basis))
-        self.conv1_transpose = BitwiseConvTranspose1d(transform_channels,
-            in_channels, kernel_size, stride=stride, biased=False)
+        self.conv1_transpose = BitwiseConvTranspose1d(
+            self.transform_channels,
+            in_channels, kernel_size, stride=stride, biased=False,
+            groups=in_channels)
         self.conv1_transpose.weight = nn.Parameter(inv_basis.unsqueeze(1),
             requires_grad=adapt)
 
@@ -75,14 +76,13 @@ class BitwiseNetwork(nn.Module):
     def forward(self, x):
         '''
         Bitwise neural network forward
-        * Input is a tensor of shape (N, C, T)
-        * Output is a tensor of shape (N, C, T)
-            * N is the batch size
-            * T is the sequence length
-            * C is the number of input channels
+        * Input is a tensor of shape (batch, channels, time)
+        * Output is a tensor of shape (batch, channels, time)
+            * batch is the batch size
+            * time is the sequence length
+            * channels is the number of input channels = num bits in qad
         '''
-        # (N, C, T)
-        N, C, T = x.size()
+        # (batch, channels, time)
         transformed_x = self.conv1(x)
         transformed_x = self.in_scaler(transformed_x)
         transformed_x = self.activation(transformed_x)
@@ -94,7 +94,7 @@ class BitwiseNetwork(nn.Module):
             spec_x = F.relu(self.combine1(spec_x))
             spec_x = F.relu(self.combine2(spec_x)).squeeze(1)
 
-            # Flatten (N, F, T') -> (NT', F)
+            # Flatten (batch, bands, frames) -> (batch * frames, bands)
             h = spec_x.permute(0, 2, 1).contiguous().view(-1, spec_x.size(1))
             for i in range(self.num_layers):
                 h = self.linear_list[i](h)
@@ -148,12 +148,12 @@ class BitwiseNetwork(nn.Module):
             for layer in self.linear_list:
                 layer.update_beta(sparsity=self.sparsity)
 
-def make_data(batchsize, toy=False):
+def make_data(batchsize, hop=256, toy=False, num_bits=8):
     '''
     Make two mixture dataset
     '''
-    trainset, valset = make_mixture_set(toy=toy)
-    collate = lambda x: collate_and_trim(x, axis=0)
+    trainset, valset = make_mixture_set(hop=hop, toy=toy, num_bits=num_bits)
+    collate = lambda x: collate_and_trim(x, axis=1)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
@@ -165,20 +165,6 @@ def biortho_loss(w, winv):
     end transform
     '''
     return torch.mse_loss(torch.mm(winv, w), torch.eye(w.size(1)))
-
-@DeprecationWarning
-def model_loss(model, batch, biortho_reg=0, loss=F.mse_loss, device=torch.device('cpu')):
-    mix = batch['mixture'].cuda(device)
-    targ = batch['target'].cuda(device)
-    interference = batch['interference'].cuda(device)
-    estimate = model(mix)
-    reconstruction_loss = loss(estimate, targ, interference)
-    biortho_loss = 0
-    if biortho_reg != 0:
-        w = model.conv1.weight.squeeze(1)
-        winv = model.scale * torch.t(model.conv2.weight.squeeze(1))
-        inv_loss = biortho_reg * biortho_loss(winv, w)
-    return reconstruction_loss + biortho_loss
 
 def get_data_from_batch(batch, device=torch.device('cpu')):
     mix = batch['mixture'].to(device)
@@ -221,7 +207,7 @@ def main():
                         help='Number of epochs')
     parser.add_argument('--kernel', '-k', type=int, default=1024)
     parser.add_argument('--stride', '-s', type=int, default=128)
-    parser.add_argument('--batchsize', '-b', type=int, default=32,
+    parser.add_argument('--batchsize', '-b', type=int, default=8,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
@@ -235,6 +221,7 @@ def main():
     parser.add_argument('--toy', action='store_true')
     parser.add_argument('--autoencode', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
+    parser.add_argument('--num_bits', '-nb', type=int, default=8)
     args = parser.parse_args()
 
     # Initialize device
@@ -245,9 +232,11 @@ def main():
     print('On device: ', device)
 
     # Make model and dataset
-    train_dl, val_dl = make_data(args.batchsize, toy=args.toy)
+    train_dl, val_dl = make_data(args.batchsize, hop=args.stride, toy=args.toy,
+        num_bits=args.num_bits)
     model = BitwiseNetwork(args.kernel, args.stride, fc_sizes=[2048, 2048],
-        dropout=args.dropout, sparsity=args.sparsity, adapt=not args.no_adapt,
+        in_channels=args.num_bits, dropout=args.dropout,
+        sparsity=args.sparsity, adapt=not args.no_adapt,
         autoencode=args.autoencode)
     if args.train_noisy:
         print('Noisy Network Training')
@@ -259,7 +248,7 @@ def main():
     print(model)
 
     # Initialize loss function and optimizer
-    loss = nn.MSELoss()
+    loss = nn.BCELoss()
     loss_metrics = LossMetrics()
     # vis = visdom.Visdom(port=5800)
     lr = args.learning_rate

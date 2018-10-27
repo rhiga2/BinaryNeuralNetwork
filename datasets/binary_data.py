@@ -38,21 +38,14 @@ def bucketize(x, bins):
     return bucket_x
 
 def quantize_and_disperse(x, bins, num_bits=4):
-    pass
-
-def binarize(x, bins, num_bits=4):
     '''
-    x is shape (F, T)
-    F = frequency range
+    x is shape (T)
     T = time range
     '''
     assert len(bins)+1 == 2**num_bits
     digit_x = np.digitize(x, bins).astype(np.uint8)
-    binary_x = []
-    for i in range(digit_x.shape[0]):
-        bits = np.unpackbits(np.expand_dims(digit_x[i], axis=0), axis=0)[-num_bits:]
-        binary_x.append(bits)
-    return np.concatenate(binary_x, axis=0)
+    qad = np.unpackbits(np.expand_dims(digit_x, axis=0), axis=0)[-num_bits:]
+    return qad
 
 def quantize(x, bins, centers):
     digit_x = np.digitize(x, bins).astype(np.int)
