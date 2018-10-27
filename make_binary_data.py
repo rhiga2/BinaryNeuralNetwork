@@ -12,7 +12,7 @@ def make_mixture_set(hop=256, toy=False, num_bits=8):
         'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0',
         'dr1/fsma0', 'dr1/ftbr0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targets, num_train=7)
-    bins = np.linspace(-1, 1, 65)[1:-1] # evenly spaced buckets
+    bins = np.linspace(-1, 1, 2**num_bits+1)[1:-1] # evenly spaced buckets
     qad = lambda x: quantize_and_disperse(x, bins, num_bits=num_bits)
 
     if toy:

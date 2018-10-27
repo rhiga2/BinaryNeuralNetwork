@@ -30,11 +30,12 @@ class BitwiseNetwork(nn.Module):
             kernel_size, stride=stride, biased=False,
             padding=self.transform_channels, groups=in_channels)
         fft = np.fft.fft(np.eye(kernel_size))
-        real_ffts = [np.real(fft) for i in range(in_channels)]
-        im_ffts = [np.imag(fft) for i in range(in_channels)]
+        real_ffts = [np.real(fft)[:self.cutoff] for i in range(in_channels)]
+        im_ffts = [np.imag(fft)[:self.cutoff] for i in range(in_channels)]
         basis = torch.FloatTensor(
             np.concatenate(real_ffts + im_ffts, axis=0)
         )
+        print(basis.shape)
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
         self.in_scaler = ConvScaler1d(self.transform_channels)
         self.autoencode = autoencode
@@ -83,6 +84,7 @@ class BitwiseNetwork(nn.Module):
             * channels is the number of input channels = num bits in qad
         '''
         # (batch, channels, time)
+        time = x.size(2)
         transformed_x = self.conv1(x)
         transformed_x = self.in_scaler(transformed_x)
         transformed_x = self.activation(transformed_x)
@@ -105,13 +107,13 @@ class BitwiseNetwork(nn.Module):
                     h = self.dropout_list[i](h)
             h = (self.output_transform(h) + 1) / 2
 
-            # Unflatten (NT', F) -> (N, F, T')
+            # Unflatten (batch * frames, bands) -> (batch, bands, frames)
             mask = h.view(spec_x.size(0), spec_x.size(2), -1).permute(0, 2, 1)
             mask = torch.cat([mask, mask], dim=1)
             transformed_x = transformed_x * mask
 
         y_hat = self.activation(self.conv1_transpose(transformed_x))
-        return y_hat[:, :, self.transform_channels:T+self.transform_channels]
+        return y_hat[:, :, self.transform_channels:time+self.transform_channels]
 
     def noisy(self):
         '''
@@ -179,7 +181,7 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
         mix, target, inter = get_data_from_batch(batch, device)
         if autoencode:
             mix = target
-        estimates = model(mix.unsqueeze(1)).squeeze(1)
+        estimates = model(mix)
         reconst_loss = loss(estimates, target)
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
@@ -248,7 +250,7 @@ def main():
     print(model)
 
     # Initialize loss function and optimizer
-    loss = nn.BCELoss()
+    loss = nn.BCEWithLogitsLoss()
     loss_metrics = LossMetrics()
     # vis = visdom.Visdom(port=5800)
     lr = args.learning_rate
