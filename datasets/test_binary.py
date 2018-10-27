@@ -3,6 +3,13 @@ import torch
 from binary_data import *
 
 class TestQuantize(unittest.TestCase):
+    def test_qad_shape(self):
+        torch.manual_seed(0)
+        x = torch.rand((10, 10))
+        ans = torch.Size([10, 8, 10])
+        estimate = quantize_and_disperse(x, 0, 0.05, num_bits=8)
+        self.assertEqual(ans, estimate.size())
+
     def test_quantize_and_disperse(self):
         x = torch.tensor(np.array([1.1, 2.1, 5.5, 15.2, -43]), dtype=torch.float32)
         x = x.unsqueeze(0)
