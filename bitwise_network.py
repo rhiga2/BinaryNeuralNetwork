@@ -221,7 +221,7 @@ def main():
                         help='Number of epochs')
     parser.add_argument('--kernel', '-k', type=int, default=1024)
     parser.add_argument('--stride', '-s', type=int, default=128)
-    parser.add_argument('--batchsize', '-b', type=int, default=8,
+    parser.add_argument('--batchsize', '-b', type=int, default=16,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
@@ -261,16 +261,17 @@ def main():
     model.to(device)
     print(model)
 
-    # Initialize loss function and optimizer
+    # Initialize loss function
     loss = SignalDistortionRatio()
     loss_metrics = LossMetrics()
 
     # Initialize quantizer and dequantizer
     delta = 4/(2**args.num_bits)
     quantizer = QuantizeDisperser(-2, delta, args.num_bits, device=device, dtype=torch.float32)
-    dequantizer = DequantizerAccumulator(-2, delta, args.num_bits, device=device)
+    dequantizer = DequantizeAccumulator(-2, delta, args.num_bits, device=device)
 
-    # vis = visdom.Visdom(port=5800)
+    # Initialize optimizer
+    vis = visdom.Visdom(port=5800)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
@@ -289,7 +290,7 @@ def main():
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 output_period=args.output_period)
-            # train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', 'BSS Eval'])
+            train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', 'BSS Eval'])
             print('Validation Cost: ', val_loss)
             print('Val SDR: ', sdr)
             print('Val SIR: ', sir)
