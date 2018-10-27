@@ -28,13 +28,15 @@ class BitwiseNetwork(nn.Module):
         self.transform_channels = 2*self.cutoff*in_channels
         self.conv1 = BitwiseConv1d(in_channels, self.transform_channels,
             kernel_size, stride=stride, biased=False,
-            padding=self.transform_channels, groups=in_channels)
+            padding=kernel_size, groups=in_channels)
         fft = np.fft.fft(np.eye(kernel_size))
-        real_ffts = [np.real(fft)[:self.cutoff] for i in range(in_channels)]
-        im_ffts = [np.imag(fft)[:self.cutoff] for i in range(in_channels)]
-        basis = torch.FloatTensor(
-            np.concatenate(real_ffts + im_ffts, axis=0)
-        )
+        real_fft = np.real(fft)[:self.cutoff]
+        im_fft = np.real(fft)[:self.cutoff]
+        fft_list = []
+        for _ in range(in_channels):
+            fft_list.append(real_fft)
+            fft_list.append(im_fft)
+        basis = torch.FloatTensor(np.concatenate(fft_list, axis=0))
         print(basis.shape)
         self.conv1.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=adapt)
         self.in_scaler = ConvScaler1d(self.transform_channels)
@@ -113,7 +115,7 @@ class BitwiseNetwork(nn.Module):
             transformed_x = transformed_x * mask
 
         y_hat = self.activation(self.conv1_transpose(transformed_x))
-        return y_hat[:, :, self.transform_channels:time+self.transform_channels]
+        return y_hat[:, :, self.kernel_size:time+self.kernel_size]
 
     def noisy(self):
         '''
@@ -155,7 +157,7 @@ def make_data(batchsize, hop=256, toy=False, num_bits=8):
     Make two mixture dataset
     '''
     trainset, valset = make_mixture_set(hop=hop, toy=toy, num_bits=num_bits)
-    collate = lambda x: collate_and_trim(x, axis=1)
+    collate = lambda x: collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
@@ -266,7 +268,7 @@ def main():
     # Initialize quantizer and dequantizer
     delta = 4/(2**args.num_bits)
     quantizer = lambda x : quantize_and_disperse(x, -2, delta, args.num_bits)
-    dequantizer = lambda x : dequantize_and_disperse(x, -2, delta, args.num_bits)
+    dequantizer = lambda x : dequantize_and_accumulate(x, -2, delta, args.num_bits)
 
     # vis = visdom.Visdom(port=5800)
     lr = args.learning_rate

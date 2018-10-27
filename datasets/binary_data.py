@@ -263,7 +263,7 @@ unpacked = torch.tensor([
   [1,1,1,1,1,1,0,1],
   [1,1,1,1,1,1,1,0],
   [1,1,1,1,1,1,1,1]
-], dtype=torch.uint8)
+], dtype=torch.float32, device=torch.device('cuda:0')) # Absolutely atrocious and hacky
 
 def uniform_qlevels(x, levels=16):
     '''
