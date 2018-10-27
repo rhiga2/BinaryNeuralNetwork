@@ -302,24 +302,32 @@ def quantize(x, min, delta, num_bins=16):
     bucket_x = torch.ceil(x)
     return torch.clamp(bucket_x, 0, num_bins-1).to(dtype=torch.long)
 
-class Quantizer
+class QuantizeDisperser(nn.Module):
+    def __init__(self, min, delta, num_bits=4, device=torch.device('cpu'),
+        dtype=torch.float32):
+        super(QuantizeDisperser, self).__init__()
+        self.min = min
+        self.delta = delta
+        self.num_bits = num_bits
+        self.unpacked = unpacked.to(device=device, dtype=dtype)
 
-def quantize_and_disperse(x, min, delta, num_bits=4):
-    '''
-    Quantize and disperse x into a binary tensor
-    x is shape (batch, length)
-    returns output of shape (batch, num_bits, length)
-    '''
-    digit_x = quantize(x, min, delta, num_bins=2**num_bits).view(-1)
-    qad = torch.index_select(unpacked, 0, digit_x)[:, -num_bits:]
-    return qad.view(x.size(0), x.size(1), -1).permute(0, 2, 1).contiguous()
+    def forward(self, x):
+        digit_x = quantize(x, self.min, self.delta, num_bins=2**self.num_bits).view(-1)
+        qad = torch.index_select(self.unpacked, 0, digit_x)[:, -self.num_bits:]
+        return qad.view(x.size(0), x.size(1), -1).permute(0, 2, 1).contiguous()
 
-def dequantize_and_accumulate(x, min, delta, num_bits=4):
-    '''
-    Dequantize and accumulate a binary tensor
-    '''
-    weights = torch.tensor([2**(num_bits-i-1) for i in range(num_bits)], dtype=x.dtype).unsqueeze(1)
-    return delta*(torch.sum(x * weights, dim=1) - 0.5) + min
+class DequantizeAccumulator(nn.Module):
+    def __init__(self, min, delta, num_bits=4, device=torch.device('cpu'),
+        dtype=torch.float32):
+        super(DequantizeAccumulator, self).__init__()
+        self.min = min
+        self.delta = delta
+        self.num_bits = num_bits
+        self.weights = torch.tensor([2**(num_bits-i-1) for i in range(num_bits)],
+            dtype=dtype, device=device).unsqueeze(1)
+
+    def forward(self, x):
+        return delta*(torch.sum(x * self.weights, dim=1) - 0.5) + self.min
 
 def make_binary_mask(premask, dtype=np.float):
     return np.array(premask > 0, dtype=dtype)
