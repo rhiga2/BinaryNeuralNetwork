@@ -204,7 +204,7 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix, -2, 4/2**4)
+            mix = quantizer(mix)
         estimate = model(mix.unsqueeze(1)).squeeze(1)
         if dequantizer:
             estimate = dequantizer(estimate)
