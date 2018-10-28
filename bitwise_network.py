@@ -35,7 +35,8 @@ class BitwiseNetwork(nn.Module):
         im_fft = np.real(fft)[:self.cutoff]
         fft = torch.tensor(np.concatenate([real_fft, im_fft], axis=0), dtype=torch.float32)
         basis_group = torch.cat([fft for _ in range(bit_groups)], dim=0)
-        basis = torch.stack([2*(num_bits - i - 1)*basis_group for i in range(in_channels // bit_groups)], dim=0)
+        channels_per_group = in_channels // bit_groups
+        basis = torch.stack([2**(channels_per_group - i - 1)*basis_group for i in range(channels_per_group)], dim=0)
         basis = basis.permute(1, 0, 2).contiguous()
         self.conv1.weight = nn.Parameter(basis, requires_grad=adapt)
         self.in_scaler = ConvScaler1d(self.transform_channels)
@@ -45,7 +46,7 @@ class BitwiseNetwork(nn.Module):
         # Initialize inverse of front end transform
         self.scale = kernel_size / stride
         invbasis_group = bit_groups * torch.t(torch.pinverse(self.scale*basis_group))
-        invbasis = torch.stack([invbasis_group for i in range(in_channels // bit_groups)], dim=0)
+        invbasis = torch.stack([2**(-channels_per_group + i + 1)*invbasis_group for i in range(in_channels // bit_groups)], dim=0)
         invbasis = invbasis.permute(1, 0, 2).contiguous()
         self.conv1_transpose = BitwiseConvTranspose1d( self.transform_channels,
             in_channels, kernel_size, stride=stride, biased=False,
@@ -74,7 +75,12 @@ class BitwiseNetwork(nn.Module):
             self.output_transform = bitwise_activation
 
         self.sparsity = sparsity
-        self.out_scaler = ConvScaler1d(in_channels)
+        divisor = torch.tensor(
+            [2**(channels_per_group-i-1) for i in range(channels_per_group)],
+            dtype=torch.float)
+        divisor = torch.cat([divisor for i in range(bit_groups)]).unsqueeze(1)
+        self.divisor = nn.Parameter(divisor, requires_grad=True)
+        self.bias = nn.Parameter(torch.zeros(num_bits, 1), requires_grad=True)
         self.mode = 'real'
 
     def forward(self, x):
@@ -113,7 +119,9 @@ class BitwiseNetwork(nn.Module):
             mask = torch.cat([mask, mask], dim=1)
             transformed_x = transformed_x * mask
 
-        y_hat = 2*self.activation(self.out_scaler(self.conv1_transpose(transformed_x)))-1
+        y_hat = self.conv1_transpose(transformed_x)
+        y_hat = torch.fmod(y_hat, self.divisor) + self.bias
+        y_hat = (self.activation(y_hat)+1)/2
         return y_hat[:, :, self.kernel_size:time+self.kernel_size]
 
     def noisy(self):
