@@ -315,7 +315,7 @@ class QuantizeDisperser(nn.Module):
     def forward(self, x):
         digit_x = quantize(x, self.min, self.delta, num_bins=2**self.num_bits).view(-1)
         qad = torch.index_select(self.unpacked, 0, digit_x)[:, -self.num_bits:]
-        return qad.view(x.size(0), x.size(1), -1).permute(0, 2, 1).contiguous()
+        return qad.contiguous().view(x.size(0), x.size(1), -1).permute(0, 2, 1)
 
 class DequantizeAccumulator(nn.Module):
     def __init__(self, min, delta, num_bits=4, device=torch.device('cpu'),
