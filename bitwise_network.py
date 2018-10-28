@@ -35,7 +35,7 @@ class BitwiseNetwork(nn.Module):
         im_fft = np.real(fft)[:self.cutoff]
         fft = torch.tensor(np.concatenate([real_fft, im_fft], axis=0), dtype=torch.float32)
         basis_group = torch.cat([fft for _ in range(bit_groups)], dim=0)
-        basis = torch.stack([basis_group for i in range(in_channels // bit_groups)], dim=0)
+        basis = torch.stack([2*(num_bits - i - 1)*basis_group for i in range(in_channels // bit_groups)], dim=0)
         basis = basis.permute(1, 0, 2).contiguous()
         self.conv1.weight = nn.Parameter(basis, requires_grad=adapt)
         self.in_scaler = ConvScaler1d(self.transform_channels)
@@ -44,7 +44,7 @@ class BitwiseNetwork(nn.Module):
 
         # Initialize inverse of front end transform
         self.scale = kernel_size / stride
-        invbasis_group = torch.t(torch.pinverse(self.scale*basis_group))
+        invbasis_group = bit_groups * torch.t(torch.pinverse(self.scale*basis_group))
         invbasis = torch.stack([invbasis_group for i in range(in_channels // bit_groups)], dim=0)
         invbasis = invbasis.permute(1, 0, 2).contiguous()
         self.conv1_transpose = BitwiseConvTranspose1d( self.transform_channels,
