@@ -33,7 +33,7 @@ class BitwiseNetwork(nn.Module):
         fft = np.fft.fft(np.eye(kernel_size))
         real_fft = np.real(fft)[:self.cutoff]
         im_fft = np.real(fft)[:self.cutoff]
-        fft = np.concatenate([real_fft, im_fft], axis=0)
+        fft = torch.tensor(np.concatenate([real_fft, im_fft], axis=0), dtype=torch.float32)
         basis_group = torch.cat([fft for _ in range(bit_groups)], dim=0)
         basis = torch.stack([basis_group for i in range(in_channels // bit_groups)], dim=0)
         basis = basis.permute(1, 0, 2).contiguous()
@@ -46,7 +46,7 @@ class BitwiseNetwork(nn.Module):
         self.scale = kernel_size / stride
         invbasis_group = torch.t(torch.pinverse(self.scale*basis_group))
         invbasis = torch.stack([invbasis_group for i in range(in_channels // bit_groups)], dim=0)
-        basis = basis.permute(1, 0, 2).contiguous()
+        invbasis = invbasis.permute(1, 0, 2).contiguous()
         self.conv1_transpose = BitwiseConvTranspose1d( self.transform_channels,
             in_channels, kernel_size, stride=stride, biased=False,
             groups=bit_groups)
@@ -114,7 +114,7 @@ class BitwiseNetwork(nn.Module):
             mask = torch.cat([mask, mask], dim=1)
             transformed_x = transformed_x * mask
 
-        y_hat = self.activation(self.conv1_transpose(transformed_x))
+        y_hat = 2*self.activation(self.conv1_transpose(transformed_x))-1
         return y_hat[:, :, self.kernel_size:time+self.kernel_size]
 
     def noisy(self):
@@ -205,13 +205,13 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False
             mix = target
         if quantizer:
             mix = quantizer(mix)
-        estimate = model(mix.unsqueeze(1)).squeeze(1)
+        estimate = model(mix)
         if dequantizer:
             estimate = dequantizer(estimate)
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
         sources = torch.stack([target, inter], dim=1)
-        metrics = bss_eval_batch(estimates, sources)
+        metrics = bss_eval_batch(estimate, sources)
         bss_metrics.extend(metrics)
     return running_loss / len(dl), bss_metrics
 
