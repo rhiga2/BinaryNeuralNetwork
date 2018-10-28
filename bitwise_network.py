@@ -80,7 +80,7 @@ class BitwiseNetwork(nn.Module):
             dtype=torch.float)
         divisor = torch.cat([divisor for i in range(bit_groups)]).unsqueeze(1)
         self.divisor = nn.Parameter(divisor, requires_grad=True)
-        self.bias = nn.Parameter(torch.zeros(num_bits, 1), requires_grad=True)
+        self.bias = nn.Parameter(torch.zeros(in_channels, 1), requires_grad=True)
         self.mode = 'real'
 
     def forward(self, x):
@@ -120,7 +120,7 @@ class BitwiseNetwork(nn.Module):
             transformed_x = transformed_x * mask
 
         y_hat = self.conv1_transpose(transformed_x)
-        y_hat = torch.fmod(y_hat, self.divisor) + self.bias
+        y_hat = torch.remainder(y_hat, self.divisor) + self.bias
         y_hat = (self.activation(y_hat)+1)/2
         return y_hat[:, :, self.kernel_size:time+self.kernel_size]
 
