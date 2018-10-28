@@ -74,6 +74,7 @@ class BitwiseNetwork(nn.Module):
             self.output_transform = bitwise_activation
 
         self.sparsity = sparsity
+        self.out_scaler = ConvScaler1d(in_channels)
         self.mode = 'real'
 
     def forward(self, x):
@@ -87,9 +88,7 @@ class BitwiseNetwork(nn.Module):
         '''
         # (batch, channels, time)
         time = x.size(2)
-        transformed_x = self.conv1(x)
-        transformed_x = self.in_scaler(transformed_x)
-        transformed_x = self.activation(transformed_x)
+        transformed_x = self.activation(self.in_scaler(self.conv1(x)))
 
         if not self.autoencode:
             real_x = transformed_x[:, :self.cutoff, :]
@@ -114,7 +113,7 @@ class BitwiseNetwork(nn.Module):
             mask = torch.cat([mask, mask], dim=1)
             transformed_x = transformed_x * mask
 
-        y_hat = self.activation(self.conv1_transpose(transformed_x))
+        y_hat = self.activation(self.out_scaler(self.conv1_transpose(transformed_x)))
         return y_hat[:, :, self.kernel_size:time+self.kernel_size]
 
     def noisy(self):
