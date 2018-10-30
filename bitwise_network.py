@@ -75,12 +75,13 @@ class BitwiseNetwork(nn.Module):
             self.output_transform = bitwise_activation
 
         self.sparsity = sparsity
-        divisor = torch.tensor(
-            [2**(channels_per_group-i-1) for i in range(channels_per_group)],
+        freqs = torch.tensor(
+            [2**(-channels_per_group+i)*math.pi for i in range(channels_per_group)],
             dtype=torch.float)
-        divisor = torch.cat([divisor for i in range(bit_groups)]).unsqueeze(1)
-        self.divisor = nn.Parameter(divisor, requires_grad=True)
-        self.bias = nn.Parameter(torch.zeros(in_channels, 1), requires_grad=True)
+        freqs = torch.cat([freqs for _ in range(bit_groups)]).unsqueeze(1)
+        phases = torch.tensor(2**(channels_per_group)*freqs + math.pi, dtype=torch.float)
+        self.freqs = nn.Parameter(freqs, requires_grad=True)
+        self.bias = nn.Parameter(phases, requires_grad=True)
         self.mode = 'real'
 
     def forward(self, x):
@@ -120,8 +121,8 @@ class BitwiseNetwork(nn.Module):
             transformed_x = transformed_x * mask
 
         y_hat = self.conv1_transpose(transformed_x)
-        y_hat = torch.remainder(y_hat, self.divisor) + self.bias
-        y_hat = (self.activation(y_hat)+1)/2
+        y_hat = torch.sin(self.freqs * y_hat + self.bias)
+        y_hat = self.activation(y_hat)
         return y_hat[:, :, self.kernel_size:time+self.kernel_size]
 
     def noisy(self):
@@ -192,8 +193,9 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix)
+            mix = 2*quantizer(mix)-1
         estimate = model(mix)
+        estimate = (estimate+1)/2
         if dequantizer:
             estimate = dequantizer(estimate)
         reconst_loss = loss(estimate, target)
@@ -211,8 +213,9 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix)
+            mix = 2*quantizer(mix)-1
         estimate = model(mix)
+        estimate = (estimate+1)/2
         if dequantizer:
             estimate = dequantizer(estimate)
         reconst_loss = loss(estimate, target)
