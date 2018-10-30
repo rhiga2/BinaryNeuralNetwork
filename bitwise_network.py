@@ -76,13 +76,9 @@ class BitwiseNetwork(nn.Module):
             self.output_transform = bitwise_activation
 
         self.sparsity = sparsity
-        freqs = torch.tensor(
-            [2**(-channels_per_group+i)*math.pi for i in range(channels_per_group)],
-            dtype=torch.float)
-        freqs = torch.cat([freqs for _ in range(bit_groups)]).unsqueeze(1)
-        phases = torch.tensor(2**(channels_per_group)*freqs + math.pi, dtype=torch.float)
-        self.freqs = nn.Parameter(freqs, requires_grad=adapt)
-        self.phases = nn.Parameter(phases, requires_grad=adapt)
+        self.disperser = BitwiseDisperser(channels_per_group, bit_groups,
+            requires_grad=False)
+        self.out_scaler = ConvScaler1d(in_channels)
         self.mode = 'real'
 
     def forward(self, x):
@@ -94,11 +90,11 @@ class BitwiseNetwork(nn.Module):
             * time is the sequence length
             * channels is the number of input channels = num bits in qad
         '''
-        # (batch, channels, time)
         time = x.size(2)
         transformed_x = self.activation(self.conv1(x))
 
         if not self.autoencode:
+            # (batch, channels_per_group * transform_size, time)
             real_x = transformed_x[:, :self.cutoff, :]
             imag_x = transformed_x[:, self.cutoff:, :]
             spec_x = torch.stack([real_x, imag_x], dim=1)
@@ -122,8 +118,7 @@ class BitwiseNetwork(nn.Module):
             transformed_x = transformed_x * mask
 
         y_hat = self.conv1_transpose(transformed_x)[:, :, self.kernel_size:time+self.kernel_size]
-        y_hat = torch.sin(self.freqs * y_hat + self.phases)
-        y_hat = self.activation(y_hat)
+        y_hat = self.activation(self.out_scaler(self.disperser(y_hat)))
         return y_hat
 
     def noisy(self):
