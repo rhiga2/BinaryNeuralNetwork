@@ -12,7 +12,7 @@ from bss_eval import *
 import visdom
 import argparse
 import pdb
-
+    
 class BitwiseNetwork(nn.Module):
     '''
     Adaptive transform network inspired by Minje Kim
