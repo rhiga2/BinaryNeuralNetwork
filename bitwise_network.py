@@ -96,7 +96,7 @@ class BitwiseNetwork(nn.Module):
         '''
         # (batch, channels, time)
         time = x.size(2)
-        transformed_x = self.activation(self.in_scaler(self.conv1(x)))
+        transformed_x = self.activation(self.conv1(x))
 
         if not self.autoencode:
             real_x = transformed_x[:, :self.cutoff, :]
@@ -234,7 +234,7 @@ def main():
     parser.add_argument('--stride', '-s', type=int, default=128)
     parser.add_argument('--batchsize', '-b', type=int, default=16,
                         help='Training batch size')
-    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--no_adapt', '-no_adapt', action='store_true')
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
