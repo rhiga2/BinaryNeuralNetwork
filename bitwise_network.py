@@ -81,8 +81,8 @@ class BitwiseNetwork(nn.Module):
             dtype=torch.float)
         freqs = torch.cat([freqs for _ in range(bit_groups)]).unsqueeze(1)
         phases = torch.tensor(2**(channels_per_group)*freqs + math.pi, dtype=torch.float)
-        self.freqs = nn.Parameter(freqs, requires_grad=True)
-        self.phases = nn.Parameter(phases, requires_grad=True)
+        self.freqs = nn.Parameter(freqs, requires_grad=adapt)
+        self.phases = nn.Parameter(phases, requires_grad=adapt)
         self.mode = 'real'
 
     def forward(self, x):
