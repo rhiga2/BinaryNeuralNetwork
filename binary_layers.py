@@ -367,24 +367,3 @@ class ConvScaler1d(nn.Module):
         x = x.permute(0, 2, 1).contiguous().view(-1, C)
         x = scale_only_bn(self.gamma, x)
         return x.view(-1, T, C).permute(0, 2, 1).contiguous()
-
-class BitwiseDisperser(BitwiseAbstractClass):
-    def __init__(self, channels_per_group, bit_groups, requires_grad=True):
-        super(BitwiseDisperser, self).__init__()
-        self.scale = 2**(bit_groups+1) + 1
-        weight = torch.tensor(
-            [2**(-channels_per_group+i+1)/self.scale for i in range(channels_per_group)],
-            dtype=torch.float)
-        weight = torch.cat([weight for _ in range(bit_groups)]).unsqueeze(1)
-        bias = torch.tensor(2**(channels_per_group)*weight - 2/self.scale, dtype=torch.float)
-        self.weight = nn.Parameter(weight, requires_grad=requires_grad)
-        self.bias = nn.Parameter(bias, requires_grad=requires_grad)
-        self.biased = True
-        self.mode = 'real'
-
-    def forward(self, x):
-        w = self.weight
-        b = self.bias
-        # w = convert_param(self.weight, 0, self.mode)
-        # b = convert_param(self.bias, 0, self.mode)
-        return torch.sin(self.scale*math.pi/2 * (x * w + b))
