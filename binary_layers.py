@@ -95,10 +95,6 @@ class BitwiseAbstractClass(nn.Module):
     def forward(self):
         pass
 
-    @abstractmethod
-    def __repr__(self):
-        pass
-
     def update_beta(self, sparsity):
         if sparsity == 0:
             return

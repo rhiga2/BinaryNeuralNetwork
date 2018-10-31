@@ -152,7 +152,7 @@ class BitwiseNetwork(nn.Module):
 
         self.conv1.update_beta(sparsity=self.sparsity)
         self.conv1_transpose.update_beta(sparsity=self.sparsity)
-        if self.autoencode:
+        if not self.autoencode:
             for layer in self.linear_list:
                 layer.update_beta(sparsity=self.sparsity)
 
@@ -194,7 +194,9 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
         estimate = (estimate+1)/2
         if dequantizer:
             estimate = dequantizer(estimate)
-        reconst_loss = loss(estimate, target)
+        reconst_loss = loss(estimate, target) + \
+            1e-5*torch.mean(1 - model.activation(model.conv1.weight)**2) + \
+            1e-5*torch.mean(1 - model.activation(model.conv1_transpose.weight)**2)
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
         optimizer.step()
@@ -214,7 +216,9 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False
         estimate = (estimate+1)/2
         if dequantizer:
             estimate = dequantizer(estimate)
-        reconst_loss = loss(estimate, target)
+        reconst_loss = loss(estimate, target) + \
+            1e-5*torch.mean(1 - model.activation(model.conv1.weight)**2) + \
+            1e-5*torch.mean(1 - model.activation(model.conv1_transpose.weight)**2)
         running_loss += reconst_loss.item() * mix.size(0)
         sources = torch.stack([target, inter], dim=1)
         metrics = bss_eval_batch(estimate, sources)
@@ -234,7 +238,8 @@ def main():
     parser.add_argument('--no_adapt', '-no_adapt', action='store_true')
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
-    parser.add_argument('--train_noisy', '-tn',  default=None)
+    parser.add_argument('--train_noisy', '-tn',  action='store_true')
+    parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--output_period', '-op', type=int, default=1)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
@@ -261,7 +266,8 @@ def main():
         autoencode=args.autoencode, bit_groups=args.bit_groups)
     if args.train_noisy:
         print('Noisy Network Training')
-        model.load_state_dict(torch.load('models/' + args.train_noisy))
+        if args.load_file:
+            model.load_state_dict(torch.load('models/' + args.load_file))
         model.noisy()
     else:
         print('Real Network Training')
