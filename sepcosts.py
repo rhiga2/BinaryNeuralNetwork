@@ -150,7 +150,7 @@ class ShortTimeObjectiveIntelligibility(nn.Module):
 
     def _correlation(self, x, y):
         '''
-        Input shape is (batch_size, bands, time dimension)
+        Input shape is (batch, bands, time dimension)
         '''
         xn = x - torch.mean(x, dim=2, keepdim=True)
         xn /= torch.sqrt(torch.sum(xn**2, dim=2, keepdim=True))
@@ -159,36 +159,34 @@ class ShortTimeObjectiveIntelligibility(nn.Module):
         r = torch.mean(torch.sum(xn * yn, dim=2))
         return r
 
-class CombinedSIRSAR(nn.Module):
-    def __init__(self, weight=1):
-        super(CombinedSIRSAR, self).__init__()
-        self.weight = weight
-        self.sir = SignalInterferenceRatio()
-        self.sar = SignalArtifactRatio()
+class DiscreteWasserstein(nn.Module):
+    def __init__(self, mode='one_hot'):
+        '''
+        Input mode is one of the following options
+            * 'one_hot': targets are one hot vectors
+            * 'interger': targets are integers
+        '''
+        super(DiscreteWasserstein, self).__init__()
+        self.mode = mode
 
-    def forward(self, prediction, target, interference):
-        # inter_norm = torch.mean(interference**2, dim = 1, keepdim=True)
-        # target_norm = torch.mean(target**2, dim = 1, keepdim=True)
-        # ref_correlation = torch.mean(prediction * target, dim = 1, keepdim=True)
-        # inter_correlation = torch.mean(prediction * interference, dim = 1, keepdim=True)
-        # project = inter_norm * ref_correlation * target + target_norm * inter_correlation * interference
-        # sirsar = -torch.mean(project**2) / (torch.mean(prediction**2) +2e-7) * torch.mean(prediction * target)**2
-        # return sirsar
-        sir = self.sir(prediction, target, interference)
-        sar = self.sar(prediction, target, interference)
-        return (1 - self.weight) * sir + self.weight * sar
+    def forward(self, x, y):
+        '''
+        Inputs:
+        x is shape (batch, number of classes, time)
+        y is shape (batch, number of classes, time) if one hot
+            or (batch, time) otherwise
+        '''
+        # make input shape (batch x time, number of classes)
+        batch, classes, time = x.size()
+        x = x.permute(0, 2, 1).view(-1, classes)
+        if self.mode == 'one_hot':
+            y = torch.argmax(y, dim=1)
+        y = y.view(-1, 1)
+        distances = torch.abs(y - torch.arange(classes))
+        costs = torch.sum(x * distances, dim=1)
+        return time * torch.mean(costs)
 
-class CombinedSDRSTOI(nn.Module):
-    def __init__(self, weight=1):
-        super(CombinedSDRSTOI, self).__init__()
-        self.weight = weight
-        self.sdr = SignalDistortionRatio()
-        self.stoi = ShortTimeObjectiveIntelligibility()
 
-    def forward(self, prediction, target, interference):
-        sdr = self.sdr(prediction, target, interference)
-        stoi = self.stoi(prediction, target, interference)
-        return (1 - self.weight) * sdr + self.weight * stoi
 
 def main():
     clean, _ = librosa.core.load('results/clean_example.wav', sr=16000)
