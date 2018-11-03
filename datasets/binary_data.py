@@ -82,7 +82,19 @@ class Accumulator(nn.Module):
 def quantize(x, min, delta, num_bits=4):
     x = (x - min) / delta
     bucket_x = torch.ceil(x)
-    return torch.clamp(bucket_x, 0, 2**num_bits-1).to(dtype=torch.float)
+    return torch.clamp(bucket_x, 0, 2**num_bits-1).to(dtype=torch.long)
+
+class Quantize(nn.Module):
+    def __init__(self, min, delta, num_bits=4, dtype=torch.float32):
+        super(Quantize, self).__init__()
+        self.min = min
+        self.delta = delta
+        self.num_bits = num_bits
+        self.dtype = dtype
+
+    def forward(self, x):
+        return quantize(x, self.min, self.delta,
+            num_bits=self.num_bits).to(self.dtype)
 
 class QuantizeDisperser(nn.Module):
     def __init__(self, min, delta, num_bits=4, dtype=torch.float32):
@@ -91,9 +103,11 @@ class QuantizeDisperser(nn.Module):
         self.delta = delta
         self.num_bits = num_bits
         self.disperser = Disperser(num_bits, 1)
+        self.dtype = dtype
 
     def forward(self, x):
-        digit_x = quantize(x, self.min, self.delta, num_bits=self.num_bits)
+        digit_x = quantize(x, self.min, self.delta,
+            num_bits=self.num_bits).to(self.dtype)
         digit_x = 2*digit_x - 2**(self.num_bits) + 1
         return torch.sign(self.disperser(digit_x))
 
@@ -109,6 +123,30 @@ class DequantizeAccumulator(nn.Module):
     def forward(self, x):
         x = (x + 1)/2
         return self.delta*(self.accumulator(x) - 0.5) + self.min
+
+def one_hot(x, num_bits=4):
+    '''
+    x has shape (batch, length)
+    return has shape (batch, 2**num_bits, length)
+    '''
+    y = torch.zeros(x.size(0), 2**num_bits, x.size(1))
+    y.scatter_(1, x.unsqueeze(1), 1)
+    return y
+
+class QuantizeOneHot(nn.Module):
+    def __init__(self, min, delta, num_bits=4, dtype=torch.float32):
+        super(QuantizeOneHot, self).__init__()
+        self.min = min
+        self.delta = delta
+        self.num_bits = num_bits
+
+    def forward(self, x):
+        '''
+        x has shape (batch, length)
+        return has shape (batch, 2**num_bits, length)
+        '''
+        digit_x = quantize(x, self.min, self.delta, num_bits=self.num_bits)
+        return one_hot(digit_x, self.num_bits)
 
 def make_binary_mask(premask, dtype=np.float):
     return np.array(premask > 0, dtype=dtype)

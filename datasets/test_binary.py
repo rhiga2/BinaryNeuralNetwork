@@ -4,16 +4,14 @@ from binary_data import *
 
 class TestQuantize(unittest.TestCase):
     def setUp(self):
-        self.quantizer = QuantizeDisperser(0, 1, num_bits=4, dtype=torch.uint8)
-        self.dequantizer = DequantizeAccumulator(0, 1, num_bits=4)
-        self.disperser = Disperser(4, 1)
+        self.quantizer_d = QuantizeDisperser(0, 1, num_bits=4)
+        self.quantizer_oh = QuantizeOneHot(0, 1, num_bits=4)
+        self.dequantizer_d = DequantizeAccumulator(0, 1, num_bits=4)
+        self.disperser = Disperser(16, 1)
+        self.accumulator = Accumulator(16)
 
-    def test_qad_shape(self):
-        torch.manual_seed(0)
-        x = torch.rand((10, 5, 10))
-        ans = torch.Size([10, 4, 5, 10])
-        estimate = self.quantizer(x)
-        self.assertEqual(ans, estimate.size())
+    def test_disperser(self):
+        x = torch.tensor([[[-1, -3, 0]]], dtype=torch.float32)
 
     def test_quantize_and_disperse(self):
         x = torch.tensor(np.array([1.1, 2.1, 5.5, 15.2, -43]), dtype=torch.float32)
@@ -23,11 +21,39 @@ class TestQuantize(unittest.TestCase):
                 [-1, 1, -1, 1, -1],
                 [1, 1, 1, 1, -1],
                 [-1, -1, 1, 1, -1],
-                [-1, -1, -1, 1, -1]]),
+                [-1, -1, -1, 1, -1]
+            ]),
             dtype=torch.float
         )
-        estimate = self.quantizer(x).squeeze(0).squeeze(2)
+        estimate = self.quantizer_d(x).squeeze(0).squeeze(2)
         self.assertTrue(torch.equal(estimate, ans))
+
+    def test_quantize_one_hot(self):
+        x = torch.tensor(np.array([1.1, 2.1, 5.5, 15.2, -43]), dtype=torch.float32)
+        x = x.unsqueeze(0)
+        ans = torch.tensor(
+            np.array([
+                [0, 0, 0, 0, 1],
+                [0, 0, 0, 0, 0],
+                [1, 0, 0, 0, 0],
+                [0, 1, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 1, 0]
+            ])
+        )
+        print(ans.size())
+        estimate = self.quantizer_oh(x)
+        print(ans.size(), estimate.size())
 
     def test_dequantize_and_accumulate(self):
         x = torch.tensor(
@@ -39,7 +65,7 @@ class TestQuantize(unittest.TestCase):
             dtype=torch.float32
         ).unsqueeze(0).unsqueeze(3)
         ans = torch.tensor(np.array([1.5, 2.5, 5.5, 14.5, -0.5]), dtype=torch.float32)
-        estimate = self.dequantizer(x).squeeze(0).squeeze(1)
+        estimate = self.dequantizer_d(x).squeeze(0).squeeze(1)
         self.assertTrue(torch.equal(estimate, ans))
 
     def test_bucketize(self):
