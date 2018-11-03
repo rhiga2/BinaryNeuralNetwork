@@ -197,7 +197,7 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
         optimizer.step()
-    return running_loss / len(dl)
+    return running_loss / len(dl.dataset)
 
 def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False,
     quantizer=None):
@@ -218,7 +218,7 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False
         sources = torch.stack([target, inter], dim=1)
         metrics = bss_eval_batch(estimate, sources)
         bss_metrics.extend(metrics)
-    return running_loss / len(dl), bss_metrics
+    return running_loss / len(dl.dataset), bss_metrics
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
