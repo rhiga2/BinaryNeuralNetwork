@@ -18,19 +18,17 @@ class BitwiseNetwork(nn.Module):
     '''
     Adaptive transform network inspired by Minje Kim
     '''
-    def __init__(self, kernel_size=1024, stride=256, bit_channels=1,
-        combine_hidden=8, fc_sizes = [], dropout=0, sparsity=95,
-        adapt=True, autoencode=False, bit_groups=1):
+    def __init__(self, kernel_size=1024, stride=256, in_channels=1,
+        out_channels=256, combine_hidden=8, fc_sizes = [], dropout=0,
+        sparsity=95, adapt=True, autoencode=False, groups=1):
         super(BitwiseNetwork, self).__init__()
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.cutoff = kernel_size // 2 + 1
-        self.bit_channels = bit_channels
-
         self.transform_channels = 2*self.cutoff
-        self.conv1 = BitwiseConv1d(1, self.transform_channels,
+        self.conv1 = BitwiseConv1d(in_channels, self.transform_channels,
             kernel_size, stride=stride, biased=False,
-            padding=kernel_size, groups=bit_groups)
+            padding=kernel_size, groups=groups)
         '''
         fft = np.fft.fft(np.eye(kernel_size))
         real_fft = np.real(fft)[:self.cutoff]
@@ -69,8 +67,8 @@ class BitwiseNetwork(nn.Module):
 
         # Initialize inverse of front end transform
         self.conv1_transpose = BitwiseConvTranspose1d(self.transform_channels,
-            2**bit_channels, kernel_size, stride=stride, biased=False,
-            groups=bit_groups)
+            out_channels, kernel_size, stride=stride, biased=False,
+            groups=groups)
         '''
         invbasis_group = bit_groups * torch.t(torch.pinverse(self.scale*basis_group))
         invbasis = torch.stack([invbasis_group for _ in range(channels_per_group)], dim=0)
@@ -118,9 +116,9 @@ class BitwiseNetwork(nn.Module):
             mask = torch.cat([mask, mask], dim=1)
             transformed_x = transformed_x * mask
 
-        y_hat = self.conv1_transpose(x)[:, :, self.kernel_size:time+self.kernel_size]
-        y_hat = self.output_activation(y_hat)
-        return y_hat
+        x = self.conv1_transpose(x)[:, :, self.kernel_size:time+self.kernel_size]
+        x = self.output_activation(x)
+        return x
 
     def noisy(self):
         '''
@@ -157,11 +155,11 @@ class BitwiseNetwork(nn.Module):
             for layer in self.linear_list:
                 layer.update_beta(sparsity=self.sparsity)
 
-def make_data(batchsize, hop=256, toy=False, num_bits=8):
+def make_data(batchsize, hop=256, toy=False):
     '''
     Make two mixture dataset
     '''
-    trainset, valset = make_mixture_set(hop=hop, toy=toy, num_bits=num_bits)
+    trainset, valset = make_mixture_set(hop=hop, toy=toy)
     collate = lambda x: collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)
@@ -175,23 +173,20 @@ def biortho_loss(w, winv):
     '''
     return torch.mse_loss(torch.mm(winv, w), torch.eye(w.size(1)))
 
-def get_data_from_batch(batch, device=torch.device('cpu')):
-    mix = batch['mixture'].to(device)
-    target = batch['target'].to(device)
-    inter = batch['interference'].to(device)
-    return mix, target, inter
-
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False,
-    quantizer=None):
+    quantizer=None, transform=None):
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
-        mix, target, _ = get_data_from_batch(batch, device)
+        mix, target = batch['mixture'], batch['interference']
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix).unsqueeze(1)
-            target = quantizer(target)
+            mix = quantizer(mix)
+            target = quantizer(target).to(device=device)
+        if transform:
+            mix = transform(mix)
+        mix = mix.to(device=device)
         estimate = model(mix)
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
@@ -200,22 +195,25 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
     return running_loss / len(dl)
 
 def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False,
-    quantizer=None):
+    quantizer=None, transform=None):
     running_loss = 0
     bss_metrics = BSSMetricsList()
     for batch in dl:
-        mix, target, inter = get_data_from_batch(batch, device)
+        mix, target = batch['mixture'], batch['target']
         if autoencode:
             mix = target
         if quantizer:
             mix = quantizer(mix).unsqueeze(1)
-            target = quantizer(target)
-            inter = quantizer(inter)
+            target = quantizer(target).to(device=device)
+        if transform:
+            mix = transform(mix)
+        mix.to(device=device)
         estimate = model(mix)
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
-        estimate = torch.argmax(estimate, dim=1).to(dtype=estimate.dtype)
-        sources = torch.stack([target, inter], dim=1)
+        estimate = torch.argmax(estimate, dim=1)
+        estimate = estimate.to(dtype=estimate.dtype, device=torch.device('cpu'))
+        sources = torch.stack([batch['target'], batch['interference']], dim=1)
         metrics = bss_eval_batch(estimate, sources)
         bss_metrics.extend(metrics)
     return running_loss / len(dl), bss_metrics
@@ -252,12 +250,22 @@ def main():
         device = torch.device('cpu')
     print('On device: ', device)
 
+    # Initialize quantizer and dequantizer
+    transform = 'disperse'
+    delta = 4/(2**args.num_bits)
+    quantizer = Quantizer(-2, delta, args.num_bits)
+    if transform == 'disperse':
+        transform = Disperser(args.num_bits, center=True)
+        in_channels = args.num_bits
+    elif transform == 'one_hot':
+        transform = Disperser(args.num_bits, center=True)
+        in_channels = 2**args.num_bits
+
     # Make model and dataset
-    train_dl, val_dl = make_data(args.batchsize, hop=args.stride, toy=args.toy,
-        num_bits=args.num_bits)
+    train_dl, val_dl = make_data(args.batchsize, hop=args.stride, toy=args.toy)
     model = BitwiseNetwork(args.kernel, args.stride, fc_sizes=[2048, 2048],
-        bit_channels=args.num_bits, dropout=args.dropout,
-        sparsity=args.sparsity, adapt=not args.no_adapt,
+        in_channels=args.num_bits, out_channels=2**args.num_bits,
+        dropout=args.dropout, sparsity=args.sparsity, adapt=not args.no_adapt,
         autoencode=args.autoencode, bit_groups=args.bit_groups)
     if args.train_noisy:
         print('Noisy Network Training')
@@ -266,17 +274,12 @@ def main():
         model.noisy()
     else:
         print('Real Network Training')
-    model.to(device)
+    model.to(device=device)
     print(model)
 
     # Initialize loss function
     loss = DiscreteWasserstein(2**args.num_bits, mode='interger', device=device)
     loss_metrics = LossMetrics()
-
-    # Initialize quantizer and dequantizer
-    delta = 4/(2**args.num_bits)
-    quantizer = Quantize(-2, delta, args.num_bits, dtype=torch.float32)
-    dequantizer = None
 
     # Initialize optimizer
     vis = visdom.Visdom(port=5800)
@@ -288,13 +291,14 @@ def main():
         model.update_betas()
         model.train()
         train_loss = train(model, train_dl, optimizer, loss=loss, device=device,
-            autoencode=args.autoencode, quantizer=quantizer)
+            autoencode=args.autoencode, quantizer=quantizer, transform=transform)
 
         if epoch % args.output_period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
             val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device,
-                autoencode=args.autoencode, quantizer=quantizer)
+                autoencode=args.autoencode, quantizer=quantizer,
+                transform=transform)
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 output_period=args.output_period)

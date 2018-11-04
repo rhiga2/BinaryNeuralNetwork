@@ -160,15 +160,15 @@ class ShortTimeObjectiveIntelligibility(nn.Module):
         return r
 
 class DiscreteWasserstein(nn.Module):
-    def __init__(self, num_classes, mode='one_hot', device=torch.device('cpu'), dtype=torch.float):
+    def __init__(self, num_classes, mode='one_hot', device=torch.device('cpu')):
         '''
         Input mode is one of the following options
             * 'one_hot': targets are one hot vectors
-            * 'interger': targets are integers
+            * 'integer': targets are integers
         '''
         super(DiscreteWasserstein, self).__init__()
         self.mode = mode
-        self.indices = torch.arange(num_classes, dtype=dtype, device=device)
+        self.indices = torch.arange(num_classes, dtype=torch.float, device=device)
 
     def forward(self, x, y):
         '''
@@ -186,17 +186,3 @@ class DiscreteWasserstein(nn.Module):
         distances = torch.abs(y - self.indices)
         costs = torch.sum(x * distances, dim=1)
         return torch.mean(costs)
-
-
-
-def main():
-    clean, _ = librosa.core.load('results/clean_example.wav', sr=16000)
-    plt.plot(clean)
-    stoi = SignalArtifactRatio()
-    clean = Variable(torch.FloatTensor(clean))
-    noisy = Variable(torch.FloatTensor(noisy))
-    noise = noisy - clean
-    print('SAR: ', stoi(noisy.unsqueeze(0), clean.unsqueeze(0), noise.unsqueeze(0)))
-
-if __name__ == '__main__':
-    main()

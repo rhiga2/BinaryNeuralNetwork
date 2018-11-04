@@ -35,40 +35,36 @@ def bucketize(x, bins):
     '''
     Quantize x according to bucket bins
     '''
-    bucket_x = torch.zeros(x.size(), dtype=torch.long)
+    bucket_x = torch.zeros(x.size())
     for bin in bins:
         bucket_x[x >= bin] += 1
-    return bucket_x
+    return bucket_x.to(dtype=torch.long)
 
 class Disperser(nn.Module):
-    def __init__(self, num_bits, in_features, requires_grad=False, dtype=torch.float):
+    def __init__(self, num_bits, center=False):
         super(Disperser, self).__init__()
         self.num_bits = num_bits
-        weight = torch.tensor(
-            [2**(-i) for i in range(num_bits)],
-            dtype=dtype
-        )
-        weight = weight.unsqueeze(1).unsqueeze(1)
-        bias = torch.tensor(2**(num_bits)*weight*in_features + 2, dtype=dtype)
-        self.weight = nn.Parameter(weight, requires_grad=requires_grad)
-        self.bias = nn.Parameter(bias, requires_grad=requires_grad)
+        self.weight = torch.FloatTensor([2**(-i) for i in range(num_bits)])
+        self.weight = self.weight.unsqueeze(1)
+        self.bias = torch.FloatTensor(1 + self.weight/2)
+        self.center = center
 
     def forward(self, x):
         '''
-        x has shape (batch, channels, frames)
-        return has shape (batch, number of bits, channels, frames)
+        x has shape (batch, features)
+        return has shape (batch, number of bits, features)
         '''
         x = x.unsqueeze(1)
-        return torch.sin(math.pi/2 * (x * self.weight + self.bias))
+        x = torch.sign(torch.sin(math.pi * (x * self.weight + self.bias)))
+        if not self.center:
+            x = (x+1)/2
+        return x
 
 class Accumulator(nn.Module):
     def __init__(self, num_bits, requires_grad=False):
         super(Accumulator, self).__init__()
         self.num_bits = num_bits
-        weight = torch.tensor(
-            [2**i for i in range(num_bits)],
-            dtype=torch.float
-        )
+        weight = torch.FloatTensor([2**i for i in range(num_bits)])
         weight = weight.unsqueeze(1).unsqueeze(1)
         self.weight = nn.Parameter(weight, requires_grad=requires_grad)
 
@@ -79,92 +75,32 @@ class Accumulator(nn.Module):
         '''
         return torch.sum(x * self.weight, dim=1)
 
-def quantize(x, min, delta, num_bits=4):
-    x = (x - min) / delta
-    bucket_x = torch.ceil(x)
-    return torch.clamp(bucket_x, 0, 2**num_bits-1).to(dtype=torch.long)
-
-class Quantize(nn.Module):
-    def __init__(self, min, delta, num_bits=4, dtype=torch.float32):
-        super(Quantize, self).__init__()
-        self.min = min
-        self.delta = delta
+class OneHotTransform(nn.Module):
+    def __init__(self, num_bits):
+        super(OneHotTransform, self).__init__()
         self.num_bits = num_bits
-        self.dtype = dtype
 
     def forward(self, x):
-        return quantize(x, self.min, self.delta,
-            num_bits=self.num_bits).to(self.dtype)
+        x = x.to(dtype=torch.long)
+        y = torch.zeros(x.size(0), 2**self.num_bits, x.size(1))
+        y.scatter_(1, x.unsqueeze(1), 1)
+        return y
 
-class QuantizeDisperser(nn.Module):
-    def __init__(self, min, delta, num_bits=4, dtype=torch.float32):
-        super(QuantizeDisperser, self).__init__()
-        self.min = min
-        self.delta = delta
-        self.num_bits = num_bits
-        self.disperser = Disperser(num_bits, 1)
-        self.dtype = dtype
-
-    def forward(self, x):
-        digit_x = quantize(x, self.min, self.delta,
-            num_bits=self.num_bits).to(self.dtype)
-        digit_x = 2*digit_x - 2**(self.num_bits) + 1
-        return torch.sign(self.disperser(digit_x))
-
-class DequantizeAccumulator(nn.Module):
-    def __init__(self, min, delta, num_bits=4,
-        dtype=torch.float32):
-        super(DequantizeAccumulator, self).__init__()
-        self.min = min
-        self.delta = delta
-        self.num_bits = num_bits
-        self.accumulator = Accumulator(num_bits, requires_grad=False)
-
-    def forward(self, x):
-        x = (x + 1)/2
-        return self.delta*(self.accumulator(x) - 0.5) + self.min
-
-def one_hot(x, num_bits=4):
-    '''
-    x has shape (batch, length)
-    return has shape (batch, 2**num_bits, length)
-    '''
-    y = torch.zeros(x.size(0), 2**num_bits, x.size(1))
-    y.scatter_(1, x.unsqueeze(1), 1)
-    return y
-
-class QuantizeOneHot(nn.Module):
-    def __init__(self, min, delta, num_bits=4, dtype=torch.float32):
-        super(QuantizeOneHot, self).__init__()
+class Quantizer(nn.Module):
+    def __init__(self, min, delta, num_bits=4):
+        super(Quantizer, self).__init__()
         self.min = min
         self.delta = delta
         self.num_bits = num_bits
 
     def forward(self, x):
         '''
-        x has shape (batch, length)
-        return has shape (batch, 2**num_bits, length)
+        x has shape (batch, features)
+        return has shape (batch, 2**num_bits, features)
         '''
-        digit_x = quantize(x, self.min, self.delta, num_bits=self.num_bits)
-        return one_hot(digit_x, self.num_bits)
-
-def make_binary_mask(premask, dtype=np.float):
-    return np.array(premask > 0, dtype=dtype)
-
-def stft(x, window='hann', nperseg=1024, noverlap=768):
-    stft_x = signal.stft(x,
-        window=window,
-        nperseg=nperseg,
-        noverlap=noverlap)[2]
-    real, imag = np.real(stft_x), np.imag(stft_x)
-    mag = np.sqrt(real**2 + imag**2 + 1e-6)
-    phase = stft_x / (mag + 1e-6)
-    return mag, phase
-
-def istft(mag, phase, window='hann', nperseg=1024, noverlap=768):
-    stft_x = mag * phase
-    x = signal.istft(stft_x, window=window, nperseg=nperseg, noverlap=noverlap)[1]
-    return x
+        x = (x - self.min) / self.delta
+        x = torch.ceil(x)
+        return torch.clamp(x, 0, 2**self.num_bits-1)
 
 class BinaryDataset():
     def __init__(self, data_dir):
@@ -181,6 +117,3 @@ class BinaryDataset():
 
     def __len__(self):
         return self.length
-
-def crop_length(x, hop):
-    return x[:len(x)//hop*hop]

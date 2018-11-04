@@ -6,7 +6,7 @@ from datasets.two_source_mixture import *
 from datasets.sinusoidal_data import *
 from torch.utils.data import Dataset, DataLoader
 
-def make_mixture_set(hop=256, toy=False, num_bits=8):
+def make_mixture_set(hop=256, toy=False):
     speaker_path = '/media/data/timit-wav/train'
     targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
         'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0',
