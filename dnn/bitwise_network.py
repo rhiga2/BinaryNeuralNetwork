@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
 import math
 import numpy as np
 from datasets.binary_data import *
@@ -215,7 +216,9 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
             mix = quantizer(mix)
             target = quantizer(target).to(device=device)
         if transform:
-            mix = transform(mix)
+            mix = transform(mix) 
+        else:
+            mix = mix.unsqueeze(1)
         mix = mix.to(device=device)
         estimate = model(mix)
         reconst_loss = loss(estimate, target)
@@ -233,16 +236,18 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix).unsqueeze(1)
+            mix = quantizer(mix)
             target = quantizer(target).to(device=device)
         if transform:
             mix = transform(mix)
-        mix.to(device=device)
+        else:
+            mix = mix.unsqueeze(1)
+        mix = mix.to(device=device)
         estimate = model(mix)
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
         estimate = torch.argmax(estimate, dim=1)
-        estimate = estimate.to(dtype=estimate.dtype, device=torch.device('cpu'))
+        estimate = estimate.to(dtype=torch.float, device=torch.device('cpu'))
         sources = torch.stack([batch['target'], batch['interference']], dim=1)
         metrics = bss_eval_batch(estimate, sources)
         bss_metrics.extend(metrics)
@@ -252,7 +257,7 @@ def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
                         help='Number of epochs')
-    parser.add_argument('--kernel', '-k', type=int, default=1024)
+    parser.add_argument('--kernel', '-k', type=int, default=512)
     parser.add_argument('--stride', '-s', type=int, default=128)
     parser.add_argument('--batchsize', '-b', type=int, default=8,
                         help='Training batch size')
@@ -270,7 +275,7 @@ def main():
     parser.add_argument('--autoencode', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
     parser.add_argument('--num_bits', '-nb', type=int, default=8)
-    parser.add_argument('--bit_groups', '-bg', type=int, default=1)
+    parser.add_argument('--groups', '-g', type=int, default=1)
     args = parser.parse_args()
 
     # Initialize device
@@ -296,11 +301,11 @@ def main():
     model = BitwiseNetwork(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=args.num_bits, out_channels=2**args.num_bits,
         dropout=args.dropout, sparsity=args.sparsity, adapt=not args.no_adapt,
-        autoencode=args.autoencode, bit_groups=args.bit_groups)
+        autoencode=args.autoencode, groups=args.groups)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
-            model.load_state_dict(torch.load('models/' + args.load_file))
+            model.load_state_dict(torch.load('../models/' + args.load_file))
         model.noisy()
     else:
         print('Real Network Training')
@@ -337,7 +342,7 @@ def main():
             print('Val SDR: ', sdr)
             print('Val SIR: ', sir)
             print('Val SAR: ', sar)
-            torch.save(model.state_dict(), 'models/' + args.model_file)
+            torch.save(model.state_dict(), '../models/' + args.model_file)
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)
