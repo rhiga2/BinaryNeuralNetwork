@@ -34,36 +34,48 @@ class BSSMetricsList:
 
 def compute_s_target(pred, target):
     '''
-    pred (T)
-    target (T)
+    pred (length)
+    target (length)
     '''
     return torch.sum(target*pred)/\
         torch.sum(target**2)*target
 
 def compute_source_projection(pred, sources):
     '''
-    pred (T)
-    sources (T, S)
+    pred (length)
+    sources (length, sources)
     '''
     pinv_pred = torch.matmul(torch.pinverse(sources), pred)
     return torch.matmul(sources, pinv_pred)
 
 def compute_sdr(pred, s_target):
+    '''
+    pred (length)
+    s_target (length)
+    '''
     e_total = pred - s_target
     return 10*torch.log10(torch.sum(s_target**2)/torch.sum(e_total**2))
 
 def compute_sir(s_target, e_inter):
+    '''
+    pred (length)
+    e_inter (length)
+    '''
     return 10*torch.log10(torch.sum(s_target**2)/torch.sum(e_inter**2))
 
 def compute_sar(s_target, e_inter, e_art):
+    '''
+    pred (length)
+    e_art (length)
+    '''
     source_projection = s_target + e_inter
     return 10*torch.log10(torch.sum(source_projection**2)/torch.sum(e_art**2))
 
 def bss_eval(pred, sources, target_idx=0):
     '''
     BSS eval metric calculation.
-    pred (T) s.t. T is the number of time steps
-    sources (S, T) s.t. S is the number of sources in mixture
+    pred (length)
+    sources (sources, length)
     target_idx (int) index of target in sources
     '''
     sources = torch.t(sources)
@@ -80,8 +92,8 @@ def bss_eval(pred, sources, target_idx=0):
 
 def bss_eval_batch(preds, source_tensor, target_idx=0):
     '''
-    preds (N, T)
-    source_tensor (N, S, T)
+    preds (batch, length)
+    source_tensor (batch, sources, length)
     '''
     metrics = BSSMetricsList()
     for i in range(preds.size()[0]):

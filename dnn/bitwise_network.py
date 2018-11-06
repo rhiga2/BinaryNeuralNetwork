@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import math
 import numpy as np
-from datasets.binary_data import *
+from datasets.quantized_data import *
 from datasets.two_source_mixture import *
 from loss_and_metrics.sepcosts import *
 from loss_and_metrics.bss_eval import *
@@ -38,7 +38,7 @@ def make_mixture_set(hop=256, toy=False):
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop)
     else:
         interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
-                    'dr1/mwad0', 'dr1/mwar0']
+            'dr1/mwad0', 'dr1/mwar0']
         train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop)
@@ -197,13 +197,6 @@ def make_data(batchsize, hop=256, toy=False):
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
     return train_dl, val_dl
 
-def biortho_loss(w, winv):
-    '''
-    Forces the back end transform to be a biorthogonal projection of the front
-    end transform
-    '''
-    return torch.mse_loss(torch.mm(winv, w), torch.eye(w.size(1)))
-
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False,
     quantizer=None, transform=None):
     running_loss = 0
@@ -246,7 +239,7 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False
         estimate = model(mix)
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
-        estimate = torch.argmax(estimate, dim=1)
+        estimate = torch.argmax(inverse_mu_law(estimate), dim=1)
         estimate = estimate.to(dtype=torch.float, device=torch.device('cpu'))
         sources = torch.stack([batch['target'], batch['interference']], dim=1)
         metrics = bss_eval_batch(estimate, sources)
@@ -287,13 +280,13 @@ def main():
 
     # Initialize quantizer and dequantizer
     transform = 'disperse'
-    delta = 4/(2**args.num_bits)
-    quantizer = Quantizer(-2, delta, args.num_bits)
+    delta = 2/(2**args.num_bits)
+    quantizer = Quantizer(-1, delta, args.num_bits, mu_law=True)
     if transform == 'disperse':
         transform = Disperser(args.num_bits, center=True)
         in_channels = args.num_bits
     elif transform == 'one_hot':
-        transform = Disperser(args.num_bits, center=True)
+        transform = OneHotTransform(args.num_bits, center=True)
         in_channels = 2**args.num_bits
 
     # Make model and dataset
@@ -313,7 +306,8 @@ def main():
     print(model)
 
     # Initialize loss function
-    loss = DiscreteWasserstein(2**args.num_bits, mode='interger', device=device)
+    loss = DiscreteWasserstein(2**args.num_bits, mode='interger',
+        dist_matrix=None, device=device)
     loss_metrics = LossMetrics()
 
     # Initialize optimizer

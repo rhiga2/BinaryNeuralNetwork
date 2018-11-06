@@ -36,9 +36,10 @@ class TwoSourceMixtureDataset(Dataset):
             inter = np.mean(inter, axis=1)
 
         # normalize and mix signals
-        sig = sig / np.std(sig)
-        inter = inter / np.std(inter)
+        sig = sig / np.max(sig)
+        inter = inter / np.max(inter)
         mix = sig + (1 / self.snr) * inter
+        mix = mix / np.max(mix)
         sample = {'mixture': mix, 'target': sig, 'interference': inter}
 
         if self.transform:
