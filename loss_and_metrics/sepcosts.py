@@ -160,8 +160,8 @@ class ShortTimeObjectiveIntelligibility(nn.Module):
         return r
 
 class DiscreteWasserstein(nn.Module):
-    def __init__(self, num_classes, mode='one_hot',
-        dist_matrix=None, device=torch.device('cpu')):
+    def __init__(self, num_classes, mode='one_hot', default_dist=True,
+        dist_matrix=None):
         '''
         Input
         * num_classes: number of classes in dataset
@@ -173,10 +173,11 @@ class DiscreteWasserstein(nn.Module):
         super(DiscreteWasserstein, self).__init__()
         self.mode = mode
         self.dist_matrix = dist_matrix
-        if dist_matrix:
+        if default_dist:
             col = torch.arange(0, num_classes).unsqueeze(1)
             row = torch.arange(0, num_classes)
             self.dist_matrix = torch.abs(col - row)
+        self.dist_matrix = nn.Parameter(self.dist_matrix, requires_grad=False)
 
     def forward(self, x, y):
         '''

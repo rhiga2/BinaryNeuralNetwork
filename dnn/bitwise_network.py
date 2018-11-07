@@ -116,9 +116,9 @@ class BitwiseNetwork(nn.Module):
         Bitwise neural network forward
         * Input is a tensor of shape (batch, channels, time)
         * Output is a tensor of shape (batch, channels, time)
-            * batch is the batch size
-            * time is the sequence length
-            * channels is the number of input channels = num bits in qad
+            - batch is the batch size
+            - time is the sequence length
+            - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
         x = self.activation(self.conv1(x))
@@ -207,7 +207,7 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
             mix = target
         if quantizer:
             mix = quantizer(mix)
-            target = quantizer(target).to(device=device)
+            target = quantizer(target).to(device=device, dtype=torch.long)
         if transform:
             mix = transform(mix) 
         else:
@@ -272,6 +272,7 @@ def main():
     args = parser.parse_args()
 
     # Initialize device
+    dtype = torch.float16
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
     else:
@@ -302,12 +303,13 @@ def main():
         model.noisy()
     else:
         print('Real Network Training')
-    model.to(device=device)
+    model.to(device=device, dtype=dtype)
     print(model)
 
     # Initialize loss function
     loss = DiscreteWasserstein(2**args.num_bits, mode='interger',
         dist_matrix=None, device=device)
+    loss = loss.to(device=device, dtype=dtype)
     loss_metrics = LossMetrics()
 
     # Initialize optimizer
