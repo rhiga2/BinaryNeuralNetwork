@@ -95,7 +95,7 @@ class Quantizer(nn.Module):
         return has shape (batch, 2**num_bits, features)
         '''
         if self.use_mu:
-            x = mu_law(x, 2**self.num_bits)
+            x = mu_law(x, 2**self.num_bits-1)
         x = (x - self.min) / self.delta-1
         x = torch.ceil(x)
         return torch.clamp(x, 0, 2**self.num_bits-1)
@@ -103,7 +103,7 @@ class Quantizer(nn.Module):
     def inverse(self, x):
         x = self.delta * (x + 0.5) + self.min
         if self.use_mu:
-            x = inverse_mu_law(x, 2**self.num_bits)
+            x = inverse_mu_law(x, 2**self.num_bits=1)
         return x
 
 class BinaryDataset():
