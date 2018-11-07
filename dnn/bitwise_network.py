@@ -42,8 +42,18 @@ def make_mixture_set(hop=256, toy=False):
         train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop)
-
     return trainset, valset
+
+def make_data(batchsize, hop=256, toy=False):
+    '''
+    Make two mixture dataset
+    '''
+    trainset, valset = make_mixture_set(hop=hop, toy=toy)
+    collate = lambda x: collate_and_trim(x, axis=0)
+    train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
+        collate_fn=collate)
+    val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
+    return train_dl, val_dl
 
 class BitwiseNetwork(nn.Module):
     '''
@@ -186,17 +196,6 @@ class BitwiseNetwork(nn.Module):
             for layer in self.linear_list:
                 layer.update_beta(sparsity=self.sparsity)
 
-def make_data(batchsize, hop=256, toy=False):
-    '''
-    Make two mixture dataset
-    '''
-    trainset, valset = make_mixture_set(hop=hop, toy=toy)
-    collate = lambda x: collate_and_trim(x, axis=0)
-    train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
-        collate_fn=collate)
-    val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
-    return train_dl, val_dl
-
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False,
     quantizer=None, transform=None):
     running_loss = 0
@@ -206,10 +205,10 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix)
+            mix = quantizer(mix).to(dtype=dtype)
             target = quantizer(target).to(device=device, dtype=torch.long)
         if transform:
-            mix = transform(mix) 
+            mix = transform(mix)
         else:
             mix = mix.unsqueeze(1)
         mix = mix.to(device=device)
@@ -220,8 +219,9 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
         optimizer.step()
     return running_loss / len(dl.dataset)
 
-def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False,
-    quantizer=None, transform=None):
+def val(model, dl, loss=F.mse_loss, autoencode=False,
+    quantizer=None, transform=None, device=torch.device('cpu'),
+    dtype=torch.float):
     running_loss = 0
     bss_metrics = BSSMetricsList()
     for batch in dl:
@@ -229,8 +229,8 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix)
-            target = quantizer(target).to(device=device)
+            mix = quantizer(mix).to(dtype=dtype)
+            target = quantizer(target).to(device=device, dtype=torch.long)
         if transform:
             mix = transform(mix)
         else:
@@ -239,8 +239,10 @@ def val(model, dl, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False
         estimate = model(mix)
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
-        estimate = torch.argmax(inverse_mu_law(estimate), dim=1)
-        estimate = estimate.to(dtype=torch.float, device=torch.device('cpu'))
+        estimate = torch.argmax(estimate, dim=1)
+        if quantizer:
+            estimate = quantizer.inverse(estimate)
+        estimate = estimate.to(dtype=torch.float, device='cpu')
         sources = torch.stack([batch['target'], batch['interference']], dim=1)
         metrics = bss_eval_batch(estimate, sources)
         bss_metrics.extend(metrics)
@@ -280,15 +282,10 @@ def main():
     print('On device: ', device)
 
     # Initialize quantizer and dequantizer
-    transform = 'disperse'
     delta = 2/(2**args.num_bits)
     quantizer = Quantizer(-1, delta, args.num_bits, mu_law=True)
-    if transform == 'disperse':
-        transform = Disperser(args.num_bits, center=True)
-        in_channels = args.num_bits
-    elif transform == 'one_hot':
-        transform = OneHotTransform(args.num_bits, center=True)
-        in_channels = 2**args.num_bits
+    transform = Disperser(args.num_bits, center=True)
+    transform = transform.to(dtype)
 
     # Make model and dataset
     train_dl, val_dl = make_data(args.batchsize, hop=args.stride, toy=args.toy)

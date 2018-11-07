@@ -44,9 +44,11 @@ class Disperser(nn.Module):
     def __init__(self, num_bits, center=False):
         super(Disperser, self).__init__()
         self.num_bits = num_bits
-        self.weight = torch.FloatTensor([2**(-i) for i in range(num_bits)])
+        self.weight = nn.Parameter(torch.tensor([2**(-i) for i in range(num_bits)]),
+            requires_grad=False)
         self.weight = self.weight.unsqueeze(1)
-        self.bias = torch.FloatTensor(1 + self.weight/2)
+        self.bias = nn.Parameter(torch.tensor(1 + self.weight/2),
+            requires_grad=False)
         self.center = center
 
     def forward(self, x):
@@ -60,20 +62,8 @@ class Disperser(nn.Module):
             x = (x+1)/2
         return x
 
-class Accumulator(nn.Module):
-    def __init__(self, num_bits, requires_grad=False):
-        super(Accumulator, self).__init__()
-        self.num_bits = num_bits
-        weight = torch.FloatTensor([2**i for i in range(num_bits)])
-        weight = weight.unsqueeze(1).unsqueeze(1)
-        self.weight = nn.Parameter(weight, requires_grad=requires_grad)
-
-    def forward(self, x):
-        '''
-        x has shape (batch, number of bits, channels, frames)
-        return has shape (batch, channels, frames)
-        '''
-        return torch.sum(x * self.weight, dim=1)
+    def inverse(self, x):
+        return torch.sum(x / self.weight, dim=1)
 
 class OneHotTransform(nn.Module):
     def __init__(self, num_bits):
@@ -98,16 +88,24 @@ class Quantizer(nn.Module):
         self.min = min
         self.delta = delta
         self.num_bits = num_bits
+        self.mu_law = mu_law
 
     def forward(self, x):
         '''
         x has shape (batch, features)
         return has shape (batch, 2**num_bits, features)
         '''
-        x = mu_law(x, 2**self.num_bits)
-        x = (x - self.min) / self.delta
+        if mu_law:
+            x = mu_law(x, 2**self.num_bits)
+        x = (x - (self.min + self.delta)) / self.delta
         x = torch.ceil(x)
         return torch.clamp(x, 0, 2**self.num_bits-1)
+
+    def inverse(self, x):
+        x = self.delta * (x + 0.5) + self.min
+        if mu_law:
+            x = inverse_mu_law(x, 2**self.num_bits)
+        return x
 
 class BinaryDataset():
     def __init__(self, data_dir):
