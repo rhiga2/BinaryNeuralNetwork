@@ -283,7 +283,7 @@ def main():
 
     # Initialize quantizer and dequantizer
     delta = 2/(2**args.num_bits)
-    quantizer = Quantizer(-1, delta, args.num_bits, mu_law=True)
+    quantizer = Quantizer(-1, delta, args.num_bits, use_mu=True)
     transform = Disperser(args.num_bits, center=True)
     transform = transform.to(dtype)
 

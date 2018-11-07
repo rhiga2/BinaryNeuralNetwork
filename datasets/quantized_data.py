@@ -44,9 +44,8 @@ class Disperser(nn.Module):
     def __init__(self, num_bits, center=False):
         super(Disperser, self).__init__()
         self.num_bits = num_bits
-        self.weight = nn.Parameter(torch.tensor([2**(-i) for i in range(num_bits)]),
+        self.weight = nn.Parameter(torch.tensor([2**(-i) for i in range(num_bits)]).unsqueeze(1),
             requires_grad=False)
-        self.weight = self.weight.unsqueeze(1)
         self.bias = nn.Parameter(torch.tensor(1 + self.weight/2),
             requires_grad=False)
         self.center = center
@@ -80,30 +79,30 @@ def mu_law(x, mu):
     return torch.sign(x)*torch.log(1 + mu*torch.abs(x))/(np.log(1 + mu))
 
 def inverse_mu_law(x, mu):
-    return torch.sign(x)/mu*((1 + mu)**x - 1)
+    return torch.sign(x)/mu*((1 + mu)**torch.abs(x) - 1)
 
 class Quantizer(nn.Module):
-    def __init__(self, min=-1, delta=1/8, num_bits=4, mu_law=True):
+    def __init__(self, min=-1, delta=1/8, num_bits=4, use_mu=True):
         super(Quantizer, self).__init__()
         self.min = min
         self.delta = delta
         self.num_bits = num_bits
-        self.mu_law = mu_law
+        self.use_mu = use_mu
 
     def forward(self, x):
         '''
         x has shape (batch, features)
         return has shape (batch, 2**num_bits, features)
         '''
-        if mu_law:
+        if self.use_mu:
             x = mu_law(x, 2**self.num_bits)
-        x = (x - (self.min + self.delta)) / self.delta
+        x = (x - self.min) / self.delta-1
         x = torch.ceil(x)
         return torch.clamp(x, 0, 2**self.num_bits-1)
 
     def inverse(self, x):
         x = self.delta * (x + 0.5) + self.min
-        if mu_law:
+        if self.use_mu:
             x = inverse_mu_law(x, 2**self.num_bits)
         return x
 
