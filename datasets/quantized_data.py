@@ -44,9 +44,8 @@ class Disperser(nn.Module):
     def __init__(self, num_bits, center=False):
         super(Disperser, self).__init__()
         self.num_bits = num_bits
-        self.weight = nn.Parameter(torch.tensor([2**(-i) for i in range(num_bits)]),
+        self.weight = nn.Parameter(torch.tensor([2**(-i) for i in range(num_bits)]).unsqueeze(1),
             requires_grad=False)
-        self.weight = self.weight.unsqueeze(1)
         self.bias = nn.Parameter(torch.tensor(1 + self.weight/2),
             requires_grad=False)
         self.center = center
@@ -96,7 +95,7 @@ class Quantizer(nn.Module):
         return has shape (batch, 2**num_bits, features)
         '''
         if mu_law:
-            x = mu_law(x, 2**self.num_bits)
+            x = mu_law(x, 2**self.num_bits-1)
         x = (x - (self.min + self.delta)) / self.delta
         x = torch.ceil(x)
         return torch.clamp(x, 0, 2**self.num_bits-1)
@@ -104,7 +103,7 @@ class Quantizer(nn.Module):
     def inverse(self, x):
         x = self.delta * (x + 0.5) + self.min
         if mu_law:
-            x = inverse_mu_law(x, 2**self.num_bits)
+            x = inverse_mu_law(x, 2**self.num_bits-1)
         return x
 
 class BinaryDataset():

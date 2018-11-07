@@ -197,7 +197,7 @@ class BitwiseNetwork(nn.Module):
                 layer.update_beta(sparsity=self.sparsity)
 
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False,
-    quantizer=None, transform=None):
+    quantizer=None, transform=None, dtype=torch.float):
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
@@ -205,7 +205,7 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix).to(dtype=dtype)
+            mix = quantizer(mix).to(device=device, dtype=dtype)
             target = quantizer(target).to(device=device, dtype=torch.long)
         if transform:
             mix = transform(mix)
@@ -229,7 +229,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix).to(dtype=dtype)
+            mix = quantizer(mix).to(device=device, dtype=dtype)
             target = quantizer(target).to(device=device, dtype=torch.long)
         if transform:
             mix = transform(mix)
@@ -285,7 +285,7 @@ def main():
     delta = 2/(2**args.num_bits)
     quantizer = Quantizer(-1, delta, args.num_bits, mu_law=True)
     transform = Disperser(args.num_bits, center=True)
-    transform = transform.to(dtype)
+    transform = transform.to(device=device, dtype=dtype)
 
     # Make model and dataset
     train_dl, val_dl = make_data(args.batchsize, hop=args.stride, toy=args.toy)
@@ -304,8 +304,12 @@ def main():
     print(model)
 
     # Initialize loss function
+    col = torch.arange(0, 2**args.num_bits)
+    col = quantizer.inverse(col.to(torch.float))
+    dist_matrix = torch.abs(col.unsqueeze(1)-col)
+    print(dist_matrix)
     loss = DiscreteWasserstein(2**args.num_bits, mode='interger',
-        dist_matrix=None, device=device)
+        default_dist=False, dist_matrix=dist_matrix)
     loss = loss.to(device=device, dtype=dtype)
     loss_metrics = LossMetrics()
 
@@ -319,14 +323,15 @@ def main():
         model.update_betas()
         model.train()
         train_loss = train(model, train_dl, optimizer, loss=loss, device=device,
-            autoencode=args.autoencode, quantizer=quantizer, transform=transform)
+            autoencode=args.autoencode, quantizer=quantizer, transform=transform, 
+            dtype=dtype)
 
         if epoch % args.output_period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
             val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device,
                 autoencode=args.autoencode, quantizer=quantizer,
-                transform=transform)
+                transform=transform, dtype=dtype)
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 output_period=args.output_period)

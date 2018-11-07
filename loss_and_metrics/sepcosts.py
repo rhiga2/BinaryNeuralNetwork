@@ -172,12 +172,11 @@ class DiscreteWasserstein(nn.Module):
         '''
         super(DiscreteWasserstein, self).__init__()
         self.mode = mode
-        self.dist_matrix = dist_matrix
         if default_dist:
             col = torch.arange(0, num_classes).unsqueeze(1)
             row = torch.arange(0, num_classes)
-            self.dist_matrix = torch.abs(col - row)
-        self.dist_matrix = nn.Parameter(self.dist_matrix, requires_grad=False)
+            dist_matrix = torch.abs(col - row)
+        self.dist_matrix = nn.Parameter(dist_matrix.to(torch.float), requires_grad=False)
 
     def forward(self, x, y):
         '''
@@ -191,7 +190,8 @@ class DiscreteWasserstein(nn.Module):
         x = x.permute(0, 2, 1).contiguous().view(-1, classes)
         if self.mode == 'one_hot':
             y = torch.argmax(y, dim=1)
-        y = y.view(-1, 1)
+        y = y.view(-1)
         dists = self.dist_matrix[y]
-        costs = torch.sum(x * dists, dim=1)
-        return torch.mean(costs)
+        costs = torch.sum(x * dists, dim=1).view(batch, time)
+        costs = torch.mean(costs, dim=1)
+        return torch.mean(costs, dim=0)
