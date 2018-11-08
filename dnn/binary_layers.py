@@ -99,53 +99,36 @@ class BitwiseAbstractClass(nn.Module):
         if sparsity == 0:
             return
         w = self.weight.cpu().data.numpy()
-        params = np.abs(w)
-        if self.biased:
-            b = self.bias.cpu().data.numpy()
-            params = np.abs(np.concatenate((w, np.expand_dims(b, axis=1)), axis=1))
-        beta = torch.tensor(np.percentile(params, sparsity), dtype=self.weight.dtype,
-            device=self.weight.device)
+        beta = torch.tensor(np.percentile(np.abs(w), sparsity),
+            dtype=self.weight.dtype, device=self.weight.device)
         self.beta = nn.Parameter(beta, requires_grad=False)
 
     def noisy(self):
         self.mode = 'noisy'
         self.weight = nn.Parameter(torch.tanh(self.weight),
             requires_grad=self.requires_grad)
-        if self.biased:
-            self.bias = nn.Parameter(torch.tanh(self.bias),
-                requires_grad=self.requires_grad)
 
     def inference(self):
         self.mode = 'inference'
         self.weight = nn.Parameter(bitwise_params(self.weight, self.beta),
             requires_grad=self.requires_grad)
-        if self.biased:
-            self.bias = nn.Parameter(bitwise_params(self.bias, self.beta),
-                requires_grad=self.requires_grad)
 
 class BitwiseLinear(BitwiseAbstractClass):
     '''
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
-    def __init__(self, input_size, output_size, biased=False, requires_grad=True):
+    def __init__(self, input_size, output_size, requires_grad=True):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
-        self.biased = biased
         self.requires_grad = requires_grad
         self.weight = init_weight((output_size, input_size), requires_grad)
-        self.bias = None
-        if biased:
-            self.bias = init_bias(output_size, requires_grad)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 
     def forward(self, x):
         w = convert_param(self.weight, self.beta, self.mode)
-        b = None
-        if self.biased:
-            b = convert_param(self.bias, self.beta, self.mode)
-        return F.linear(x, w, b)
+        return F.linear(x, w, None)
 
     def __repr__(self):
         return 'BitwiseLinear(%d, %d)' % (self.input_size, self.output_size)
@@ -155,7 +138,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
     1D bitwise (Kim et. al) convolution
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
-        stride=1, padding=0, biased=False, groups=1, requires_grad=True):
+        stride=1, padding=0, groups=1, requires_grad=True):
         super(BitwiseConv1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -163,22 +146,15 @@ class BitwiseConv1d(BitwiseAbstractClass):
         self.stride = stride
         self.padding = padding
         self.groups = groups
-        self.biased = biased
         self.requires_grad = requires_grad
         weight_size = (output_channels, input_channels//self.groups, kernel_size)
         self.weight = init_weight(weight_size, requires_grad)
-        self.bias = None
-        if biased:
-            self.bias = init_bias(output_channels, requires_grad)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 
     def forward(self, x):
         w = convert_param(self.weight, self.beta, self.mode)
-        b = None
-        if self.biased:
-            b = convert_param(self.bias, self.beta, self.mode)
-        return F.conv1d(x, w, b, stride=self.stride,
+        return F.conv1d(x, w, None, stride=self.stride,
             padding=self.padding, groups=self.groups)
 
     def __repr__(self):
@@ -191,7 +167,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
     Issue: Almost copy paste of BitwiseConv1d. Parameter dimensions may be incorrect
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
-        stride=1, padding=0, biased=False, groups=1, requires_grad=True):
+        stride=1, padding=0, groups=1, requires_grad=True):
         super(BitwiseConvTranspose1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -199,22 +175,15 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
         self.stride = stride
         self.padding = padding
         self.groups = groups
-        self.biased = biased
         self.requires_grad = requires_grad
         weight_size = (input_channels, output_channels // groups, kernel_size)
         self.weight = init_weight(weight_size, requires_grad)
-        self.bias = None
-        if biased:
-            self.bias = init_bias(output_channels, requires_grad)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 
     def forward(self, x):
         w = convert_param(self.weight, self.beta, self.mode)
-        b = None
-        if self.biased:
-            b = convert_param(self.bias, self.beta, self.mode)
-        return F.conv_transpose1d(x, w, b, stride=self.stride,
+        return F.conv_transpose1d(x, w, None, stride=self.stride,
             padding=self.padding, groups=self.groups)
 
     def __repr__(self):

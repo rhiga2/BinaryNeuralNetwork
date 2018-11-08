@@ -82,7 +82,7 @@ class BitwiseNetwork(nn.Module):
         basis = basis.permute(1, 0, 2).contiguous()
         self.conv1.weight = nn.Parameter(basis, requires_grad=adapt)
         '''
-        self.in_scaler = ConvScaler1d(self.transform_channels)
+        self.in_scaler = nn.BatchNorm1d(self.transform_channels)
         self.autoencode = autoencode
         self.activation = torch.tanh
 
@@ -323,7 +323,7 @@ def main():
         model.update_betas()
         model.train()
         train_loss = train(model, train_dl, optimizer, loss=loss, device=device,
-            autoencode=args.autoencode, quantizer=quantizer, transform=transform, 
+            autoencode=args.autoencode, quantizer=quantizer, transform=transform,
             dtype=dtype)
 
         if epoch % args.output_period == 0:
