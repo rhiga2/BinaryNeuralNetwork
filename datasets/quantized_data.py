@@ -103,7 +103,7 @@ class Quantizer(nn.Module):
     def inverse(self, x):
         x = self.delta * (x + 0.5) + self.min
         if self.use_mu:
-            x = inverse_mu_law(x, 2**self.num_bits=1)
+            x = inverse_mu_law(x, 2**self.num_bits-1)
         return x
 
 class BinaryDataset():

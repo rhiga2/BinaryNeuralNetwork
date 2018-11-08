@@ -11,13 +11,13 @@ import librosa
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
-        random_start=True, transform=None, hop=None, length=None, random_shift=False):
+        random_start=True, transform=None, hop=None, min_length=None, random_shift=False):
         self.fs = fs
         self.snr = np.power(10, snr/20)
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
         self.hop = hop
-        self.length = length
+        self.min_length = min_length
 
     def __len__(self):
         return len(self.mixes)
@@ -34,6 +34,12 @@ class TwoSourceMixtureDataset(Dataset):
         inter, _ = sf.read(interf, frames=sig.shape[0], fill_value=0)
         if len(inter.shape) != 1:
             inter = np.mean(inter, axis=1)
+
+        if self.min_length:
+            if len(sig) > self.min_length:
+                sig = sig[:self.min_length]
+            if len(inter) > self.min_length:
+                inter = inter[:self.min_length]
 
         # normalize and mix signals
         sig = sig / np.max(sig)

@@ -193,5 +193,5 @@ class DiscreteWasserstein(nn.Module):
         y = y.view(-1)
         dists = self.dist_matrix[y]
         costs = torch.sum(x * dists, dim=1).view(batch, time)
-        costs = torch.mean(costs, dim=1)
+        costs = torch.mean(costs, dim=0)
         return torch.mean(costs, dim=0)
