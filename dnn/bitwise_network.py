@@ -68,8 +68,7 @@ class BitwiseNetwork(nn.Module):
         self.cutoff = kernel_size // 2 + 1
         self.transform_channels = 2*self.cutoff
         self.conv1 = BitwiseConv1d(in_channels, self.transform_channels,
-            kernel_size, stride=stride, biased=False,
-            padding=kernel_size, groups=groups)
+            kernel_size, stride=stride, padding=kernel_size, groups=groups)
         self.in_scaler = nn.BatchNorm1d(self.transform_channels)
         self.autoencode = autoencode
         self.activation = torch.tanh
@@ -96,8 +95,7 @@ class BitwiseNetwork(nn.Module):
 
         # Initialize inverse of front end transform
         self.conv1_transpose = BitwiseConvTranspose1d(self.transform_channels,
-            out_channels, kernel_size, stride=stride, biased=False,
-            groups=groups)
+            out_channels, kernel_size, stride=stride, groups=groups)
         self.output_activation = nn.Softmax(dim=1)
         self.sparsity = sparsity
         self.mode = 'real'
