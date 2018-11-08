@@ -86,6 +86,14 @@ def convert_param(param, beta=0, mode='real'):
         return bitwise_params(param, beta)
     return param
 
+def convert_paramV2(filter, gate, mode='real'):
+    if mode == 'real':
+        return torch.tanh(filter) * torch.sigmoid(gate)
+    elif model == 'noisy':
+        return bitwise_activation(filter) * (bitwise_activation(gate) + 1)/2
+    else:
+        return filter * gate
+
 class BitwiseAbstractClass(nn.Module):
     @abstractmethod
     def __init__(self):
@@ -188,6 +196,98 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
 
     def __repr__(self):
         return 'BitwiseConvTranspose1d(%d, %d, kernel_size=%d, stride=%d, padding=%d, self.groups=%d)' % \
+            (self.input_channels, self.output_channels, self.kernel_size,
+            self.stride, self.padding, self.groups)
+
+class BitwiseAbstractClassV2(nn.Module):
+    @abstractmethod
+    def __init__(self):
+        super(BitwiseAbstractClassV2, self).__init__()
+
+    @abstractmethod
+    def forward(self):
+        pass
+
+    def noisy(self):
+        self.mode = 'noisy'
+        self.filter = nn.Parameter(torch.tanh(self.filter),
+            requires_grad=self.requires_grad)
+        self.gate = nn.Parameter(torch.sigmoid(self.gate),
+            requires_grad=self.requires_grad)
+
+    def inference(self):
+        self.mode = 'inference'
+        self.filter = nn.Parameter(bitwise_activation(self.filter),
+            requires_grad=self.requires_grad)
+        self.gate = nn.Parameter((bitwise_activation(self.gate)+1)/2,
+            requires_grad=self.requires_grad)
+
+class BitwiseLinearV2(BitwiseAbstractClassV2):
+    def __init__(self, input_size, output_size, requires_grad=True):
+        super(BitwiseLinearV2, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.requires_grad = requires_grad
+        self.filter = init_weight((output_size, input_size), requires_grad)
+        self.gate = init_weight((output_size, input_size), requires_grad)
+        self.mode = 'real'
+
+    def forward(self, x):
+        w = convert_paramV2(self.filter, self.gate, self.mode)
+        return F.linear(x, w, None)
+
+    def __repr__(self):
+        return 'BitwiseLinearV2(%d, %d)' % (self.input_size, self.output_size)
+
+class BitwiseConv1dV2(BitwiseAbstractClassV2):
+    def __init__(self, input_channels, output_channels, kernel_size,
+        stride=1, padding=0, groups=1, requires_grad=True):
+        super(BitwiseConv1d, self).__init__()
+        self.input_channels = input_channels
+        self.output_channels = output_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.groups = groups
+        self.requires_grad = requires_grad
+        weight_size = (output_channels, input_channels//self.groups, kernel_size)
+        self.filter = init_weight(weight_size, requires_grad)
+        self.gate = init_weight(weight_size, requires_grad)
+        self.mode = 'real'
+
+    def forward(self, x):
+        w = convert_paramV2(self.filter, self.gate, self.mode)
+        return F.conv1d(x, w, None, stride=self.stride,
+            padding=self.padding, groups=self.groups)
+
+    def __repr__(self):
+        return 'BitwiseConv1dV2(%d, %d, kernel_size=%d, stride=%d, padding=%d, self.groups=%d)' % \
+            (self.input_channels, self.output_channels, self.kernel_size,
+            self.stride, self.padding, self.groups)
+
+class BitwiseConvTranspose1dV2(BitwiseAbstractClassV2):
+    def __init__(self, input_channels, output_channels, kernel_size,
+        stride=1, padding=0, groups=1, requires_grad=True):
+        super(BitwiseConvTranspose1d, self).__init__()
+        self.input_channels = input_channels
+        self.output_channels = output_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.groups = groups
+        self.requires_grad = requires_grad
+        weight_size = (input_channels, output_channels // groups, kernel_size)
+        self.filter = init_weight(weight_size, requires_grad)
+        self.gate = init_weight(weight_size, requires_grad)
+        self.mode = 'real'
+
+    def forward(self, x):
+        w = convert_paramV2(self.filter, self.gate, self.mode)
+        return F.conv_transpose1d(x, w, None, stride=self.stride,
+            padding=self.padding, groups=self.groups)
+
+    def __repr__(self):
+        return 'BitwiseConvTranspose1dV2(%d, %d, kernel_size=%d, stride=%d, padding=%d, self.groups=%d)' % \
             (self.input_channels, self.output_channels, self.kernel_size,
             self.stride, self.padding, self.groups)
 

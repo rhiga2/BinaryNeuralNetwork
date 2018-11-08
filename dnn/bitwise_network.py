@@ -67,9 +67,8 @@ class BitwiseNetwork(nn.Module):
         self.kernel_size = kernel_size
         self.cutoff = kernel_size // 2 + 1
         self.transform_channels = 2*self.cutoff
-        self.conv1 = BitwiseConv1d(in_channels, self.transform_channels,
+        self.conv1 = BitwiseConv1dV2(in_channels, self.transform_channels,
             kernel_size, stride=stride, padding=kernel_size, groups=groups)
-        self.in_scaler = nn.BatchNorm1d(self.transform_channels)
         self.autoencode = autoencode
         self.activation = torch.tanh
 
@@ -92,9 +91,8 @@ class BitwiseNetwork(nn.Module):
                 if i < self.num_layers - 1:
                     self.dropout_list.append(nn.Dropout(dropout))
 
-
         # Initialize inverse of front end transform
-        self.conv1_transpose = BitwiseConvTranspose1d(self.transform_channels,
+        self.conv1_transpose = BitwiseConvTranspose1dV2(self.transform_channels,
             out_channels, kernel_size, stride=stride, groups=groups)
         self.output_activation = nn.Softmax(dim=1)
         self.sparsity = sparsity
@@ -110,7 +108,7 @@ class BitwiseNetwork(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        x = self.activation(self.in_scaler(self.conv1(x)))
+        x = self.activation(self.conv1(x))
 
         if not self.autoencode:
             # (batch, channels_per_group * transform_size, time)
@@ -169,8 +167,8 @@ class BitwiseNetwork(nn.Module):
         if self.mode != 'noisy':
             return
 
-        self.conv1.update_beta(sparsity=self.sparsity)
-        self.conv1_transpose.update_beta(sparsity=self.sparsity)
+        # self.conv1.update_beta(sparsity=self.sparsity)
+        # self.conv1_transpose.update_beta(sparsity=self.sparsity)
         if not self.autoencode:
             for layer in self.linear_list:
                 layer.update_beta(sparsity=self.sparsity)
