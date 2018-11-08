@@ -4,10 +4,10 @@ from quantized_data import *
 
 class TestQuantize(unittest.TestCase):
     def setUp(self):
-        num_bits=4
-        self.quantizer = Quantizer(0, 1, num_bits=num_bits, use_mu=False)
-        self.disperser = Disperser(num_bits)
-        self.one_hot_transform = OneHotTransform(num_bits)
+        self.quantizer = Quantizer(0, 1, num_bits=4, use_mu=False)
+        self.disperser = Disperser(4)
+        self.one_hot_transform = OneHotTransform(4)
+        self.quantizer2 = Quantizer(-1, 1/128, num_bits=8, use_mu=True)
 
     def test_quantize(self):
         x = torch.tensor(np.array([1.1, 2.1, 5.5, 15.2, -43]), dtype=torch.float)
@@ -65,6 +65,10 @@ class TestQuantize(unittest.TestCase):
         bucket_x = bucketize(x, bins)
         all_match = torch.all(torch.eq(bucket_x, soln))
         self.assertTrue(all_match)
+
+    def test_quantizer_and_mu_law(self):
+        x = torch.FloatTensor([126, 127, 128])
+        print(self.quantizer2.inverse(x))
 
     def test_mu_law_inverse(self):
         '''

@@ -19,8 +19,8 @@ import argparse
 def make_mixture_set(hop=256, toy=False):
     speaker_path = '/media/data/timit-wav/train'
     targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
-        'dr1/fdaw0', 'dr1/fjsp0', 'dr1/fsjk1', 'dr1/fvmh0',
-        'dr1/fsma0', 'dr1/ftbr0']
+        'dr1/fdaw0', 'dr1/fjsp0'] #,'dr1/fsjk1', 'dr1/fvmh0',
+        # 'dr1/fsma0', 'dr1/ftbr0']
     train_speeches, val_speeches = get_speech_files(speaker_path, targets, num_train=7)
 
     if toy:
@@ -37,8 +37,8 @@ def make_mixture_set(hop=256, toy=False):
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop)
     else:
-        interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
-            'dr1/mwad0', 'dr1/mwar0']
+        interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0']#, 'dr1/mrws0',
+        #    'dr1/mwad0', 'dr1/mwar0']
         train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop)
@@ -70,18 +70,6 @@ class BitwiseNetwork(nn.Module):
         self.conv1 = BitwiseConv1d(in_channels, self.transform_channels,
             kernel_size, stride=stride, biased=False,
             padding=kernel_size, groups=groups)
-        '''
-        fft = np.fft.fft(np.eye(kernel_size))
-        real_fft = np.real(fft)[:self.cutoff]
-        im_fft = np.imag(fft)[:self.cutoff]
-        fft = torch.FloatTensor(np.concatenate([real_fft, im_fft], axis=0))
-        channels_per_group = in_channels // bit_groups
-        self.scale = kernel_size / stride
-        basis_group = torch.cat([fft for i in range(bit_groups)], dim=0) / 2**(channels_per_group+self.scale)
-        basis = torch.stack([2**(channels_per_group - i - 1)*basis_group for i in range(channels_per_group)], dim=0)
-        basis = basis.permute(1, 0, 2).contiguous()
-        self.conv1.weight = nn.Parameter(basis, requires_grad=adapt)
-        '''
         self.in_scaler = ConvScaler1d(self.transform_channels)
         self.autoencode = autoencode
         self.activation = torch.tanh
@@ -110,13 +98,6 @@ class BitwiseNetwork(nn.Module):
         self.conv1_transpose = BitwiseConvTranspose1d(self.transform_channels,
             out_channels, kernel_size, stride=stride, biased=False,
             groups=groups)
-        '''
-        invbasis_group = bit_groups * torch.t(torch.pinverse(self.scale*basis_group))
-        invbasis = torch.stack([invbasis_group for _ in range(channels_per_group)], dim=0)
-        invbasis = invbasis.permute(1, 0, 2).contiguous()
-        self.conv1_transpose.weight = nn.Parameter(invbasis,
-            requires_grad=adapt)
-        '''
         self.output_activation = nn.Softmax(dim=1)
         self.sparsity = sparsity
         self.mode = 'real'
@@ -131,7 +112,7 @@ class BitwiseNetwork(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        x = self.activation(self.conv1(x))
+        x = self.activation(self.in_scaler(self.conv1(x)))
 
         if not self.autoencode:
             # (batch, channels_per_group * transform_size, time)
@@ -239,10 +220,10 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
         estimate = model(mix)
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
-        estimate = torch.argmax(estimate, dim=1)
+        estimate = torch.argmax(estimate, dim=1).to(torch.float)
         if quantizer:
             estimate = quantizer.inverse(estimate)
-        estimate = estimate.to(dtype=torch.float, device='cpu')
+        estimate = estimate.to(device='cpu')
         sources = torch.stack([batch['target'], batch['interference']], dim=1)
         metrics = bss_eval_batch(estimate, sources)
         bss_metrics.extend(metrics)
@@ -274,7 +255,7 @@ def main():
     args = parser.parse_args()
 
     # Initialize device
-    dtype = torch.float16
+    dtype = torch.float32
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
     else:
@@ -283,14 +264,15 @@ def main():
 
     # Initialize quantizer and dequantizer
     delta = 2/(2**args.num_bits)
-    quantizer = Quantizer(-1, delta, args.num_bits, use_mu=True)
-    transform = Disperser(args.num_bits, center=True)
-    transform = transform.to(device=device, dtype=dtype)
+    quantizer = Quantizer(-1, delta, num_bits=args.num_bits, use_mu=True)
+    # transform = Disperser(num_bits=args.num_bits, center=True)
+    # transform = transform.to(device=device, dtype=dtype)
+    transform = None
 
     # Make model and dataset
     train_dl, val_dl = make_data(args.batchsize, hop=args.stride, toy=args.toy)
     model = BitwiseNetwork(args.kernel, args.stride, fc_sizes=[2048, 2048],
-        in_channels=args.num_bits, out_channels=2**args.num_bits,
+        in_channels=args.num_bits if transform else 1, out_channels=2**args.num_bits,
         dropout=args.dropout, sparsity=args.sparsity, adapt=not args.no_adapt,
         autoencode=args.autoencode, groups=args.groups)
     if args.train_noisy:
@@ -304,10 +286,9 @@ def main():
     print(model)
 
     # Initialize loss function
-    col = torch.arange(0, 2**args.num_bits)
-    col = quantizer.inverse(col.to(torch.float))
+    col = torch.arange(0, 2**args.num_bits).to(torch.float)
+    col = 100*quantizer.inverse(col)
     dist_matrix = torch.abs(col.unsqueeze(1)-col)
-    print(dist_matrix)
     loss = DiscreteWasserstein(2**args.num_bits, mode='interger',
         default_dist=False, dist_matrix=dist_matrix)
     loss = loss.to(device=device, dtype=dtype)
