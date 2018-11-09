@@ -66,8 +66,8 @@ class BitwiseNetwork(nn.Module):
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.cutoff = kernel_size // 2 + 1
-        self.transform_channels = 2*self.cutoff
-        self.conv1 = BitwiseConv1dV2(in_channels, self.transform_channels,
+        self.kernel_size = 2*self.cutoff
+        self.conv1 = BitwiseConv1dV2(in_channels, self.kernel,
             kernel_size, stride=stride, padding=kernel_size, groups=groups)
         self.autoencode = autoencode
         self.activation = torch.tanh
