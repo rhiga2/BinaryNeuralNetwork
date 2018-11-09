@@ -242,7 +242,7 @@ class BitwiseLinearV2(BitwiseAbstractClassV2):
 class BitwiseConv1dV2(BitwiseAbstractClassV2):
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True):
-        super(BitwiseConv1d, self).__init__()
+        super(BitwiseConv1dV2, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
         self.kernel_size = kernel_size
@@ -268,7 +268,7 @@ class BitwiseConv1dV2(BitwiseAbstractClassV2):
 class BitwiseConvTranspose1dV2(BitwiseAbstractClassV2):
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True):
-        super(BitwiseConvTranspose1d, self).__init__()
+        super(BitwiseConvTranspose1dV2, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
         self.kernel_size = kernel_size
