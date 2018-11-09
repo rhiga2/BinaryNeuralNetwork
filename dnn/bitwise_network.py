@@ -40,8 +40,8 @@ def make_mixture_set(hop=256, toy=False):
         interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0']#, 'dr1/mrws0',
         #    'dr1/mwad0', 'dr1/mwar0']
         train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
-        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop)
-        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop, max_length=16000)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop, max_length=16000)
     return trainset, valset
 
 def make_data(batchsize, hop=256, toy=False):
@@ -65,12 +65,11 @@ class BitwiseNetwork(nn.Module):
         super(BitwiseNetwork, self).__init__()
         # Initialize adaptive front end
         self.kernel_size = kernel_size
-        self.cutoff = kernel_size // 2 + 1
-        self.kernel_size = 2*self.cutoff
-        self.conv1 = BitwiseConv1dV2(in_channels, self.kernel,
+        self.conv1 = BitwiseConv1dV2(in_channels, kernel_size,
             kernel_size, stride=stride, padding=kernel_size, groups=groups)
         self.autoencode = autoencode
         self.activation = torch.tanh
+        self.batchnorm = nn.BatchNorm1d(kernel_size)
 
         # dense layers for denoising
         if not self.autoencode:
@@ -92,7 +91,7 @@ class BitwiseNetwork(nn.Module):
                     self.dropout_list.append(nn.Dropout(dropout))
 
         # Initialize inverse of front end transform
-        self.conv1_transpose = BitwiseConvTranspose1dV2(self.transform_channels,
+        self.conv1_transpose = BitwiseConvTranspose1d(kernel_size,
             out_channels, kernel_size, stride=stride, groups=groups)
         self.output_activation = nn.Softmax(dim=1)
         self.sparsity = sparsity
@@ -108,7 +107,7 @@ class BitwiseNetwork(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        x = self.activation(self.conv1(x))
+        x = self.activation(self.batchnorm(self.conv1(x)))
 
         if not self.autoencode:
             # (batch, channels_per_group * transform_size, time)
@@ -283,7 +282,7 @@ def main():
 
     # Initialize loss function
     col = torch.arange(0, 2**args.num_bits).to(torch.float)
-    col = 100*quantizer.inverse(col)
+    col = quantizer.inverse(col)
     dist_matrix = torch.abs(col.unsqueeze(1)-col)
     loss = DiscreteWasserstein(2**args.num_bits, mode='interger',
         default_dist=False, dist_matrix=dist_matrix)

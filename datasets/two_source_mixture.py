@@ -11,13 +11,13 @@ import librosa
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
-        random_start=True, transform=None, hop=None, min_length=None, random_shift=False):
+        random_start=True, transform=None, hop=None, max_length=None, random_shift=False):
         self.fs = fs
         self.snr = np.power(10, snr/20)
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
         self.hop = hop
-        self.min_length = min_length
+        self.max_length = max_length
 
     def __len__(self):
         return len(self.mixes)
@@ -35,11 +35,13 @@ class TwoSourceMixtureDataset(Dataset):
         if len(inter.shape) != 1:
             inter = np.mean(inter, axis=1)
 
-        if self.min_length:
-            if len(sig) > self.min_length:
-                sig = sig[:self.min_length]
-            if len(inter) > self.min_length:
-                inter = inter[:self.min_length]
+        if self.max_length:
+            if len(sig) > self.max_length:
+                start = np.random.randint(len(sig) - self.max_length)
+                sig = sig[start:self.max_length+start]
+            if len(inter) > self.max_length:
+                start = np.random.randint(len(sig) - self.max_length)
+                inter = inter[start:self.max_length_start]
 
         # normalize and mix signals
         sig = sig / np.max(sig)
@@ -94,13 +96,13 @@ class SineSpeechData(Dataset):
 def collate_and_trim(batch, axis=0, hop=1, dtype=torch.float):
     keys = list(batch[0].keys())
     outbatch = {key: [] for key in keys}
-    min_length = min([sample[keys[0]].shape[axis] for sample in batch])
-    min_length = min_length // hop * hop
+    max_length = min([sample[keys[0]].shape[axis] for sample in batch])
+    max_length = max_length // hop * hop
     for sample in batch:
         length = sample[keys[0]].shape[axis]
-        start = (length - min_length) // 2
+        start = (length - max_length) // 2
         for key in keys:
-            indices = range(start, start+min_length)
+            indices = range(start, start+max_length)
             outbatch[key].append(sample[key].take(indices=indices, axis=axis))
 
     outbatch = {key: torch.as_tensor(np.stack(values, axis=0), dtype=dtype) for key, values in outbatch.items()}
