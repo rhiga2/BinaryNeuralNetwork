@@ -92,7 +92,7 @@ class Quantizer(nn.Module):
     def forward(self, x):
         '''
         x has shape (batch, features)
-        return has shape (batch, 2**num_bits, features)
+        return has shape (batch, features)
         '''
         if self.use_mu:
             x = mu_law(x, 2**self.num_bits-1)

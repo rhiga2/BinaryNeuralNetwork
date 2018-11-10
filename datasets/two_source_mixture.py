@@ -7,7 +7,6 @@ from torch.utils.data import Dataset
 import scipy.signal as signal
 import random
 import soundfile as sf
-import librosa
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,

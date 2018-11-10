@@ -107,24 +107,28 @@ class LossMetrics():
     '''
     Data struct that keeps track of all losses and metrics during the training process
     '''
-    def __init__(self):
+    def __init__(self, bss=True):
         self.time = []
         self.train_loss = []
         self.val_loss = []
-        self.sdrs = []
-        self.sirs = []
-        self.sars = []
+        self.bss = bss
+        if bss:
+            self.sdrs = []
+            self.sirs = []
+            self.sars = []
 
-    def update(self, train_loss, val_loss, sdr, sir, sar, output_period=1):
+    def update(self, train_loss, val_loss, sdr=None, sir=None, sar=None,
+        output_period=1):
         if self.time:
             self.time.append(self.time[-1] + output_period)
         else:
             self.time = [0]
         self.train_loss.append(train_loss)
         self.val_loss.append(val_loss)
-        self.sdrs.append(sdr)
-        self.sirs.append(sir)
-        self.sars.append(sar)
+        if self.bss:
+            self.sdrs.append(sdr)
+            self.sirs.append(sir)
+            self.sars.append(sar)
 
 def train_plot(vis, loss_metrics, eid=None, win=[None, None]):
     '''
@@ -150,29 +154,30 @@ def train_plot(vis, loss_metrics, eid=None, win=[None, None]):
     )
     vis._send(dict(data=data1, layout=layout1, win=win[0], eid=eid))
 
-    # BSS_EVAL plots
-    data2 = [
-        # SDR
-        dict(
-            x=loss_metrics.time, y=loss_metrics.sdrs, name='SDR',
-            hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
-        # SIR
-        dict(
-            x=loss_metrics.time, y=loss_metrics.sirs, name='SIR',
-            hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
-        # SAR
-        dict(
-            x=loss_metrics.time, y=loss_metrics.sars, name='SAR',
-            hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
-    ]
-    layout2 = dict(
-        showlegend=True,
-        legend=dict(orientation='h', y=1.05, bgcolor='rgba(0,0,0,0)'),
-        margin=dict(r=30, b=40, l=50, t=50),
-        font=dict(family='Bell Gothic Std'),
-        xaxis=dict(autorange=True, title='Training samples'),
-        yaxis=dict(autorange=True, title='dB'),
-        yaxis2=dict(autorange=True, title='STOI', overlaying='y', side='right'),
-        title=win[1]
-    )
-    vis._send(dict(data=data2, layout=layout2, win=win[1], eid=eid))
+    if loss.metrics.bss:
+        # BSS_EVAL plots
+        data2 = [
+            # SDR
+            dict(
+                x=loss_metrics.time, y=loss_metrics.sdrs, name='SDR',
+                hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
+            # SIR
+            dict(
+                x=loss_metrics.time, y=loss_metrics.sirs, name='SIR',
+                hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
+            # SAR
+            dict(
+                x=loss_metrics.time, y=loss_metrics.sars, name='SAR',
+                hoverinfo='name+y+lines', line=dict( width=1), mode='lines', type='scatter'),
+        ]
+        layout2 = dict(
+            showlegend=True,
+            legend=dict(orientation='h', y=1.05, bgcolor='rgba(0,0,0,0)'),
+            margin=dict(r=30, b=40, l=50, t=50),
+            font=dict(family='Bell Gothic Std'),
+            xaxis=dict(autorange=True, title='Training samples'),
+            yaxis=dict(autorange=True, title='dB'),
+            yaxis2=dict(autorange=True, title='STOI', overlaying='y', side='right'),
+            title=win[1]
+        )
+        vis._send(dict(data=data2, layout=layout2, win=win[1], eid=eid))
