@@ -40,8 +40,8 @@ def make_mixture_set(hop=256, toy=False):
         interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0']#, 'dr1/mrws0',
         #    'dr1/mwad0', 'dr1/mwar0']
         train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
-        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop, max_length=16000)
-        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop, max_length=16000)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop, max_length=32000)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop, max_length=32000)
     return trainset, valset
 
 def make_data(batchsize, hop=256, toy=False):
