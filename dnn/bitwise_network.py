@@ -16,7 +16,7 @@ from dnn.binary_layers import *
 import visdom
 import argparse
 
-def make_mixture_set(hop=256, toy=False):
+def make_mixture_set(hop=256, toy=False, max_length=32000):
     speaker_path = '/media/data/timit-wav/train'
     targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
         'dr1/fdaw0', 'dr1/fjsp0'] #,'dr1/fsjk1', 'dr1/fvmh0',
@@ -34,14 +34,18 @@ def make_mixture_set(hop=256, toy=False):
                          'n59.wav', # jungle?
                          ]
         train_noises, val_noises = get_noise_files(noise_path, interferences)
-        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop)
-        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
+            max_length=max_length)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
+            max_length=max_length)
     else:
         interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0']#, 'dr1/mrws0',
         #    'dr1/mwad0', 'dr1/mwar0']
         train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
-        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop, max_length=16000)
-        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop, max_length=16000)
+        trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
+            max_length=max_length)
+        valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
+            max_length=max_length)
     return trainset, valset
 
 def make_data(batchsize, hop=256, toy=False):
@@ -59,7 +63,7 @@ class BitwiseNetwork(nn.Module):
     '''
     Adaptive transform network inspired by Minje Kim
     '''
-    def __init__(self, kernel_size=1024, stride=256, in_channels=1,
+    def __init__(self, kernel_size=512, stride=128, in_channels=1,
         out_channels=256, combine_hidden=8, fc_sizes = [], dropout=0,
         sparsity=95, adapt=True, autoencode=False, groups=1):
         super(BitwiseNetwork, self).__init__()
