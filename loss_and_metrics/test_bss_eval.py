@@ -3,36 +3,6 @@ import torch
 import numpy as np
 from bss_eval import *
 
-def bss_eval_test( sep, sources, i=0):
-    # Current target
-    from numpy import dot, linalg, log10
-    min_len = min([len(sep), len(sources[i])])
-    sources = sources[:,:min_len]
-    sep = sep[:min_len]
-    target = sources[i]
-
-    # Target contribution
-    s_target = target * dot( target, sep.T) / dot( target, target.T)
-
-    # Interference contribution
-    pse = dot( dot( sources, sep.T), \
-    linalg.inv( dot( sources, sources.T))).T.dot( sources)
-    e_interf = pse - s_target
-
-    # Artifact contribution
-    e_artif= sep - pse;
-
-    # Interference + artifacts contribution
-    e_total = e_interf + e_artif;
-
-    # Computation of the log energy ratios
-    sdr = 10*log10( sum( s_target**2) / sum( e_total**2));
-    sir = 10*log10( sum( s_target**2) / sum( e_interf**2));
-    sar = 10*log10( sum( (s_target + e_interf)**2) / sum( e_artif**2));
-
-    # Done!
-    return BSSMetrics(sdr, sir, sar)
-
 class TestBssEval(unittest.TestCase):
     def setUp(self):
         # Create dataset

@@ -103,6 +103,35 @@ def bss_eval_batch(preds, source_tensor, target_idx=0):
         metrics.append(metric)
     return metrics
 
+def bss_eval_np(sep, sources, i=0):
+    # Current target
+    min_len = min([len(sep), len(sources[i])])
+    sources = sources[:,:min_len]
+    sep = sep[:min_len]
+    target = sources[i]
+
+    # Target contribution
+    s_target = target * np.dot( target, sep.T) / np.dot( target, target.T)
+
+    # Interference contribution
+    pse = np.dot(np.dot( sources, sep.T), \
+    np.linalg.inv(np.dot( sources, sources.T))).T.np.dot( sources)
+    e_interf = pse - s_target
+
+    # Artifact contribution
+    e_artif= sep - pse;
+
+    # Interference + artifacts contribution
+    e_total = e_interf + e_artif;
+
+    # Computation of the log energy ratios
+    sdr = 10*np.log10( sum( s_target**2) / sum( e_total**2));
+    sir = 10*np.log10( sum( s_target**2) / sum( e_interf**2));
+    sar = 10*np.log10( sum( (s_target + e_interf)**2) / sum( e_artif**2));
+
+    # Done!
+    return BSSMetrics(sdr, sir, sar)
+
 class LossMetrics():
     '''
     Data struct that keeps track of all losses and metrics during the training process
