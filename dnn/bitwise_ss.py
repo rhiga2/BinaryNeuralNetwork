@@ -1,10 +1,13 @@
+import sys , os
+sys.path.append('../')
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import math
 import numpy as np
-from datasets.make_quantized_data import *
+from datasets.binary_data import *
 from datasets.quantized_data import *
 from datasets.two_source_mixture import *
 from loss_and_metrics.sepcosts import *
@@ -183,3 +186,6 @@ class BitwiseNetwork(nn.Module):
                 lr *= args.lr_decay
                 optimizer = optim.Adam(model.parameters(), lr=lr,
                     weight_decay=args.weight_decay)
+
+if __name__ == '__main__':
+    main()

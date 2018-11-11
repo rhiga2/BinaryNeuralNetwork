@@ -140,7 +140,7 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), aut
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix).to(device=device, dtype=dtype)
+            mix = quantizer(mix).to(device=device, dtype=dtype) / 255
             target = quantizer(target).to(device=device, dtype=torch.long)
         if transform:
             mix = transform(mix)
@@ -164,7 +164,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
         if autoencode:
             mix = target
         if quantizer:
-            mix = quantizer(mix).to(device=device, dtype=dtype)
+            mix = quantizer(mix).to(device=device, dtype=dtype) / 255
             target = quantizer(target).to(device=device, dtype=torch.long)
         if transform:
             mix = transform(mix)

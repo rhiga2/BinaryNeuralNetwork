@@ -4,28 +4,29 @@ sys.path.append('../')
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from dataset.make_data import *
-from dataset.quantized_data import *
+from datasets.make_data import *
+from datasets.quantized_data import *
 import argparse
 
 def make_binary_mask(x):
     return x > 0
 
 def quantize_and_disperse(mix_mag, quantizer, disperser):
-    mix_mag = torch.FloatTensor(mix_mag / np.abs(mix_mag)).unsqueeze(0)
+    mix_mag = torch.FloatTensor(mix_mag / np.max(np.abs(mix_mag))).unsqueeze(0)
     qmag = quantizer(mix_mag)
-    channels, frames = qmag.size()
+    _, channels, frames = qmag.size()
     bmag = disperser(qmag.view(1, -1))
     bmag = bmag.squeeze(0).contiguous()
     bmag = torch.cat(torch.chunk(bmag, channels, dim=1), dim=0)
     bmag = bmag.numpy()
     return bmag
 
-def accumulate(x, disperser):
+def accumulate(x, quantizer, disperser):
     x = torch.FloatTensor(x)
     channels, frames =  x.size()
-    x = torch.cat(torch.chunk(x, channels // disperser.num_bits, dim=0), dim=1)
+    x = torch.cat(torch.chunk(x, channels // disperser.num_bits, dim=0), dim=1).unsqueeze(0)
     x = disperser.inverse(x).view(-1, frames)
+    x = quantizer.inverse(x)
     return x.numpy()
 
 def stft(x, window='hann', nperseg=1024, noverlap=768):
@@ -67,7 +68,7 @@ def main():
 
     quantizer = Quantizer(min=-1, delta=2/2**(args.num_bits),
         num_bits=args.num_bits, use_mu=True)
-    disperser = Disperser(num_bits)
+    disperser = Disperser(args.num_bits)
     trainset, valset = make_mixture_set(args.toy)
     print('Samples in Trainset: ', len(trainset))
     print('Samples in Valset: ', len(valset))
@@ -75,8 +76,6 @@ def main():
     if not args.toy:
         train_dir = dataset_dir + 'train/'
         val_dir = dataset_dir + 'val/'
-        if args.denoising:
-            mode = 'denoising'
     else:
         train_dir = dataset_dir + 'toy_train/'
         val_dir = dataset_dir + 'toy_val/'
@@ -111,3 +110,6 @@ def main():
             bmag=bmag,
             ibm=ibm
         )
+
+if __name__ == '__main__':
+    main()

@@ -229,7 +229,7 @@ class BitwiseLinearV2(BitwiseAbstractClassV2):
         self.output_size = output_size
         self.requires_grad = requires_grad
         self.filter = init_weight((output_size, input_size), requires_grad)
-        self.gate = torch.ones((output_size, input_size))
+        self.gate = torch.rand((output_size, input_size))
         self.gate = nn.Parameter(self.gate, requires_grad)
         self.mode = 'real'
 
@@ -253,7 +253,7 @@ class BitwiseConv1dV2(BitwiseAbstractClassV2):
         self.requires_grad = requires_grad
         weight_size = (output_channels, input_channels//self.groups, kernel_size)
         self.filter = init_weight(weight_size, requires_grad)
-        self.gate = torch.ones((output_size, input_size))
+        self.gate = torch.rand(weight_size)
         self.gate = nn.Parameter(self.gate, requires_grad)
         self.mode = 'real'
 
@@ -280,7 +280,7 @@ class BitwiseConvTranspose1dV2(BitwiseAbstractClassV2):
         self.requires_grad = requires_grad
         weight_size = (input_channels, output_channels // groups, kernel_size)
         self.filter = init_weight(weight_size, requires_grad)
-        self.gate = torch.ones((output_size, input_size))
+        self.gate = torch.rand(weight_size)
         self.gate = nn.Parameter(self.gate, requires_grad)
         self.mode = 'real'
 
