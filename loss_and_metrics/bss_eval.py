@@ -154,7 +154,7 @@ def train_plot(vis, loss_metrics, eid=None, win=[None, None]):
     )
     vis._send(dict(data=data1, layout=layout1, win=win[0], eid=eid))
 
-    if loss.metrics.bss:
+    if loss_metrics.bss:
         # BSS_EVAL plots
         data2 = [
             # SDR
