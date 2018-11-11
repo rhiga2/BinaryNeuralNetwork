@@ -44,7 +44,7 @@ def istft(mag, phase, window='hann', nperseg=1024, noverlap=768):
     x = signal.istft(stft_x, window=window, nperseg=nperseg, noverlap=noverlap)[1]
     return x
 
-class make_binary_data(batchsize, toy=False):
+def make_binary_data(batchsize, toy=False):
     if toy:
         trainset = BinaryDataset('/media/data/binary_audio/toy_train')
         valset = BinaryDataset('/media/data/binary_audio/toy_val')
