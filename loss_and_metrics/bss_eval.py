@@ -115,7 +115,7 @@ def bss_eval_np(sep, sources, i=0):
 
     # Interference contribution
     pse = np.dot(np.dot( sources, sep.T), \
-    np.linalg.inv(np.dot( sources, sources.T))).T.np.dot( sources)
+    np.linalg.inv(np.dot( sources, sources.T))).T.dot( sources)
     e_interf = pse - s_target
 
     # Artifact contribution

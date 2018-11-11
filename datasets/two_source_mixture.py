@@ -94,7 +94,6 @@ def collate_and_trim(batch, axis=0, hop=1, dtype=torch.float):
     keys = list(batch[0].keys())
     outbatch = {key: [] for key in keys}
     min_length = min([sample[keys[0]].shape[axis] for sample in batch])
-    min_length = min_length // hop * hop
     for sample in batch:
         length = sample[keys[0]].shape[axis]
         start = (length - min_length) // 2

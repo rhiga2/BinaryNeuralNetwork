@@ -17,7 +17,7 @@ def main():
     quantizer = Quantizer(min=-1, delta=2/2**(args.num_bits),
         num_bits=args.num_bits, use_mu=True)
     disperser = Disperser(args.num_bits)
-    trainset, valset = make_mixture_set(args.toy)
+    trainset, valset = make_mixture_set(toy=args.toy)
     print('Samples in Trainset: ', len(trainset))
     print('Samples in Valset: ', len(valset))
     dataset_dir = '/media/data/binary_audio/'

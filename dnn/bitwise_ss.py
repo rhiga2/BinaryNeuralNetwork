@@ -16,11 +16,10 @@ from dnn.binary_layers import *
 import visdom
 import argparse
 
-class BitwiseNetwork(nn.Module):
-    def __init__(self, in_size=2048, out_size=512, fc_sizes=[], dropout=0, sparsity=95):
-        super(BitwiseNetwork, self).__init__()
+class BitwiseMLP(nn.Module):
+    def __init__(self, in_size=2052, out_size=512, fc_sizes=[], dropout=0, sparsity=95):
+        super(BitwiseMLP, self).__init__()
         self.activation = torch.tanh
-        self.batchnorm = nn.BatchNorm1d(kernel_size)
         self.in_size = in_size
         self.out_size = out_size
 
@@ -34,9 +33,9 @@ class BitwiseNetwork(nn.Module):
         for i, out_size in enumerate(fc_sizes):
             self.linear_list.append(BitwiseLinear(in_size, out_size))
             in_size = out_size
-            self.scaler_list.append(nn.BatchNorm1d(out_size))
+            self.bn_list.append(nn.BatchNorm1d(out_size))
             if i < self.num_layers - 1:
-                self.dropout_list.append(nn.Dropout(dropout))
+                self.dropout_list.append(nn.Dropout(dropout)) 
 
         self.sparsity = sparsity
         self.mode = 'real'
@@ -51,17 +50,16 @@ class BitwiseNetwork(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         batch, channels, time = x.size()
-        x = x.permute(0, 2, 1).contiguous.view(-1, channels)
+        x = x.permute(0, 2, 1).contiguous().view(-1, channels)
 
         for i in range(self.num_layers):
-            h = self.linear_list[i](h)
-            h = self.bn_list[i](h)
+            x = self.linear_list[i](x)
+            x = self.bn_list[i](x)
             if i < self.num_layers - 1:
-                h = self.activation(h)
-                h = self.dropout_list[i](h)
-        h = (self.output_transform(h) + 1) / 2
+                x = self.activation(x)
+                x = self.dropout_list[i](x)
 
-        mask = h.view(-1, time, self.out_size).permute(0, 2, 1)
+        x = x.view(-1, time, self.out_size).permute(0, 2, 1)
         return x
 
     def noisy(self):
@@ -70,8 +68,6 @@ class BitwiseNetwork(nn.Module):
         '''
         self.mode = 'noisy'
         self.activation = bitwise_activation
-        self.conv1.noisy()
-        self.conv1_transpose.noisy()
         for layer in self.linear_list:
             layer.noisy()
 
@@ -101,29 +97,30 @@ class BitwiseNetwork(nn.Module):
             layer.update_beta(sparsity=self.sparsity)
 
 
-    def eval_loss(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
-        dtype=torch.float, train=True):
-        running_loss = 0
-        for batch in dl:
-            if model.training:
-                optimizer.zero_grad()
-            mix, target = batch['mixture'], batch['interference']
-            mix = mix.to(device=device)
-            estimate = model(mix)
-            reconst_loss = loss(estimate, target)
-            running_loss += reconst_loss.item() * mix.size(0)
-            if model.training:
-                reconst_loss.backward()
-                optimizer.step()
-        return running_loss / len(dl.dataset)
+def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
+    dtype=torch.float, train=True):
+    running_loss = 0
+    for batch in dl:
+        if optimizer:
+            optimizer.zero_grad()
+        mix = batch['bmag'].to(device=device) 
+        target  = batch['ibm'].to(device=device)
+        mix = mix.to(device=device)
+        estimate = model(mix)
+        reconst_loss = loss(estimate, target)
+        running_loss += reconst_loss.item() * mix.size(0)
+        if optimizer:
+            reconst_loss.backward()
+            optimizer.step()
+    return running_loss / len(dl.dataset)
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
                         help='Number of epochs')
-    parser.add_argument('--batchsize', '-b', type=int, default=8,
+    parser.add_argument('--batchsize', '-b', type=int, default=16,
                         help='Training batch size')
-    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
@@ -146,8 +143,8 @@ def main():
 
     # Make model and dataset
     train_dl, val_dl = make_binary_data(args.batchsize, toy=args.toy)
-    model = BitwiseNetwork(in_size=2048, out_size=512, fc_sizes=[2048, 2048],
-        dropout=args.dropout, sparsity=args.sparsity, autoencode=args.autoencode)
+    model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
+        dropout=args.dropout, sparsity=args.sparsity)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
@@ -161,7 +158,7 @@ def main():
     # Initialize loss function
     loss = nn.BCEWithLogitsLoss()
     loss = loss.to(device=device)
-    metrics = LossMetrics()
+    loss_metrics = LossMetrics()
 
     # Initialize optimizer
     vis = visdom.Visdom(port=5800)
@@ -172,14 +169,14 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
-        train_loss = train(model, train_dl, optimizer, loss=loss, device=device)
+        train_loss = evaluate(model, train_dl, optimizer, loss=loss, device=device)
 
         if epoch % args.output_period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
-            val_loss = val(model, val_dl, loss=loss, device=device)
+            val_loss = evaluate(model, val_dl, loss=loss, device=device)
             print('Val Cost: ', val_loss)
-            metrics.update(train_loss, val_loss,
+            loss_metrics.update(train_loss, val_loss,
                 output_period=args.output_period)
             train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', None])
             torch.save(model.state_dict(), '../models/' + args.model_file)
