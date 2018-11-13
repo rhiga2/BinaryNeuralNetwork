@@ -1,60 +1,33 @@
-import numpy as np
+import sys , os
+sys.path.append('../')
+
 import torch
-import glob
-import scipy.signal as signal
-from sklearn.cluster import KMeans
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+from datasets.make_data import *
+from datasets.quantized_data import *
 import argparse
 
-def uniform_qlevels(x, levels=16):
-    '''
-    x is flattened array of numbers
-    '''
-    xmax = np.max(x)
-    xmin = np.min(x)
-    centers = (xmax - xmin)*(np.arange(levels) + 0.5)/levels + xmin
-    bins = get_bins(centers)
-    return centers, bins
+def make_binary_mask(x):
+    return x > 0
 
-def kmeans_qlevels(x, levels=16):
-    '''
-    x is flattened array of numbers
-    '''
-    km = KMeans(n_clusters=levels)
-    km.fit(np.expand_dims(x, axis=1))
-    centers = np.sort(km.cluster_centers_.reshape(-1))
-    bins = get_bins(centers)
-    return centers, bins
+def quantize_and_disperse(mix_mag, quantizer, disperser):
+    mix_mag = torch.FloatTensor(mix_mag / np.max(np.abs(mix_mag))).unsqueeze(0)
+    qmag = quantizer(mix_mag)
+    _, channels, frames = qmag.size()
+    bmag = disperser(qmag.view(1, -1))
+    bmag = bmag.squeeze(0).contiguous()
+    bmag = torch.cat(torch.chunk(bmag, channels, dim=1), dim=0)
+    bmag = bmag.numpy()
+    return bmag
 
-def get_bins(centers):
-    return (centers[:-1] + centers[1:])/2
-
-def bucketize(x, bins):
-    bucket_x = torch.zeros(x.size(), dtype=torch.uint8)
-    for bin in bins:
-        bucket_x[x >= bin] += 1
-    return bucket_x
-
-def binarize_stft(x, bins, num_bits=4):
-    '''
-    x is shape (F, T)
-    F = frequency range
-    T = time range
-    '''
-    assert len(bins)+1 == 2**num_bits
-    digit_x = np.digitize(x, bins).astype(np.uint8)
-    binary_x = []
-    for i in range(digit_x.shape[0]):
-        bits = np.unpackbits(np.expand_dims(digit_x[i], axis=0), axis=0)[-num_bits:]
-        binary_x.append(bits)
-    return np.concatenate(binary_x, axis=0)
-
-def quantize(x, bins, centers):
-    digit_x = np.digitize(x, bins).astype(np.int)
-    qx = centers[digit_x] # qx = quantized x
-    return qx
-
-def make_binary_mask(premask, dtype=np.float):
-    return np.array(premask > 0, dtype=dtype)
+def accumulate(x, quantizer, disperser):
+    x = torch.FloatTensor(x)
+    channels, frames =  x.size()
+    x = torch.cat(torch.chunk(x, channels // disperser.num_bits, dim=0), dim=1).unsqueeze(0)
+    x = disperser.inverse(x).view(-1, frames)
+    x = quantizer.inverse(x)
+    return x.numpy()
 
 def stft(x, window='hann', nperseg=1024, noverlap=768):
     stft_x = signal.stft(x,
@@ -71,6 +44,19 @@ def istft(mag, phase, window='hann', nperseg=1024, noverlap=768):
     x = signal.istft(stft_x, window=window, nperseg=nperseg, noverlap=noverlap)[1]
     return x
 
+def make_binary_data(batchsize, toy=False):
+    if toy:
+        trainset = BinaryDataset('/media/data/binary_audio/toy_train')
+        valset = BinaryDataset('/media/data/binary_audio/toy_val')
+    else:
+        trainset = BinaryDataset('/media/data/binary_audio/train')
+        valset = BinaryDataset('/media/data/binary_audio/val')
+    collate = lambda x : collate_and_trim(x, axis=1)
+    train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
+        collate_fn=collate)
+    val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
+    return train_dl, val_dl
+
 class BinaryDataset():
     def __init__(self, data_dir):
         self.data_dir = data_dir
@@ -86,6 +72,3 @@ class BinaryDataset():
 
     def __len__(self):
         return self.length
-
-def crop_length(x, hop):
-    return x[:len(x)//hop*hop]

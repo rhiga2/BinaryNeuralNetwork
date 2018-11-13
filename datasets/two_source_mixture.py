@@ -7,17 +7,16 @@ from torch.utils.data import Dataset
 import scipy.signal as signal
 import random
 import soundfile as sf
-import librosa
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000, snr=0,
-        random_start=True, transform=None, hop=None, length=None, random_shift=False):
+        random_start=True, transform=None, hop=None, max_length=None, random_shift=False):
         self.fs = fs
         self.snr = np.power(10, snr/20)
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
         self.hop = hop
-        slef.length = length
+        self.max_length = max_length
 
     def __len__(self):
         return len(self.mixes)
@@ -31,14 +30,21 @@ class TwoSourceMixtureDataset(Dataset):
         if self.hop:
             sig = sig[:len(sig)//self.hop*self.hop]
 
-        inter, _ = sf.read(interf, frames=sig.shape[0], fill_value=0)
+        inter, _ = sf.read(interf, frames=len(sig), fill_value=0)
         if len(inter.shape) != 1:
             inter = np.mean(inter, axis=1)
 
+        if self.max_length:
+            if len(sig) > self.max_length:
+                start = np.random.randint(len(sig) - self.max_length)
+                sig = sig[start:self.max_length+start]
+                inter = inter[:self.max_length]
+
         # normalize and mix signals
-        sig = sig / np.std(sig)
-        inter = inter / np.std(inter)
+        sig = sig / np.max(np.abs(sig))
+        inter = inter / np.max(np.abs(inter))
         mix = sig + (1 / self.snr) * inter
+        mix = mix / np.max(np.abs(mix))
         sample = {'mixture': mix, 'target': sig, 'interference': inter}
 
         if self.transform:
@@ -88,7 +94,6 @@ def collate_and_trim(batch, axis=0, hop=1, dtype=torch.float):
     keys = list(batch[0].keys())
     outbatch = {key: [] for key in keys}
     min_length = min([sample[keys[0]].shape[axis] for sample in batch])
-    min_length = min_length // hop * hop
     for sample in batch:
         length = sample[keys[0]].shape[axis]
         start = (length - min_length) // 2
