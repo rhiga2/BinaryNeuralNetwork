@@ -35,7 +35,7 @@ class BitwiseMLP(nn.Module):
             in_size = out_size
             self.bn_list.append(nn.BatchNorm1d(out_size))
             if i < self.num_layers - 1:
-                self.dropout_list.append(nn.Dropout(dropout)) 
+                self.dropout_list.append(nn.Dropout(dropout))
 
         self.sparsity = sparsity
         self.mode = 'real'
@@ -80,9 +80,11 @@ class BitwiseMLP(nn.Module):
         for layer in self.linear_list:
             layer.inference()
         for bn in self.bn_list:
-            bias = torch.round(- bn.weight * bn.running_mean + bn.bias) + 0.5
+            sign_weight = torch.sign(bn.weight)
+            bias = -sign_weight * bn.running_mean
+            bias += bn.bias * bn.running_var / torch.abs(bn.weight)
             bn.bias = nn.Parameter(bias, requires_grad=False)
-            bn.weight = nn.Parameter(torch.sign(bn.weight), requires_grad=False)
+            bn.weight = nn.Parameter(sign_weight, requires_grad=False)
             bn.running_var = torch.ones_like(running_var)
             bn_running_mean = torch.zeros_like(running_mean)
 
@@ -103,7 +105,7 @@ def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cp
     for batch in dl:
         if optimizer:
             optimizer.zero_grad()
-        mix = batch['bmag'].to(device=device) 
+        mix = batch['bmag'].to(device=device)
         target  = batch['ibm'].to(device=device)
         mix = mix.to(device=device)
         estimate = model(mix)
