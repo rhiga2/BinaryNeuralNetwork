@@ -17,11 +17,13 @@ import visdom
 import argparse
 
 class BitwiseMLP(nn.Module):
-    def __init__(self, in_size=2052, out_size=512, fc_sizes=[], dropout=0, sparsity=95):
+    def __init__(self, in_size=2052, out_size=512, fc_sizes=[], dropout=0,
+        sparsity=95, version='V1'):
         super(BitwiseMLP, self).__init__()
         self.activation = torch.tanh
         self.in_size = in_size
         self.out_size = out_size
+        self.version = version
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
@@ -31,7 +33,10 @@ class BitwiseMLP(nn.Module):
         self.bn_list = nn.ModuleList()
         self.dropout_list = nn.ModuleList()
         for i, out_size in enumerate(fc_sizes):
-            self.linear_list.append(BitwiseLinear(in_size, out_size))
+            if version == 'V1':
+                self.linear_list.append(BitwiseLinear(in_size, out_size))
+            else:
+                self.linear_list.append(BitwiseLinearV2(in_size, out_size))
             in_size = out_size
             self.bn_list.append(nn.BatchNorm1d(out_size))
             if i < self.num_layers - 1:
@@ -92,7 +97,7 @@ class BitwiseMLP(nn.Module):
         '''
         Updates sparsity parameter beta
         '''
-        if self.mode != 'noisy':
+        if self.mode != 'noisy' or self.version != 'V1':
             return
 
         for layer in self.linear_list:
@@ -133,6 +138,7 @@ def main():
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     parser.add_argument('--toy', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
+    parser.add_argument('--version', '-v', default='V1')
     args = parser.parse_args()
 
     # Initialize device
@@ -146,7 +152,7 @@ def main():
     # Make model and dataset
     train_dl, val_dl = make_binary_data(args.batchsize, toy=args.toy)
     model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
-        dropout=args.dropout, sparsity=args.sparsity)
+        dropout=args.dropout, sparsity=args.sparsity, version=args.version)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
