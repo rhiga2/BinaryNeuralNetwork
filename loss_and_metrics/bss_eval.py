@@ -16,6 +16,9 @@ class BSSMetricsList:
         self.sirs = []
         self.sars = []
 
+    def __len__():
+        return len(self.sdrs)
+
     def append(self, metric):
         self.sdrs.append(metric.sdr)
         self.sirs.append(metric.sir)
