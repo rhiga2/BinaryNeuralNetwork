@@ -48,14 +48,16 @@ class BitwiseMLP(nn.Module):
     def forward(self, x):
         '''
         Bitwise neural network forward
-        * Input is a tensor of shape (batch, channels, time)
-        * Output is a tensor of shape (batch, channels, time)
+        * Input is a tensor of shape (batch, channels, time) or (batch, channels)
+        * Output is a tensor of shape (batch, channels, time) or (batch, channels)
             - batch is the batch size
             - time is the sequence length
             - channels is the number of input channels = num bits in qad
         '''
-        batch, channels, time = x.size()
-        x = x.permute(0, 2, 1).contiguous().view(-1, channels)
+        two_d = len(x.size()) <= 2
+        if not two_d:
+            batch, channels, time = x.size()
+            x = x.permute(0, 2, 1).contiguous().view(-1, channels)
 
         for i in range(self.num_layers):
             x = self.linear_list[i](x)
@@ -64,7 +66,8 @@ class BitwiseMLP(nn.Module):
                 x = self.activation(x)
                 x = self.dropout_list[i](x)
 
-        x = x.view(-1, time, self.out_size).permute(0, 2, 1)
+        if not two_d:
+            x = x.view(-1, time, self.out_size).permute(0, 2, 1)
         return x
 
     def noisy(self):
@@ -113,11 +116,13 @@ def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cp
         mix = batch['bmag'].to(device=device)
         target  = batch['ibm'].to(device=device)
         mix = mix.to(device=device)
-        estimate = model(mix)
-        reconst_loss = loss(estimate, target)
-        running_loss += reconst_loss.item() * mix.size(0)
+        batch_size, channels, time = mix.size()
+        mix = mix.permute(0, 2, 1).contiguous().view(-1, channels)
+        estimate = model(input_mix)
+        cost = loss(estimate, target)
+        running_loss += cost.item() * batch_size
         if optimizer:
-            reconst_loss.backward()
+            cost.backward()
             optimizer.step()
     return running_loss / len(dl.dataset)
 

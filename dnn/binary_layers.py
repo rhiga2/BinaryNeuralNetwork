@@ -212,7 +212,7 @@ class BitwiseAbstractClassV2(nn.Module):
         self.mode = 'noisy'
         self.filter = nn.Parameter(torch.tanh(self.filter),
             requires_grad=self.requires_grad)
-        self.gate = nn.Parameter(torch.sigmoid(self.gate),
+        self.gate = nn.Parameter(torch.tanh(self.gate),
             requires_grad=self.requires_grad)
 
     def inference(self):
