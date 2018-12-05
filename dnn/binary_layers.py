@@ -47,10 +47,10 @@ bitwise_activation = BitwiseActivation.apply
 bitwise_params = BitwiseParams.apply
 binarize = Binarize.apply
 
-def init_weight(size, requires_grad=True):
+def init_weight(size, requires_grad=True, scale=1):
     w = torch.empty(size)
     nn.init.xavier_uniform_(w)
-    w = nn.Parameter(w, requires_grad=requires_grad)
+    w = nn.Parameter(scale*w, requires_grad=requires_grad)
     return w
 
 def init_bias(size, requires_grad=True):
@@ -74,13 +74,13 @@ def convert_param(param, beta=0, mode='real'):
         return bitwise_params(param, beta)
     return param
 
-def convert_paramV2(filter, gate, mode='real'):
+def convert_paramV2(kernel, gate, mode='real'):
     if mode == 'real':
-        return torch.tanh(filter) * torch.sigmoid(gate)
-    elif model == 'noisy':
-        return bitwise_activation(filter) * (bitwise_activation(gate) + 1)/2
+        return torch.tanh(kernel) * torch.sigmoid(gate)
+    elif mode == 'noisy':
+        return bitwise_activation(kernel) * (bitwise_activation(gate) + 1)/2
     else:
-        return filter * gate
+        return kernel * gate
 
 class BitwiseAbstractClass(nn.Module):
     @abstractmethod
@@ -200,7 +200,7 @@ class BitwiseAbstractClassV2(nn.Module):
         self.mode = 'noisy'
         self.filter = nn.Parameter(torch.tanh(self.filter),
             requires_grad=self.requires_grad)
-        self.gate = nn.Parameter(torch.tanh(self.gate),
+        self.gate = nn.Parameter(self.gate,
             requires_grad=self.requires_grad)
 
     def inference(self):
@@ -217,8 +217,7 @@ class BitwiseLinearV2(BitwiseAbstractClassV2):
         self.output_size = output_size
         self.requires_grad = requires_grad
         self.filter = init_weight((output_size, input_size), requires_grad)
-        self.gate = torch.rand((output_size, input_size))
-        self.gate = nn.Parameter(self.gate, requires_grad)
+        self.gate = init_weight((output_size, input_size), requires_grad)
         self.mode = 'real'
 
     def forward(self, x):

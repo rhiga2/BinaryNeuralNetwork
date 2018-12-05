@@ -54,7 +54,7 @@ class BitwiseMLP(nn.Module):
             - time is the sequence length
             - channels is the number of input channels = num bits in qad
         '''
-        two_d = len(x.size()) <= 2
+        two_d = len(x.size()) == 2
         if not two_d:
             batch, channels, time = x.size()
             x = x.permute(0, 2, 1).contiguous().view(-1, channels)
@@ -116,11 +116,9 @@ def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cp
         mix = batch['bmag'].to(device=device)
         target  = batch['ibm'].to(device=device)
         mix = mix.to(device=device)
-        batch_size, channels, time = mix.size()
-        mix = mix.permute(0, 2, 1).contiguous().view(-1, channels)
-        estimate = model(input_mix)
+        estimate = model(mix)
         cost = loss(estimate, target)
-        running_loss += cost.item() * batch_size
+        running_loss += cost.item() * mix.size(0)
         if optimizer:
             cost.backward()
             optimizer.step()
