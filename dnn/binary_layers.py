@@ -94,14 +94,14 @@ class BitwiseAbstractClass(nn.Module):
                 requires_grad=self.requires_grad)
 
     def get_effective_weight(self):
-        if self.real:
+        if self.mode == 'real':
             w = torch.tanh(self.weight)
             if self.use_gate:
-                w *= torch.sigmoid(self.gate)
-        elif self.noisy:
+                w = w*torch.sigmoid(self.gate)
+        elif self.mode == 'noisy':
             w = bitwise_params(param, self.beta)
             if self.use_gate:
-                w *= torch.sigmoid(self.gate)
+                w = w*(bitwise_params(param, self.beta)+1)/2
         return w
 
 class BitwiseLinear(BitwiseAbstractClass):
@@ -125,7 +125,8 @@ class BitwiseLinear(BitwiseAbstractClass):
         return F.linear(x, w, None)
 
     def __repr__(self):
-        return 'BitwiseLinear(%d, %d)' % (self.input_size, self.output_size)
+        return 'BitwiseLinear(%d, %d, requires_grad=%r, use_gate=%r)' % \
+        (self.input_size, self.output_size, self.requires_grad, self.use_gate)
 
 class BitwiseConv1d(BitwiseAbstractClass):
     '''
@@ -143,6 +144,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
         self.requires_grad = requires_grad
         weight_size = (output_channels, input_channels//self.groups, kernel_size)
         self.weight = init_weight(weight_size, requires_grad)
+        self.use_gate = use_gate
         if self.use_gate:
             self.gate = init_weight(weight_size, requires_grad)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
@@ -165,7 +167,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
     Issue: Almost copy paste of BitwiseConv1d. Parameter dimensions may be incorrect
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
-        stride=1, padding=0, groups=1, requires_grad=True):
+        stride=1, padding=0, groups=1, requires_grad=True, use_gate=False):
         super(BitwiseConvTranspose1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -173,7 +175,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
         self.stride = stride
         self.padding = padding
         self.groups = groups
-        self.use_gate = gate
+        self.use_gate = use_gate
         self.requires_grad = requires_grad
         weight_size = (input_channels, output_channels // groups, kernel_size)
         self.weight = init_weight(weight_size, requires_grad)

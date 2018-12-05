@@ -25,9 +25,9 @@ def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cp
         mix = batch['bmag'].to(device=device)
         target  = batch['ibm'].to(device=device)
         mix = mix.to(device=device)
-        mix = flatten(mix)
-        estimate = model(mix)
-        estimate = unflatten(estimate)
+        model_in = flatten(mix)
+        estimate = model(model_in)
+        estimate = unflatten(estimate, mix.size(0), mix.size(2))
         cost = loss(estimate, target)
         running_loss += cost.item() * mix.size(0)
         if optimizer:
@@ -40,8 +40,8 @@ def flatten(x):
     x = x.permute(0, 2, 1).contiguous().view(-1, channels)
     return x
 
-def unflatten(x):
-    x = x.view(-1, time, self.out_size).permute(0, 2, 1)
+def unflatten(x, batch, time):
+    x = x.view(batch, time, -1).permute(0, 2, 1)
     return x
 
 def main():
