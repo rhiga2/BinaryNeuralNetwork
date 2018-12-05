@@ -7,7 +7,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from dnn.binary_layers import *
 
-
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
         sparsity=95, use_gate=False):

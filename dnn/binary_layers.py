@@ -17,6 +17,17 @@ class BitwiseActivation(Function):
         x = ctx.saved_tensors[0]
         return grad_output * (1 - torch.tanh(x)**2)
 
+class SqueezedTanh(Function):
+    @staticmethod
+    def forward(ctx, x, gamma):
+        ctx.save_for_backward(x)
+        return torch.tanh(gamma * x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_tensors[0]
+        return grad_output * (1 - torch.tanh(x)**2), None
+
 class BitwiseParams(Function):
     @staticmethod
     def forward(ctx, x, beta):
@@ -44,6 +55,7 @@ class Binarize(Function):
         return grad_output * (torch.abs(x) <= 1).to(grad_output.dtype)
 
 bitwise_activation = BitwiseActivation.apply
+squeezed_tanh = SqueezedTanh.apply
 bitwise_params = BitwiseParams.apply
 binarize = Binarize.apply
 
