@@ -29,17 +29,6 @@ class BitwiseParams(Function):
         x = ctx.saved_tensors[0]
         return grad_output * (1 - torch.tanh(x)**2), None
 
-class SineActivation(Function):
-    @staticmethod
-    def forward(ctx, x):
-        ctx.save_for_backward(x)
-        return torch.sign(torch.sin(x))
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        x = ctx.saved_tensors[0]
-        return grad_output * torch.cos(x)
-
 class Binarize(Function):
     @staticmethod
     def forward(ctx, x):
@@ -56,7 +45,6 @@ class Binarize(Function):
 
 bitwise_activation = BitwiseActivation.apply
 bitwise_params = BitwiseParams.apply
-sine_activation = SineActivation.apply
 binarize = Binarize.apply
 
 def init_weight(size, requires_grad=True):
