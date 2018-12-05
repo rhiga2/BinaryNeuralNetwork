@@ -37,7 +37,7 @@ def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cp
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
-    parser.add_argument('--epochs', '-e', type=int, default=64,
+    parser.add_argument('--epochs', '-e', type=int, default=32,
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=16,
                         help='Training batch size')
@@ -65,13 +65,13 @@ def main():
 
     # Make model and dataset
     flatten = lambda x : x.view(-1)
-    train_data = datasets.MNIST('~/Data', train=True, transform=transforms.Compose([
-                           transforms.ToTensor(), flatten]))
-    val_data = datasets.MNIST('~/Data', train=False, transform=transforms.Compose([
-                           transforms.ToTensor(), flatten]))
+    train_data = datasets.MNIST('/media/data/MNIST', train=True, transform=transforms.Compose([
+                           transforms.ToTensor(), flatten]), download=True)
+    val_data = datasets.MNIST('/media/data/MNIST', train=False, transform=transforms.Compose([
+                           transforms.ToTensor(), flatten]), download=True)
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
-    model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[2048, 2048],
+    model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[1024, 1024],
         dropout=args.dropout, sparsity=args.sparsity, version=args.version)
     if args.train_noisy:
         print('Noisy Network Training')
@@ -95,7 +95,7 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
-        train_accurac, train_loss = evaluate(model, train_dl, optimizer, loss=loss, device=device)
+        train_accuracy, train_loss = evaluate(model, train_dl, optimizer, loss=loss, device=device)
 
         if epoch % args.output_period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss, train_accuracy)
