@@ -32,26 +32,18 @@ class BitwiseMLP(nn.Module):
     def forward(self, x):
         '''
         Bitwise neural network forward
-        * Input is a tensor of shape (batch, channels, time) or (batch, channels)
-        * Output is a tensor of shape (batch, channels, time) or (batch, channels)
+        * Input is a tensor of shape (batch, channels)
+        * Output is a tensor of shape (batch, channels)
             - batch is the batch size
             - time is the sequence length
             - channels is the number of input channels = num bits in qad
         '''
-        two_d = len(x.size()) == 2
-        if not two_d:
-            batch, channels, time = x.size()
-            x = x.permute(0, 2, 1).contiguous().view(-1, channels)
-
         for i in range(self.num_layers):
             x = self.linear_list[i](x)
             x = self.bn_list[i](x)
             if i < self.num_layers - 1:
                 x = self.activation(x)
                 x = self.dropout_list[i](x)
-
-        if not two_d:
-            x = x.view(-1, time, self.out_size).permute(0, 2, 1)
         return x
 
     def noisy(self):

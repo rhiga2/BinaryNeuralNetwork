@@ -25,13 +25,24 @@ def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cp
         mix = batch['bmag'].to(device=device)
         target  = batch['ibm'].to(device=device)
         mix = mix.to(device=device)
+        mix = flatten(mix)
         estimate = model(mix)
+        estimate = unflatten(estimate)
         cost = loss(estimate, target)
         running_loss += cost.item() * mix.size(0)
         if optimizer:
             cost.backward()
             optimizer.step()
     return running_loss / len(dl.dataset)
+
+def flatten(x):
+    batch, channels, time = x.size()
+    x = x.permute(0, 2, 1).contiguous().view(-1, channels)
+    return x
+
+def unflatten(x):
+    x = x.view(-1, time, self.out_size).permute(0, 2, 1)
+    return x
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
