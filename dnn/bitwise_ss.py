@@ -12,100 +12,9 @@ from datasets.quantized_data import *
 from datasets.two_source_mixture import *
 from loss_and_metrics.sepcosts import *
 from loss_and_metrics.bss_eval import *
-from dnn.binary_layers import *
+from dnn.bitwise_mlp import *
 import visdom
 import argparse
-
-class BitwiseMLP(nn.Module):
-    def __init__(self, in_size=2052, out_size=512, fc_sizes=[], dropout=0,
-        sparsity=95, version='V1'):
-        super(BitwiseMLP, self).__init__()
-        self.activation = torch.tanh
-        self.in_size = in_size
-        self.out_size = out_size
-        self.version = version
-
-        # Initialize linear layers
-        self.num_layers = len(fc_sizes) + 1
-        fc_sizes = fc_sizes + [out_size,]
-        in_size = in_size
-        self.linear_list = nn.ModuleList()
-        self.bn_list = nn.ModuleList()
-        self.dropout_list = nn.ModuleList()
-        for i, out_size in enumerate(fc_sizes):
-            if version == 'V1':
-                self.linear_list.append(BitwiseLinear(in_size, out_size))
-            else:
-                self.linear_list.append(BitwiseLinearV2(in_size, out_size))
-            in_size = out_size
-            self.bn_list.append(nn.BatchNorm1d(out_size))
-            if i < self.num_layers - 1:
-                self.dropout_list.append(nn.Dropout(dropout))
-
-        self.sparsity = sparsity
-        self.mode = 'real'
-
-    def forward(self, x):
-        '''
-        Bitwise neural network forward
-        * Input is a tensor of shape (batch, channels, time) or (batch, channels)
-        * Output is a tensor of shape (batch, channels, time) or (batch, channels)
-            - batch is the batch size
-            - time is the sequence length
-            - channels is the number of input channels = num bits in qad
-        '''
-        two_d = len(x.size()) == 2
-        if not two_d:
-            batch, channels, time = x.size()
-            x = x.permute(0, 2, 1).contiguous().view(-1, channels)
-
-        for i in range(self.num_layers):
-            x = self.linear_list[i](x)
-            x = self.bn_list[i](x)
-            if i < self.num_layers - 1:
-                x = self.activation(x)
-                x = self.dropout_list[i](x)
-
-        if not two_d:
-            x = x.view(-1, time, self.out_size).permute(0, 2, 1)
-        return x
-
-    def noisy(self):
-        '''
-        Converts real network to noisy training network
-        '''
-        self.mode = 'noisy'
-        self.activation = bitwise_activation
-        for layer in self.linear_list:
-            layer.noisy()
-
-    def inference(self):
-        '''
-        Converts noisy training network to bitwise network
-        '''
-        self.mode = 'inference'
-        self.activation = bitwise_activation
-        for layer in self.linear_list:
-            layer.inference()
-        for bn in self.bn_list:
-            sign_weight = torch.sign(bn.weight)
-            bias = -sign_weight * bn.running_mean
-            bias += bn.bias * bn.running_var / torch.abs(bn.weight)
-            bn.bias = nn.Parameter(bias, requires_grad=False)
-            bn.weight = nn.Parameter(sign_weight, requires_grad=False)
-            bn.running_var = torch.ones_like(running_var)
-            bn_running_mean = torch.zeros_like(running_mean)
-
-    def update_betas(self):
-        '''
-        Updates sparsity parameter beta
-        '''
-        if self.mode != 'noisy' or self.version != 'V1':
-            return
-
-        for layer in self.linear_list:
-            layer.update_beta(sparsity=self.sparsity)
-
 
 def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
     dtype=torch.float, train=True):
@@ -141,7 +50,7 @@ def main():
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     parser.add_argument('--toy', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
-    parser.add_argument('--version', '-v', default='V1')
+    parser.add_argument('--use_gate', '-ug', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -155,7 +64,7 @@ def main():
     # Make model and dataset
     train_dl, val_dl = make_binary_data(args.batchsize, toy=args.toy)
     model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
-        dropout=args.dropout, sparsity=args.sparsity, version=args.version)
+        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
