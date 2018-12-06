@@ -32,25 +32,6 @@ class BitwiseNetwork(nn.Module):
         self.activation = torch.tanh
         self.batchnorm = nn.BatchNorm1d(kernel_size)
 
-        # dense layers for denoising
-        if not self.autoencode:
-            self.combine1 = nn.Conv2d(2, combine_hidden, 1)
-            self.combine2 = nn.Conv2d(combine_hidden, 1, 1)
-
-            # Initialize linear layers
-            self.num_layers = len(fc_sizes) + 1
-            fc_sizes = fc_sizes + [self.cutoff,]
-            in_size = self.cutoff
-            self.linear_list = nn.ModuleList()
-            self.scaler_list = nn.ModuleList()
-            self.dropout_list = nn.ModuleList()
-            for i, out_size in enumerate(fc_sizes):
-                self.linear_list.append(BitwiseLinear(in_size, out_size))
-                in_size = out_size
-                self.scaler_list.append(Scaler(out_size))
-                if i < self.num_layers - 1:
-                    self.dropout_list.append(nn.Dropout(dropout))
-
         # Initialize inverse of front end transform
         self.conv1_transpose = BitwiseConvTranspose1d(kernel_size,
             out_channels, kernel_size, stride=stride, groups=groups)
