@@ -111,9 +111,9 @@ class BitwiseAbstractClass(nn.Module):
             if self.use_gate:
                 w = w*torch.sigmoid(self.gate)
         elif self.mode == 'noisy':
-            w = bitwise_params(param, self.beta)
+            w = bitwise_params(self.weight, self.beta)
             if self.use_gate:
-                w = w*(bitwise_params(param, self.beta)+1)/2
+                w = w*(bitwise_params(self.gate, self.beta)+1)/2
         return w
 
 class BitwiseLinear(BitwiseAbstractClass):
