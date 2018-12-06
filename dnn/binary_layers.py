@@ -239,6 +239,27 @@ class BLRSampler(Function):
         L = torch.log(U) - torch.log(1 - U)
         return torch.tanh((torch.log(1/(1-q+eps)-1+eps) + L)/temp)
 
+class BinaryResidualLinear(nn.Module):
+    def __init__(self, input_size, output_size):
+        super(BitwiseResidualLinear, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.activation = torch.tanh
+        self.dense1 = BitwiseLinear(input_size, input_size)
+        self.dense2 = BitwiseLinear(input_size, output_size)
+
+    def forward(self, x):
+        x = self.activation(self.dense1(x))
+        return x + self.dense2(x)
+
+    def noisy(self):
+        self.dense1.noisy()
+        self.dense2.noisy()
+
+    def inference(self):
+        self.dense1.inference()
+        self.dense2.inference()
+
 def scale_only_bn(gamma, x):
     '''
      x is shape(N, C)

@@ -53,6 +53,7 @@ def main():
     parser.add_argument('--toy', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
     parser.add_argument('--use_gate', '-ug', action='store_true')
+    parser.add_argument('--residual', '-r', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -72,7 +73,8 @@ def main():
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
     model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[1024, 1024],
-        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate)
+        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
+        residual=args.residual)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
