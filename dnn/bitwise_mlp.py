@@ -15,6 +15,7 @@ class BitwiseMLP(nn.Module):
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
+        self.residual = residual
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
@@ -25,7 +26,7 @@ class BitwiseMLP(nn.Module):
         self.dropout_list = nn.ModuleList()
         for i, layer_size in enumerate(fc_sizes):
             if residual and i < self.num_layers - 1:
-                self.linear_list.append(BitwiseResidualLinear(input_size, layer_size))
+                self.linear_list.append(BitwiseResidualLinear(input_size))
             else:
                 self.linear_list.append(BitwiseLinear(input_size, layer_size, use_gate=use_gate))
             input_size = layer_size
@@ -83,7 +84,7 @@ class BitwiseMLP(nn.Module):
         '''
         Updates sparsity parameter beta
         '''
-        if self.mode != 'noisy' or self.use_gate:
+        if self.mode != 'noisy' or self.use_gate or self.residual:
             return
 
         for layer in self.linear_list:

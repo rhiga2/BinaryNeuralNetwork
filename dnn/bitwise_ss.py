@@ -62,7 +62,7 @@ def main():
     parser.add_argument('--toy', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
     parser.add_argument('--use_gate', '-ug', action='store_true')
-    parser.add_argument('--residual', '-r, action='store_true')
+    parser.add_argument('--residual', '-r', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -75,7 +75,7 @@ def main():
 
     # Make model and dataset
     train_dl, val_dl = make_binary_data(args.batchsize, toy=args.toy)
-    model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
+    model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2052, 2052],
         dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
         residual=args.residual)
     if args.train_noisy:

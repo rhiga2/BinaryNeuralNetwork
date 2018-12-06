@@ -72,7 +72,7 @@ def main():
                            transforms.ToTensor(), flatten]), download=True)
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
-    model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[1024, 1024],
+    model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[784, 784],
         dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
         residual=args.residual)
     if args.train_noisy:
