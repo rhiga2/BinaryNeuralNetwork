@@ -89,4 +89,6 @@ class BitwiseMLP(nn.Module):
 
     def update_gamma(self, gamma):
         self.gamma = gamma
+        for layer in linear_list:
+            layer.gamma = gamma
         self.activation = lambda x: squeezed_tanh(x, gamma)
