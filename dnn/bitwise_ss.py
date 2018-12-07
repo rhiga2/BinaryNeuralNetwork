@@ -68,6 +68,7 @@ def main():
     # Initialize device
     dtype = torch.float32
     if torch.cuda.is_available():
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
         device = torch.device('cuda:0')
     else:
         device = torch.device('cpu')
