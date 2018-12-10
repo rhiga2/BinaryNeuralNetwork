@@ -110,7 +110,7 @@ class BitwiseAbstractClass(nn.Module):
         if self.mode == 'real':
             w = squeezed_tanh(self.weight, self.gamma)
             if self.use_gate:
-                w = w*torch.sigmoid(self.gate)
+                w = w*(squeezed_tanh(self.gate, self.gamma+1)/2)
         elif self.mode == 'noisy':
             w = bitwise_params(self.weight, self.beta)
             if self.use_gate:

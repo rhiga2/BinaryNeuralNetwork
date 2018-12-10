@@ -47,7 +47,7 @@ def main():
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', '-tn',  action='store_true')
     parser.add_argument('--output_period', '-op', type=int, default=1)
-    parser.add_argument('--update_period', '-up', type=int, default=10)
+    parser.add_argument('--update_period', '-up', type=int, default=16)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)

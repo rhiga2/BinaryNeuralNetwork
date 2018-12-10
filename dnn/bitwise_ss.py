@@ -46,9 +46,9 @@ def unflatten(x, batch, time):
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
-    parser.add_argument('--epochs', '-e', type=int, default=64,
+    parser.add_argument('--epochs', '-e', type=int, default=256,
                         help='Number of epochs')
-    parser.add_argument('--batchsize', '-b', type=int, default=16,
+    parser.add_argument('--batchsize', '-b', type=int, default=32,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
@@ -56,7 +56,7 @@ def main():
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', '-tn',  action='store_true')
     parser.add_argument('--output_period', '-op', type=int, default=1)
-    parser.add_argument('--update_period', '-up', type=int, default=10)
+    parser.add_argument('--update_period', '-up', type=int, default=64)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
@@ -68,7 +68,6 @@ def main():
     # Initialize device
     dtype = torch.float32
     if torch.cuda.is_available():
-        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
         device = torch.device('cuda:0')
     else:
         device = torch.device('cpu')
@@ -76,7 +75,7 @@ def main():
 
     # Make model and dataset
     train_dl, val_dl = make_binary_data(args.batchsize, toy=args.toy)
-    model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2052, 2052],
+    model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
         dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate)
     if args.train_noisy:
         print('Noisy Network Training')
@@ -118,7 +117,7 @@ def main():
                 weight_decay=args.weight_decay)
 
         if (epoch+1) % args.update_period == 0:
-            model.update_gamma(model.gamma + 1)
+            model.update_gamma(model.gamma + 5)
 
 if __name__ == '__main__':
     main()
