@@ -6,6 +6,17 @@ import numpy as np
 import math
 from abc import ABC, abstractmethod
 
+class BitwiseFilterActivation(Function):
+    @staticmethod
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        return torch.sign(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_tensors[0]
+        return grad_output * (1 - torch.tanh(x)**2)
+
 class BitwiseActivation(Function):
     @staticmethod
     def forward(ctx, x):
@@ -38,7 +49,7 @@ class BitwiseParams(Function):
     def backward(ctx, grad_output):
         # relax as tanh or use straight through estimator?
         x = ctx.saved_tensors[0]
-        return grad_output * (1 - torch.tanh(x)**2), None
+        return torch.clamp(grad_output, -1, 1), None
 
 class Binarize(Function):
     @staticmethod
