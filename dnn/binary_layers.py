@@ -91,6 +91,7 @@ class BitwiseAbstractClass(nn.Module):
         self.requires_grad = True
         self.use_gate = False
         self.gamma = 1
+        self.real_activation = torch.tanh
 
     @abstractmethod
     def forward(self):
