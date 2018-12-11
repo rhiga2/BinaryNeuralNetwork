@@ -90,7 +90,6 @@ class BitwiseAbstractClass(nn.Module):
         self.gate = None
         self.requires_grad = True
         self.use_gate = False
-        self.gamma = 1
 
     @abstractmethod
     def forward(self):
@@ -121,7 +120,7 @@ class BitwiseAbstractClass(nn.Module):
         if self.mode == 'real':
             w = squeezed_tanh(self.weight, self.gamma)
             if self.use_gate:
-                w = w*(squeezed_tanh(self.gate, self.gamma+1)/2)
+                w = w*((squeezed_tanh(self.gate, self.gamma)+1)/2)
         elif self.mode == 'noisy':
             w = bitwise_params(self.weight, self.beta)
             if self.use_gate:
@@ -140,7 +139,7 @@ class BitwiseLinear(BitwiseAbstractClass):
         self.requires_grad = requires_grad
         self.weight = init_weight((output_size, input_size), requires_grad)
         self.use_gate = use_gate
-        self.gamma = gamma
+        self.gamma = nn.Parameter(torch.tensor(gamma, dtype=self.weight.dtype), requires_grad=False)
         if use_gate:
             self.gate = init_weight((output_size, input_size), requires_grad)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
@@ -168,7 +167,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
         self.stride = stride
         self.padding = padding
         self.groups = groups
-        self.gamma = gamma
+        self.gamma = nn.Parameter(gamma, requires_grad=False)
         self.requires_grad = requires_grad
         weight_size = (output_channels, input_channels//self.groups, kernel_size)
         self.weight = init_weight(weight_size, requires_grad)
@@ -204,7 +203,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
         self.stride = stride
         self.padding = padding
         self.groups = groups
-        self.gamma = gamma
+        self.gamma = nn.Parameter(gamma, requires_grad=False)
         self.use_gate = use_gate
         self.requires_grad = requires_grad
         weight_size = (input_channels, output_channels // groups, kernel_size)

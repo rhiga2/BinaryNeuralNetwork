@@ -117,7 +117,7 @@ def main():
                 weight_decay=args.weight_decay)
 
         if (epoch+1) % args.update_period == 0:
-            model.update_gamma(model.gamma + 5)
+            model.update_gamma(model.gamma*10)
 
 if __name__ == '__main__':
     main()

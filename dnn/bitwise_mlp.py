@@ -14,8 +14,8 @@ class BitwiseMLP(nn.Module):
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
-        self.gamma = gamma
-        self.filter_activation = lambda x: squeezed_tanh(x, gamma)
+        self.gamma = nn.Parameter(torch.tensor(gamma, dtype=torch.float), requires_grad=False)
+        self.filter_activation = lambda x : squeezed_tanh(x, gamma)
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
@@ -89,7 +89,10 @@ class BitwiseMLP(nn.Module):
             layer.update_beta(sparsity=self.sparsity)
 
     def update_gamma(self, gamma):
-        self.gamma = gamma
+        if self.mode != 'real':
+            return
+       
+        self.gamma = nn.Parameter(torch.tensor(gamma, dtype=self.gamma.dtype, device=self.gamma.device), requires_grad=False)
         for layer in self.filter_list:
-            layer.gamma = gamma
-        self.filter_activation = lambda x: squeezed_tanh(x, gamma)
+            layer.gamma = nn.Parameter(torch.tensor(gamma, dtype=layer.weight.dtype, device=layer.weight.device), requires_grad=False)
+        self.filter_activation = lambda x : squeezed_tanh(x, gamma)
