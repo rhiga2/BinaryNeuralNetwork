@@ -22,8 +22,7 @@ class BitwiseActivation(Function):
     def forward(ctx, x, noise):
         ctx.save_for_backward(x)
         if noise:
-            u = torch.rand_like(x)
-            x = x + torch.log(u) - torch.log(1 - u)
+            x = add_logistic_noise(x)
         return torch.sign(x)
 
     @staticmethod
@@ -36,8 +35,7 @@ class SqueezedTanh(Function):
     def forward(ctx, x, temp, noise=False):
         ctx.save_for_backward(x)
         if noise:
-            u = torch.rand_like(x)
-            x = x + torch.log(u) - torch.log(1 - u)
+            x = add_logistic_noise(x)
         return torch.tanh(temp * x)
 
     @staticmethod
@@ -50,8 +48,7 @@ class BitwiseParams(Function):
     def forward(ctx, x, beta, noise=False):
         ctx.save_for_backward(x)
         if noise:
-            u = torch.rand_like(x)
-            x = x + torch.log(u) - torch.log(1 - u)
+            x = add_logistic_noise(x)
         return (x > beta).to(dtype=x.dtype, device=x.device) - (x < -beta).to(dtype=x.dtype, device=x.device)
 
     @staticmethod
@@ -78,6 +75,11 @@ bitwise_activation = BitwiseActivation.apply
 squeezed_tanh = SqueezedTanh.apply
 bitwise_params = BitwiseParams.apply
 binarize = Binarize.apply
+
+def add_logistic_noise(x):
+    u = torch.rand_like(x)
+    x = x + torch.log(u) - torch.log(1 - u)
+    return x
 
 def init_weight(size, requires_grad=True, scale=1):
     w = torch.empty(size)
