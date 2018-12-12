@@ -19,30 +19,39 @@ class BitwiseFilterActivation(Function):
 
 class BitwiseActivation(Function):
     @staticmethod
-    def forward(ctx, x):
+    def forward(ctx, x, noise):
         ctx.save_for_backward(x)
+        if noise:
+            u = torch.rand_like(x)
+            x = x + torch.log(u) - torch.log(1 - u)
         return torch.sign(x)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        x = ctx.saved_tensors[0]
-        return grad_output * (1 - torch.tanh(x)**2)
-
-class SqueezedTanh(Function):
-    @staticmethod
-    def forward(ctx, x, gamma):
-        ctx.save_for_backward(x)
-        return torch.tanh(gamma * x)
 
     @staticmethod
     def backward(ctx, grad_output):
         x = ctx.saved_tensors[0]
         return grad_output * (1 - torch.tanh(x)**2), None
 
+class SqueezedTanh(Function):
+    @staticmethod
+    def forward(ctx, x, temp, noise=False):
+        ctx.save_for_backward(x)
+        if noise:
+            u = torch.rand_like(x)
+            x = x + torch.log(u) - torch.log(1 - u)
+        return torch.tanh(temp * x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_tensors[0]
+        return grad_output * (1 - torch.tanh(x)**2), None, None
+
 class BitwiseParams(Function):
     @staticmethod
-    def forward(ctx, x, beta):
+    def forward(ctx, x, beta, noise=False):
         ctx.save_for_backward(x)
+        if noise:
+            u = torch.rand_like(x)
+            x = x + torch.log(u) - torch.log(1 - u)
         return (x > beta).to(dtype=x.dtype, device=x.device) - (x < -beta).to(dtype=x.dtype, device=x.device)
 
     @staticmethod
@@ -90,8 +99,7 @@ class BitwiseAbstractClass(nn.Module):
         self.gate = None
         self.requires_grad = True
         self.use_gate = False
-        self.real_activation = torch.tanh
-        self.binary_activation = bitwise_params
+        self.activation = torch.tanh
 
     @abstractmethod
     def forward(self):
@@ -109,9 +117,11 @@ class BitwiseAbstractClass(nn.Module):
         self.mode = 'noisy'
         self.weight = nn.Parameter(torch.tanh(self.weight),
             requires_grad=self.requires_grad)
+        self.activation = bitwise_params
 
     def inference(self):
         self.mode = 'inference'
+        self.activation = bitwise_params
         self.weight = nn.Parameter(bitwise_params(self.weight, self.beta),
             requires_grad=self.requires_grad)
         if self.use_gate:
@@ -119,14 +129,9 @@ class BitwiseAbstractClass(nn.Module):
                 requires_grad=self.requires_grad)
 
     def get_effective_weight(self):
-        if self.mode == 'real':
-            w = self.real_activation(self.weight)
-            if self.use_gate:
-                w = w*((self.real_activation(self.gate)+1)/2)
-        elif self.mode == 'noisy':
-            w = self.binary_activation(self.weight, self.beta)
-            if self.use_gate:
-                w = w*(self.binary_activation(self.gate, self.beta)+1)/2
+        w = self.activation(self.weight)
+        if self.use_gate:
+            w = w*((self.activation(self.gate)+1)/2)
         return w
 
 class BitwiseLinear(BitwiseAbstractClass):
@@ -134,14 +139,13 @@ class BitwiseLinear(BitwiseAbstractClass):
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
     def __init__(self, input_size, output_size, requires_grad=True, use_gate=False,
-        real_activation=torch.tanh, binary_activation=bitwise_params):
+        activation=torch.tanh):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
         self.requires_grad = requires_grad
         self.weight = init_weight((output_size, input_size), requires_grad)
-        self.real_activation = real_activation
-        self.binary_activation = binary_activation
+        self.activation = activation
         self.use_gate = use_gate
         if use_gate:
             self.gate = init_weight((output_size, input_size), requires_grad)
@@ -162,7 +166,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True, use_gate=False,
-        real_activation=torch.tanh, binary_activation=bitwise_params):
+        activation=torch.tanh):
         super(BitwiseConv1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -174,8 +178,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
         weight_size = (output_channels, input_channels//self.groups, kernel_size)
         self.weight = init_weight(weight_size, requires_grad)
         self.use_gate = use_gate
-        self.real_activation = real_activation
-        self.binary_activation = binary_activation
+        self.activation = activation
         if self.use_gate:
             self.gate = init_weight(weight_size, requires_grad)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
@@ -199,7 +202,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True, use_gate=False,
-        real_activation=torch.tanh, binary_activation=bitwise_params):
+        activation=torch.tanh):
         super(BitwiseConvTranspose1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -209,8 +212,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
         self.groups = groups
         self.use_gate = use_gate
         self.requires_grad = requires_grad
-        self.real_activation = real_activation
-        self.binary_activation = binary_activation
+        self.activation = activation
         weight_size = (input_channels, output_channels // groups, kernel_size)
         self.weight = init_weight(weight_size, requires_grad)
         if use_gate:

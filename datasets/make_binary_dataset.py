@@ -17,47 +17,37 @@ def main():
     quantizer = Quantizer(min=-1, delta=2/2**(args.num_bits),
         num_bits=args.num_bits, use_mu=True)
     disperser = Disperser(args.num_bits)
-    trainset, valset = make_mixture_set(toy=args.toy)
+    trainset, valset, testset = make_mixture_set(toy=args.toy)
     print('Samples in Trainset: ', len(trainset))
     print('Samples in Valset: ', len(valset))
     dataset_dir = '/media/data/binary_audio/'
     if not args.toy:
         train_dir = dataset_dir + 'train/'
         val_dir = dataset_dir + 'val/'
+        test_dir = dataset_dir + 'test/'
     else:
         train_dir = dataset_dir + 'toy_train/'
         val_dir = dataset_dir + 'toy_val/'
+        test_dir = dataset_dir + 'toy_test/'
 
-    for i in range(len(trainset)):
-        binary_fname = train_dir + 'binary_data%d.npz' % i
-        sample = trainset[i]
-        mix, target, inter = sample['mixture'], sample['target'], sample['interference']
-        mix_mag, mix_phase = stft(mix)
-        targ_mag, targ_phase = stft(target)
-        inter_mag, inter_phase = stft(inter)
-        ibm = make_binary_mask(targ_mag - inter_mag).astype(np.uint8)
-        bmag = quantize_and_disperse(mix_mag, quantizer, disperser).astype(np.uint8)
-        np.savez(
-            binary_fname,
-            bmag=bmag,
-            ibm=ibm
-        )
+    dirs = [train_dir, val_dir, test_dir]
+    datasets = [trainset, valset, testset]
 
-    # Output validation binarization
-    for i in range(len(valset)):
-        binary_fname = val_dir + 'binary_data%d.npz' % i
-        sample = valset[i]
-        mix, target, inter = sample['mixture'], sample['target'], sample['interference']
-        mix_mag, mix_phase = stft(mix)
-        targ_mag, targ_phase = stft(target)
-        inter_mag, inter_phase = stft(inter)
-        ibm = make_binary_mask(targ_mag - inter_mag).astype(np.uint8)
-        bmag = quantize_and_disperse(mix_mag, quantizer, disperser).astype(np.uint8)
-        np.savez(
-            binary_fname,
-            bmag=bmag,
-            ibm=ibm
-        )
+    for dir, dataset in zip(dirs, datasets):
+        for i in range(len(dataset)):
+            binary_fname = train_dir + 'binary_data%d.npz' % i
+            sample = dataset[i]
+            mix, target, inter = sample['mixture'], sample['target'], sample['interference']
+            mix_mag, mix_phase = stft(mix)
+            targ_mag, targ_phase = stft(target)
+            inter_mag, inter_phase = stft(inter)
+            ibm = make_binary_mask(targ_mag - inter_mag).astype(np.uint8)
+            bmag = quantize_and_disperse(mix_mag, quantizer, disperser).astype(np.uint8)
+            np.savez(
+                binary_fname,
+                bmag=bmag,
+                ibm=ibm
+            )
 
 if __name__ == '__main__':
     main()

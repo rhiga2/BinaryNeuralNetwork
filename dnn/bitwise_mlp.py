@@ -9,13 +9,14 @@ from dnn.binary_layers import *
 
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
-        sparsity=95, gamma=1, use_gate=False):
+        sparsity=95, temp=1, use_gate=False, use_noise=False):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
-        self.gamma = nn.Parameter(torch.tensor(gamma, dtype=torch.float), requires_grad=False)
-        self.activation = lambda x : squeezed_tanh(x, gamma)
+        self.temp = nn.Parameter(torch.tensor(temp, dtype=torch.float), requires_grad=False)
+        self.activation = lambda x : squeezed_tanh(x, temp, noise=use_noise)
+        self.use_noise = use_noise
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
@@ -26,7 +27,7 @@ class BitwiseMLP(nn.Module):
         self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
             self.filter_list.append(BitwiseLinear(isize, osize,
-                use_gate=use_gate))
+                use_gate=use_gate, activation=self.activation))
             self.bn_list.append(nn.BatchNorm1d(osize))
             if i < self.num_layers - 1:
                 self.dropout_list.append(nn.Dropout(dropout))
@@ -57,7 +58,7 @@ class BitwiseMLP(nn.Module):
         Converts real network to noisy training network
         '''
         self.mode = 'noisy'
-        self.activation = bitwise_activation
+        self.activation = lambda x : bitwise_activation(x, use_noise=self.use_noise)
         for layer in self.filter_list:
             layer.noisy()
 
@@ -66,7 +67,7 @@ class BitwiseMLP(nn.Module):
         Converts noisy training network to bitwise network
         '''
         self.mode = 'inference'
-        self.activation = bitwise_activation
+        self.activation = lambda x : bitwise_activation(x, use_noise=self.use_noise)
         for layer in self.filter_list:
             layer.inference()
         for bn in self.bn_list:
@@ -88,11 +89,11 @@ class BitwiseMLP(nn.Module):
         for layer in self.filter_list:
             layer.update_beta(sparsity=self.sparsity)
 
-    def update_gamma(self, gamma):
+    def update_temp(self, temp):
         if self.mode != 'real':
             return
 
-        self.gamma = nn.Parameter(torch.tensor(gamma, dtype=self.gamma.dtype, device=self.gamma.device), requires_grad=False)
-        self.activation = lambda x : squeezed_tanh(x, gamma)
+        self.temp = nn.Parameter(torch.tensor(temp, dtype=self.temp.dtype, device=self.temp.device), requires_grad=False)
+        self.activation = lambda x : squeezed_tanh(x, temp, noise=self.use_noise)
         for layer in self.filter_list:
-            layer.real_activation = self.activation
+            layer.activation = self.activation

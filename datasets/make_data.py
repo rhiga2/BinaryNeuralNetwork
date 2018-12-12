@@ -12,7 +12,12 @@ def make_mixture_set(hop=256, toy=False, max_length=None):
     targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
         'dr1/fdaw0', 'dr1/fjsp0','dr1/fsjk1', 'dr1/fvmh0',
         'dr1/fsma0', 'dr1/ftbr0']
-    train_speeches, val_speeches = get_speech_files(speaker_path, targets, num_train=7)
+    train_speeches, val_speeches, test_speeches = get_speech_files(
+        speaker_path,
+        targets,
+        num_train=6,
+        num_val=2
+    )
 
     if toy:
         noise_path = '/media/data/Nonspeech'
@@ -24,20 +29,36 @@ def make_mixture_set(hop=256, toy=False, max_length=None):
                          'n55.wav', # cicadas?
                          'n59.wav', # jungle?
                          ]
-        train_noises, val_noises = get_noise_files(noise_path, interferences)
+        train_noises, val_noises, test_noises = get_noise_files(
+            noise_path,
+            interferences,
+            num_train=4,
+            num_val=2,
+            num_test=1
+        )
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
             max_length=max_length)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
+            max_length=max_length)
+        testset = TwoSourceMixtureDataset(test_speeches, test_noises, hop=hop,
             max_length=max_length)
     else:
         interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
-            'dr1/mwad0', 'dr1/mwar0']
-        train_noises, val_noises = get_speech_files(speaker_path, interferences, num_train=7)
+            'dr1/mwad0', 'dr1/mwar0', 'dr1/mtrr0', 'dr1/mtjs0',
+            'dr1/mcpm0', 'dr1/mmrp0']
+        train_noises, val_noises, test_noises = get_speech_files(
+            speaker_path,
+            interferences,
+            num_train=6,
+            num_val=2)
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
             max_length=max_length)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
             max_length=max_length)
-    return trainset, valset
+        testset = TwoSourceMixtureDataset(test_speeches, test_noises, hop=hop,
+            max_length=max_length)
+
+    return trainset, valset, testset
 
 def make_data(batchsize, hop=256, toy=False):
     '''

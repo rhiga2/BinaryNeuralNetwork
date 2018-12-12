@@ -104,22 +104,25 @@ def collate_and_trim(batch, axis=0, hop=1, dtype=torch.float):
     outbatch = {key: torch.as_tensor(np.stack(values, axis=0), dtype=dtype) for key, values in outbatch.items()}
     return outbatch
 
-def get_speech_files(speaker_path, speakers, num_train=8):
-    assert num_train <= 10 # Assume each speaker has 10 sentences
+def get_speech_files(speaker_path, speakers, num_train=8, num_val=2):
+    assert num_train + num_val <= 10 # Assume each speaker has 10 sentences
     if speaker_path[-1] != '/':
         speaker_path += '/'
     train_speeches = []
     val_speeches = []
+    test_speeches = []
 
     for speaker in speakers:
         if speaker[-1] != '/':
             speaker += '/'
         files = glob.glob(speaker_path + speaker + '*.wav')
         train_speeches.extend(files[:num_train])
-        val_speeches.extend(files[num_train:])
+        val_speeches.extend(files[num_train:num_train+num_val])
+        test_speeches.extend(files[num_train+num_val:])
     return train_speeches, val_speeches
 
-def get_noise_files(noise_path, noises, num_train=None):
+def get_noise_files(noise_path, noises, num_train=1, num_val=1):
+    assert num_train+num_val <= len(noises)
     if noise_path[-1] != '/':
         noise_path += '/'
     noises = [noise_path + noise for noise in noises]
@@ -127,5 +130,6 @@ def get_noise_files(noise_path, noises, num_train=None):
     val_noises = noises
     if num_train:
         train_noises = noises[:num_train]
-        val_noises = noises[num_train:]
+        val_noises = noises[num_train:num_train+num_val]
+        test_noises = noises[num_train+num_val:]
     return train_noises, val_noises

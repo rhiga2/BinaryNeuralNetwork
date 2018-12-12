@@ -48,7 +48,7 @@ def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=256,
                         help='Number of epochs')
-    parser.add_argument('--batchsize', '-b', type=int, default=32,
+    parser.add_argument('--batchsize', '-b', type=int, default=64,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
@@ -56,13 +56,14 @@ def main():
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', '-tn',  action='store_true')
     parser.add_argument('--output_period', '-op', type=int, default=1)
-    parser.add_argument('--update_period', '-up', type=int, default=64)
+    parser.add_argument('--update_period', '-up', type=int, default=32)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
     parser.add_argument('--toy', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
     parser.add_argument('--use_gate', '-ug', action='store_true')
+    parser.add_argument('--use_noise', '-noise', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -76,7 +77,8 @@ def main():
     # Make model and dataset
     train_dl, val_dl = make_binary_data(args.batchsize, toy=args.toy)
     model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
-        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate)
+        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
+        use_noise=args.use_noise)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
@@ -117,7 +119,7 @@ def main():
                 weight_decay=args.weight_decay)
 
         if (epoch+1) % args.update_period == 0:
-            model.update_gamma(model.gamma*10)
+            model.update_temp(model.temp*10)
 
 if __name__ == '__main__':
     main()
