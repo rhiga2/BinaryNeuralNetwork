@@ -48,6 +48,9 @@ class BitwiseMLP(nn.Module):
             x = self.filter_list[i](x)
             x = self.bn_list[i](x)
             if i < self.num_layers - 1:
+                if self.use_noise:
+                    u = torch.rand_like(x)
+                    x = x + torch.log(u) - torch.log(1 - u)
                 x = self.filter_activation(x)
                 x = self.dropout_list[i](x)
         return x

@@ -48,7 +48,7 @@ def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=256,
                         help='Number of epochs')
-    parser.add_argument('--batchsize', '-b', type=int, default=32,
+    parser.add_argument('--batchsize', '-b', type=int, default=64,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
@@ -56,7 +56,7 @@ def main():
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', '-tn',  action='store_true')
     parser.add_argument('--output_period', '-op', type=int, default=1)
-    parser.add_argument('--update_period', '-up', type=int, default=64)
+    parser.add_argument('--update_period', '-up', type=int, default=32)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
