@@ -23,7 +23,7 @@ class BitwiseAutoencoder(nn.Module):
     def __init__(self, kernel_size=512, stride=64, in_channels=1,
         out_channels=256, combine_hidden=8, fc_sizes = [], dropout=0,
         sparsity=95, adapt=True, autoencode=False, groups=1, use_gate=True):
-        super(BitwiseNetwork, self).__init__()
+        super(BitwiseAutoencoder, self).__init__()
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.conv1 = BitwiseConv1d(in_channels, kernel_size,
@@ -190,7 +190,7 @@ def main():
 
     # Make model and dataset
     train_dl, val_dl = make_data(args.batchsize, hop=args.stride, toy=args.toy)
-    model = BitwiseNetwork(args.kernel, args.stride, fc_sizes=[2048, 2048],
+    model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=args.num_bits if transform else 1, out_channels=2**args.num_bits,
         dropout=args.dropout, sparsity=args.sparsity, adapt=not args.no_adapt,
         autoencode=args.autoencode, groups=args.groups)

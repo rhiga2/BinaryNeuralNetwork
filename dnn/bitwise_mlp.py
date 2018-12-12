@@ -14,8 +14,8 @@ class BitwiseMLP(nn.Module):
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
-        self.gamma = gamma
-        self.filter_activation = lambda x: squeezed_tanh(x, gamma)
+        self.gamma = nn.Parameter(torch.tensor(gamma, dtype=torch.float), requires_grad=False)
+        self.activation = lambda x : squeezed_tanh(x, gamma)
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
@@ -48,7 +48,7 @@ class BitwiseMLP(nn.Module):
             x = self.filter_list[i](x)
             x = self.bn_list[i](x)
             if i < self.num_layers - 1:
-                x = self.filter_activation(x)
+                x = self.activation(x)
                 x = self.dropout_list[i](x)
         return x
 
@@ -57,7 +57,7 @@ class BitwiseMLP(nn.Module):
         Converts real network to noisy training network
         '''
         self.mode = 'noisy'
-        self.filter_activation = bitwise_activation
+        self.activation = bitwise_activation
         for layer in self.filter_list:
             layer.noisy()
 
@@ -66,7 +66,7 @@ class BitwiseMLP(nn.Module):
         Converts noisy training network to bitwise network
         '''
         self.mode = 'inference'
-        self.filter_activation = bitwise_activation
+        self.activation = bitwise_activation
         for layer in self.filter_list:
             layer.inference()
         for bn in self.bn_list:
@@ -89,7 +89,10 @@ class BitwiseMLP(nn.Module):
             layer.update_beta(sparsity=self.sparsity)
 
     def update_gamma(self, gamma):
-        self.gamma = gamma
+        if self.mode != 'real':
+            return
+
+        self.gamma = nn.Parameter(torch.tensor(gamma, dtype=self.gamma.dtype, device=self.gamma.device), requires_grad=False)
+        self.activation = lambda x : squeezed_tanh(x, gamma)
         for layer in self.filter_list:
-            layer.gamma = gamma
-        self.filter_activation = lambda x: squeezed_tanh(x, gamma)
+            layer.real_activation = self.activation
