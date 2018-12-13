@@ -15,7 +15,7 @@ class BitwiseMLP(nn.Module):
         self.out_size = out_size
         self.use_gate = use_gate
         self.temp = nn.Parameter(torch.tensor(temp, dtype=torch.float), requires_grad=False)
-        self.activation = lambda x : squeezed_tanh(x, temp, noise=use_noise)
+        self.activation = lambda x : squeezed_tanh(x, temp)
         self.use_noise = use_noise
 
         # Initialize linear layers
@@ -27,7 +27,8 @@ class BitwiseMLP(nn.Module):
         self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
             self.filter_list.append(BitwiseLinear(isize, osize,
-                use_gate=use_gate, activation=self.activation))
+                use_gate=use_gate, activation=self.activation,
+                use_noise=use_noise))
             self.bn_list.append(nn.BatchNorm1d(osize))
             if i < self.num_layers - 1:
                 self.dropout_list.append(nn.Dropout(dropout))
@@ -58,7 +59,7 @@ class BitwiseMLP(nn.Module):
         Converts real network to noisy training network
         '''
         self.mode = 'noisy'
-        self.activation = lambda x : bitwise_activation(x, use_noise=self.use_noise)
+        self.activation = bitwise_activation
         for layer in self.filter_list:
             layer.noisy()
 
@@ -67,7 +68,7 @@ class BitwiseMLP(nn.Module):
         Converts noisy training network to bitwise network
         '''
         self.mode = 'inference'
-        self.activation = lambda x : bitwise_activation(x, use_noise=self.use_noise)
+        self.activation = bitwise_activation(x)
         for layer in self.filter_list:
             layer.inference()
         for bn in self.bn_list:
@@ -94,6 +95,6 @@ class BitwiseMLP(nn.Module):
             return
 
         self.temp = nn.Parameter(torch.tensor(temp, dtype=self.temp.dtype, device=self.temp.device), requires_grad=False)
-        self.activation = lambda x : squeezed_tanh(x, temp, noise=self.use_noise)
+        self.activation = lambda x : squeezed_tanh(x, temp)
         for layer in self.filter_list:
             layer.activation = self.activation

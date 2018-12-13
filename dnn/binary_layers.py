@@ -6,23 +6,10 @@ import numpy as np
 import math
 from abc import ABC, abstractmethod
 
-class BitwiseFilterActivation(Function):
+class BitwiseActivation(Function):
     @staticmethod
     def forward(ctx, x):
         ctx.save_for_backward(x)
-        return torch.sign(x)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        x = ctx.saved_tensors[0]
-        return grad_output * (1 - torch.tanh(x)**2)
-
-class BitwiseActivation(Function):
-    @staticmethod
-    def forward(ctx, x, noise):
-        ctx.save_for_backward(x)
-        if noise:
-            x = add_logistic_noise(x)
         return torch.sign(x)
 
     @staticmethod
@@ -32,30 +19,26 @@ class BitwiseActivation(Function):
 
 class SqueezedTanh(Function):
     @staticmethod
-    def forward(ctx, x, temp, noise=False):
+    def forward(ctx, x, temp):
         ctx.save_for_backward(x)
-        if noise:
-            x = add_logistic_noise(x)
         return torch.tanh(temp * x)
 
     @staticmethod
     def backward(ctx, grad_output):
         x = ctx.saved_tensors[0]
-        return grad_output * (1 - torch.tanh(x)**2), None, None
+        return grad_output * (1 - torch.tanh(x)**2), None
 
 class BitwiseParams(Function):
     @staticmethod
-    def forward(ctx, x, beta, noise=False):
+    def forward(ctx, x, beta):
         ctx.save_for_backward(x)
-        if noise:
-            x = add_logistic_noise(x)
         return (x > beta).to(dtype=x.dtype, device=x.device) - (x < -beta).to(dtype=x.dtype, device=x.device)
 
     @staticmethod
     def backward(ctx, grad_output):
         # relax as tanh or use straight through estimator?
         x = ctx.saved_tensors[0]
-        return torch.clamp(grad_output, -1, 1), None
+        return grad_output * (1 - torch.tanh(x)**2), None
 
 class Binarize(Function):
     @staticmethod
@@ -86,12 +69,6 @@ def init_weight(size, requires_grad=True, scale=1):
     nn.init.xavier_uniform_(w)
     w = nn.Parameter(scale*w, requires_grad=requires_grad)
     return w
-
-def clip_params(mod, min=-1, max=1):
-    state_dict = mod.state_dict()
-    for name, param in state_dict.items():
-        if name.endswith('weight') or name.endswith('bias'):
-            state_dict[name] = torch.clamp(param, min, max)
 
 class BitwiseAbstractClass(nn.Module):
     @abstractmethod
@@ -131,6 +108,8 @@ class BitwiseAbstractClass(nn.Module):
                 requires_grad=self.requires_grad)
 
     def get_effective_weight(self):
+        if self.use_noise and self.mode != 'inference':
+            x = add_logistic_noise(x)
         w = self.activation(self.weight)
         if self.use_gate:
             w = w*((self.activation(self.gate)+1)/2)
@@ -141,7 +120,7 @@ class BitwiseLinear(BitwiseAbstractClass):
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
     def __init__(self, input_size, output_size, requires_grad=True, use_gate=False,
-        activation=torch.tanh):
+        activation=torch.tanh, use_noise=False):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
@@ -149,6 +128,7 @@ class BitwiseLinear(BitwiseAbstractClass):
         self.weight = init_weight((output_size, input_size), requires_grad)
         self.activation = activation
         self.use_gate = use_gate
+        self.use_noise = use_noise
         if use_gate:
             self.gate = init_weight((output_size, input_size), requires_grad)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
@@ -168,7 +148,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True, use_gate=False,
-        activation=torch.tanh):
+        activation=torch.tanh, use_noise=Falses):
         super(BitwiseConv1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -180,6 +160,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
         weight_size = (output_channels, input_channels//self.groups, kernel_size)
         self.weight = init_weight(weight_size, requires_grad)
         self.use_gate = use_gate
+        self.use_noise = use_noise
         self.activation = activation
         if self.use_gate:
             self.gate = init_weight(weight_size, requires_grad)
@@ -204,7 +185,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True, use_gate=False,
-        activation=torch.tanh):
+        activation=torch.tanh, use_noise=False):
         super(BitwiseConvTranspose1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -213,6 +194,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
         self.padding = padding
         self.groups = groups
         self.use_gate = use_gate
+        self.use_noise = use_noise
         self.requires_grad = requires_grad
         self.activation = activation
         weight_size = (input_channels, output_channels // groups, kernel_size)
