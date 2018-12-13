@@ -56,6 +56,7 @@ def main():
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', '-tn',  action='store_true')
     parser.add_argument('--output_period', '-op', type=int, default=1)
+    parser.add_argument('--update_temp', '-ut', action='store_true')
     parser.add_argument('--update_period', '-up', type=int, default=32)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
@@ -118,7 +119,7 @@ def main():
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)
 
-        if (epoch+1) % args.update_period == 0:
+        if (epoch+1) % args.update_period == 0 and args.update_temp:
             model.update_temp(model.temp*10)
 
 if __name__ == '__main__':

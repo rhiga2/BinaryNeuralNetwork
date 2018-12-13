@@ -119,7 +119,7 @@ def get_speech_files(speaker_path, speakers, num_train=8, num_val=2):
         train_speeches.extend(files[:num_train])
         val_speeches.extend(files[num_train:num_train+num_val])
         test_speeches.extend(files[num_train+num_val:])
-    return train_speeches, val_speeches
+    return train_speeches, val_speeches, test_speeches
 
 def get_noise_files(noise_path, noises, num_train=1, num_val=1):
     assert num_train+num_val <= len(noises)
@@ -132,4 +132,4 @@ def get_noise_files(noise_path, noises, num_train=1, num_val=1):
         train_noises = noises[:num_train]
         val_noises = noises[num_train:num_train+num_val]
         test_noises = noises[num_train+num_val:]
-    return train_noises, val_noises
+    return train_noises, val_noises, test_noises

@@ -20,6 +20,7 @@ def main():
     trainset, valset, testset = make_mixture_set(toy=args.toy)
     print('Samples in Trainset: ', len(trainset))
     print('Samples in Valset: ', len(valset))
+    print('Samples in Testset: ', len(testset))
     dataset_dir = '/media/data/binary_audio/'
     if not args.toy:
         train_dir = dataset_dir + 'train/'

@@ -50,7 +50,8 @@ def make_mixture_set(hop=256, toy=False, max_length=None):
             speaker_path,
             interferences,
             num_train=6,
-            num_val=2)
+            num_val=2
+        )
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
             max_length=max_length)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
@@ -64,9 +65,11 @@ def make_data(batchsize, hop=256, toy=False):
     '''
     Make two mixture dataset
     '''
-    trainset, valset = make_mixture_set(hop=hop, toy=toy)
+    trainset, valset, testset = make_mixture_set(hop=hop, toy=toy)
     collate = lambda x: collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
-    return train_dl, val_dl
+    test_dl = DataLoader(testset, batch_size=batchsize,
+        collate_fn=collate)
+    return train_dl, val_dl, test_dl
