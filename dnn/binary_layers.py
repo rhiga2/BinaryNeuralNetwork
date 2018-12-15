@@ -96,11 +96,11 @@ class BitwiseAbstractClass(nn.Module):
         self.mode = 'noisy'
         self.weight = nn.Parameter(torch.tanh(self.weight),
             requires_grad=self.requires_grad)
-        self.activation = bitwise_params
+        self.activation = lambda x : bitwise_params(x, self.beta)
 
     def inference(self):
         self.mode = 'inference'
-        self.activation = bitwise_params
+        self.activation = lambda x : bitwise_params(x, self.beta)
         self.weight = nn.Parameter(bitwise_params(self.weight, self.beta),
             requires_grad=self.requires_grad)
         if self.use_gate:
@@ -148,7 +148,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True, use_gate=False,
-        activation=torch.tanh, use_noise=Falses):
+        activation=torch.tanh, use_noise=False):
         super(BitwiseConv1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels

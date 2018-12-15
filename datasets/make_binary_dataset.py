@@ -34,9 +34,9 @@ def main():
     dirs = [train_dir, val_dir, test_dir]
     datasets = [trainset, valset, testset]
 
-    for dir, dataset in zip(dirs, datasets):
+    for directory, dataset in zip(dirs, datasets):
         for i in range(len(dataset)):
-            binary_fname = train_dir + 'binary_data%d.npz' % i
+            binary_fname = directory + 'binary_data%d.npz' % i
             sample = dataset[i]
             mix, target, inter = sample['mixture'], sample['target'], sample['interference']
             mix_mag, mix_phase = stft(mix)
