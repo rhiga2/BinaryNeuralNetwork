@@ -50,6 +50,8 @@ class BitwiseMLP(nn.Module):
             x = self.filter_list[i](x)
             x = self.bn_list[i](x)
             if i < self.num_layers - 1:
+                if self.use_noise and self.mode != 'inference':
+                    x = add_logistic_noise(x)
                 x = self.activation(x)
                 x = self.dropout_list[i](x)
         return x

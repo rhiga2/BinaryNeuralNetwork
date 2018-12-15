@@ -108,11 +108,15 @@ class BitwiseAbstractClass(nn.Module):
                 requires_grad=self.requires_grad)
 
     def get_effective_weight(self):
+        w = self.weight
         if self.use_noise and self.mode != 'inference':
-            x = add_logistic_noise(x)
-        w = self.activation(self.weight)
+            w = add_logistic_noise(self.weight)
+        w = self.activation(w)
         if self.use_gate:
-            w = w*((self.activation(self.gate)+1)/2)
+            g = self.gate
+            if self.use_noise and self.mode != 'inference':
+                g = add_logistic_noise(self.gate)
+            w = w*((self.activation(g)+1)/2)
         return w
 
 class BitwiseLinear(BitwiseAbstractClass):
