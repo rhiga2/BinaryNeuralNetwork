@@ -20,7 +20,7 @@ class BitwiseAutoencoder(nn.Module):
     '''
     Adaptive transform network inspired by Minje Kim
     '''
-    def __init__(self, kernel_size=512, stride=64, in_channels=1,
+    def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0,
         sparsity=95, adapt=True, autoencode=False, use_gate=True):
         super(BitwiseAutoencoder, self).__init__()
@@ -36,7 +36,7 @@ class BitwiseAutoencoder(nn.Module):
         self.batchnorm = nn.BatchNorm1d(kernel_size)
 
         # Initialize inverse of front end transform
-        self.conv1_tranpose = nn.Conv2d(1, kernel_size, kernel_size, stride=stride)
+        self.conv1_transpose = nn.ConvTranspose1d(kernel_size, 1, kernel_size, stride=stride)
         # self.conv1_transpose = BitwiseConvTranspose1d(kernel_size,
         #    out_channels, kernel_size, stride=stride, use_gate=use_gate)
         self.output_activation = nn.Softmax(dim=1)
@@ -99,7 +99,9 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
         else:
             mix = mix.unsqueeze(1)
         mix = mix.to(device=device)
+        target = target.to(device=device)
         estimate = model(mix)
+        estimate = estimate.squeeze(1)
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
@@ -123,10 +125,12 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
         else:
             mix = mix.unsqueeze(1)
         mix = mix.to(device=device)
+        target = target.to(device=device)
         estimate = model(mix)
+        estimate = estimate.squeeze(1)
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
-        estimate = torch.argmax(estimate, dim=1).to(torch.float)
+        # estimate = torch.argmax(estimate, dim=1).to(torch.float)
         if quantizer:
             estimate = quantizer.inverse(estimate)
         estimate = estimate.to(device='cpu')
@@ -139,11 +143,12 @@ def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=64,
                         help='Number of epochs')
-    parser.add_argument('--kernel', '-k', type=int, default=512)
-    parser.add_argument('--stride', '-s', type=int, default=128)
-    parser.add_argument('--batchsize', '-b', type=int, default=8,
+    parser.add_argument('--kernel', '-k', type=int, default=256)
+    parser.add_argument('--stride', '-s', type=int, default=16)
+    parser.add_argument('--batchsize', '-b', type=int, default=64,
                         help='Training batch size')
-    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
+    parser.add_argument('--device', '-d', type=int, default=0)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--no_adapt', '-no_adapt', action='store_true')
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
@@ -157,13 +162,12 @@ def main():
     parser.add_argument('--autoencode', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
     parser.add_argument('--num_bits', '-nb', type=int, default=8)
-    parser.add_argument('--groups', '-g', type=int, default=1)
     args = parser.parse_args()
 
     # Initialize device
     dtype = torch.float32
     if torch.cuda.is_available():
-        device = torch.device('cuda:0')
+        device = torch.device('cuda:' + str(args.device))
     else:
         device = torch.device('cpu')
     print('On device: ', device)
@@ -197,7 +201,7 @@ def main():
     # loss = DiscreteWasserstein(2**args.num_bits, mode='interger',
     #      default_dist=False, dist_matrix=dist_matrix)
     # loss = loss.to(device=device, dtype=dtype)
-    loss = nn.MSELoss()
+    loss = SignalDistortionRatio()
     loss_metrics = LossMetrics()
 
     # Initialize optimizer
