@@ -50,6 +50,7 @@ def main():
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=64,
                         help='Training batch size')
+    parser.add_argument('--device', '-d', type=int, default=0)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
@@ -70,7 +71,7 @@ def main():
     # Initialize device
     dtype = torch.float32
     if torch.cuda.is_available():
-        device = torch.device('cuda:0')
+        device = torch.device('cuda:'+ str(args.device))
     else:
         device = torch.device('cpu')
     print('On device: ', device)

@@ -64,10 +64,12 @@ def add_logistic_noise(x):
     x = x + torch.log(u) - torch.log(1 - u)
     return x
 
-def init_weight(size, requires_grad=True, scale=1):
+def init_weight(size, requires_grad=True, gain=1, one_sided=False):
     w = torch.empty(size)
-    nn.init.xavier_uniform_(w)
-    w = nn.Parameter(scale*w, requires_grad=requires_grad)
+    nn.init.xavier_uniform_(w, gain=gain)
+    if one_sided:
+        w = torch.abs(w)
+    w = nn.Parameter(w, requires_grad=requires_grad)
     return w
 
 class BitwiseAbstractClass(nn.Module):
@@ -134,7 +136,7 @@ class BitwiseLinear(BitwiseAbstractClass):
         self.use_gate = use_gate
         self.use_noise = use_noise
         if use_gate:
-            self.gate = init_weight((output_size, input_size), requires_grad)
+            self.gate = init_weight((output_size, input_size), requires_grad, one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 
@@ -167,7 +169,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
         self.use_noise = use_noise
         self.activation = activation
         if self.use_gate:
-            self.gate = init_weight(weight_size, requires_grad)
+            self.gate = init_weight(weight_size, requires_grad, one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 
@@ -204,7 +206,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
         weight_size = (input_channels, output_channels // groups, kernel_size)
         self.weight = init_weight(weight_size, requires_grad)
         if use_gate:
-            self.gate = init_weight(weight_size, requires_grad)
+            self.gate = init_weight(weight_size, requires_grad, one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 

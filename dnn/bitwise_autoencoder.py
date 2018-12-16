@@ -29,12 +29,8 @@ class BitwiseAutoencoder(nn.Module):
         self.conv1 = BitwiseConv1d(in_channels, kernel_size,
             kernel_size, stride=stride, padding=kernel_size, groups=groups,
             use_gate=use_gate)
-        self.conv2 = BitwiseConv1d(in_channels, kernel_size,
-            kernel_size, stride=stride, padding=kernel_size, groups=groups,
-            use_gate=use_gate)
         self.autoencode = autoencode
-        self.filter_activation = torch.tanh
-        self.gate_activation = torch.sigmoid
+        self.activation = torch.tanh
         self.batchnorm = nn.BatchNorm1d(kernel_size)
 
         # Initialize inverse of front end transform
@@ -55,8 +51,7 @@ class BitwiseAutoencoder(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        h = self.filter_activation(self.conv1(x))
-        h = h * self.gate_activation(self.conv2(x))
+        h = self.activation(self.conv1(x))
         h = self.conv1_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
         h = self.output_activation(h)
         return h
