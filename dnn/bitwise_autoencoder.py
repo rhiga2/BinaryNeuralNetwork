@@ -21,22 +21,24 @@ class BitwiseAutoencoder(nn.Module):
     Adaptive transform network inspired by Minje Kim
     '''
     def __init__(self, kernel_size=512, stride=64, in_channels=1,
-        out_channels=256, combine_hidden=8, fc_sizes = [], dropout=0,
-        sparsity=95, adapt=True, autoencode=False, groups=1, use_gate=True):
+        out_channels=1, fc_sizes = [], dropout=0,
+        sparsity=95, adapt=True, autoencode=False, use_gate=True):
         super(BitwiseAutoencoder, self).__init__()
         # Initialize adaptive front end
         self.kernel_size = kernel_size
-        self.conv1 = BitwiseConv1d(in_channels, kernel_size,
-            kernel_size, stride=stride, padding=kernel_size, groups=groups,
-            use_gate=use_gate)
+        self.conv1 = nn.Conv1d(1, kernel_size, kernel_size, stride=stride,
+            padding=kernel_size)
+        # self.conv1 = BitwiseConv1d(in_channels, kernel_size,
+        #     kernel_size, stride=stride, padding=kernel_size, groups=groups,
+        #     use_gate=use_gate)
         self.autoencode = autoencode
         self.activation = torch.tanh
         self.batchnorm = nn.BatchNorm1d(kernel_size)
 
         # Initialize inverse of front end transform
-        self.conv1_transpose = BitwiseConvTranspose1d(kernel_size,
-            out_channels, kernel_size, stride=stride, groups=groups,
-            use_gate=use_gate)
+        self.conv1_tranpose = nn.Conv2d(1, kernel_size, kernel_size, stride=stride)
+        # self.conv1_transpose = BitwiseConvTranspose1d(kernel_size,
+        #    out_channels, kernel_size, stride=stride, use_gate=use_gate)
         self.output_activation = nn.Softmax(dim=1)
         self.sparsity = sparsity
         self.mode = 'real'
@@ -51,9 +53,9 @@ class BitwiseAutoencoder(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        h = self.activation(self.conv1(x))
+        h = self.activation(self.batchnorm(self.conv1(x)))
         h = self.conv1_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
-        h = self.output_activation(h)
+        # h = self.output_activation(h)
         return h
 
     def noisy(self):
@@ -61,24 +63,14 @@ class BitwiseAutoencoder(nn.Module):
         Converts real network to noisy training network
         '''
         self.mode = 'noisy'
-        self.filter_activation = bitwise_activation
-        self.gate_activation = lambda x : (bitwise_activation(x) + 1)/2
-        self.conv1.noisy()
-        self.conv1_transpose.noisy()
-        if not self.autoencode:
-            for layer in self.linear_list:
-                layer.noisy()
+        self.activation = bitwise_activation
 
     def inference(self):
         '''
         Converts noisy training network to bitwise network
         '''
         self.mode = 'inference'
-        self.filter_activation = bitwise_activation
-        self.gate_activation = lambda x : (bitwise_activation(x) + 1)/2
-        if not self.autoencode:
-            for layer in self.linear_list:
-                layer.inference()
+        self.activation = bitwise_activation
 
     def update_betas(self):
         '''
@@ -91,8 +83,8 @@ class BitwiseAutoencoder(nn.Module):
             for layer in self.linear_list:
                 layer.update_beta(sparsity=self.sparsity)
 
-def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'), autoencode=False,
-    quantizer=None, transform=None, dtype=torch.float):
+def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
+    autoencode=False, quantizer=None, transform=None, dtype=torch.float):
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
@@ -177,18 +169,17 @@ def main():
     print('On device: ', device)
 
     # Initialize quantizer and dequantizer
-    delta = 2/(2**args.num_bits)
-    quantizer = Quantizer(-1, delta, num_bits=args.num_bits, use_mu=True)
-    # transform = Disperser(num_bits=args.num_bits, center=True)
-    # transform = transform.to(device=device, dtype=dtype)
+    # delta = 2/(2**args.num_bits)
+    # quantizer = Quantizer(-1, delta, num_bits=args.num_bits, use_mu=True)
+    quantizer=None
     transform = None
 
     # Make model and dataset
-    train_dl, val_dl = make_data(args.batchsize, hop=args.stride, toy=args.toy)
+    train_dl, val_dl, _ = make_data(args.batchsize, hop=args.stride, toy=args.toy)
     model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
-        in_channels=args.num_bits if transform else 1, out_channels=2**args.num_bits,
+        in_channels=1, out_channels=1,
         dropout=args.dropout, sparsity=args.sparsity, adapt=not args.no_adapt,
-        autoencode=args.autoencode, groups=args.groups)
+        autoencode=args.autoencode)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
@@ -200,12 +191,13 @@ def main():
     print(model)
 
     # Initialize loss function
-    col = torch.arange(0, 2**args.num_bits).to(torch.float)
-    col = quantizer.inverse(col)
-    dist_matrix = torch.abs(col.unsqueeze(1)-col)
-    loss = DiscreteWasserstein(2**args.num_bits, mode='interger',
-        default_dist=False, dist_matrix=dist_matrix)
-    loss = loss.to(device=device, dtype=dtype)
+    # col = torch.arange(0, 2**args.num_bits).to(torch.float)
+    # col = quantizer.inverse(col)
+    # dist_matrix = torch.abs(col.unsqueeze(1)-col)
+    # loss = DiscreteWasserstein(2**args.num_bits, mode='interger',
+    #      default_dist=False, dist_matrix=dist_matrix)
+    # loss = loss.to(device=device, dtype=dtype)
+    loss = nn.MSELoss()
     loss_metrics = LossMetrics()
 
     # Initialize optimizer
