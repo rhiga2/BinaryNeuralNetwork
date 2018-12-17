@@ -52,7 +52,7 @@ class BitwiseMLP(nn.Module):
         for i in range(self.num_layers):
             x = self.filter_list[i](x)
             if self.use_batchnorm:
-            x = self.bn_list[i](x)
+                x = self.bn_list[i](x)
             if i < self.num_layers - 1:
                 if self.use_noise and self.mode != 'inference':
                     x = add_logistic_noise(x)
