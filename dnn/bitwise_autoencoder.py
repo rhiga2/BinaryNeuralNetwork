@@ -39,7 +39,7 @@ class BitwiseAutoencoder(nn.Module):
         self.conv1_transpose = nn.ConvTranspose1d(kernel_size, 1, kernel_size, stride=stride)
         # self.conv1_transpose = BitwiseConvTranspose1d(kernel_size,
         #    out_channels, kernel_size, stride=stride, use_gate=use_gate)
-        self.output_activation = nn.Softmax(dim=1)
+        # self.output_activation = nn.Softmax(dim=1)
         self.sparsity = sparsity
         self.mode = 'real'
 

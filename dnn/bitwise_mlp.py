@@ -9,7 +9,8 @@ from dnn.binary_layers import *
 
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
-        sparsity=95, temp=1, use_gate=False, use_noise=False):
+        sparsity=95, temp=1, use_gate=False, use_noise=False,
+        use_batchnorm=True):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
@@ -17,6 +18,7 @@ class BitwiseMLP(nn.Module):
         self.temp = nn.Parameter(torch.tensor(temp, dtype=torch.float), requires_grad=False)
         self.activation = lambda x : squeezed_tanh(x, temp)
         self.use_noise = use_noise
+        self.use_batchnorm = use_batchnorm
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
@@ -29,7 +31,8 @@ class BitwiseMLP(nn.Module):
             self.filter_list.append(BitwiseLinear(isize, osize,
                 use_gate=use_gate, activation=self.activation,
                 use_noise=use_noise))
-            self.bn_list.append(nn.BatchNorm1d(osize))
+            if use_batchnorm:
+                self.bn_list.append(nn.BatchNorm1d(osize))
             if i < self.num_layers - 1:
                 self.dropout_list.append(nn.Dropout(dropout))
             isize = osize
@@ -48,6 +51,7 @@ class BitwiseMLP(nn.Module):
         '''
         for i in range(self.num_layers):
             x = self.filter_list[i](x)
+            if self.use_batchnorm:
             x = self.bn_list[i](x)
             if i < self.num_layers - 1:
                 if self.use_noise and self.mode != 'inference':

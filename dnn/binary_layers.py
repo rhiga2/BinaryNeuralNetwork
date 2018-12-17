@@ -38,7 +38,7 @@ class BitwiseParams(Function):
     def backward(ctx, grad_output):
         # relax as tanh or use straight through estimator?
         x = ctx.saved_tensors[0]
-        return grad_output * (1 - torch.tanh(x)**2), None
+        return grad_output * (torch.abs(x) <= 1).to(grad_output.dtype), None
 
 class Binarize(Function):
     @staticmethod
@@ -98,6 +98,9 @@ class BitwiseAbstractClass(nn.Module):
         self.mode = 'noisy'
         self.weight = nn.Parameter(torch.tanh(self.weight),
             requires_grad=self.requires_grad)
+        if self.use_gate:
+            self.gate = nn.Parameter(torch.tanh(self.gate),
+                requires_grad=self.requires_grad)
         self.activation = lambda x : bitwise_params(x, self.beta)
 
     def inference(self):
