@@ -47,7 +47,8 @@ def main():
             np.savez(
                 binary_fname,
                 bmag=bmag,
-                ibm=ibm
+                ibm=ibm,
+                spec=mix_mag
             )
 
 if __name__ == '__main__':

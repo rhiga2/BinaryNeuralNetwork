@@ -17,18 +17,24 @@ import visdom
 import argparse
 
 def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
-    dtype=torch.float, train=True):
+    dtype=torch.float, train=True, weighted=False):
     running_loss = 0
     for batch in dl:
         if optimizer:
             optimizer.zero_grad()
         mix = batch['bmag'].to(device=device)
-        target  = batch['ibm'].to(device=device)
+        target = batch['ibm'].to(device=device)
+        spec = batch['mix_mag'].to(device=device)
         mix = mix.to(device=device)
         model_in = flatten(mix)
         estimate = model(model_in)
-        estimate = unflatten(estimate, mix.size(0), mix.size(2))
-        cost = loss(estimate, target)
+        estimate = unflatten(estimate, mix.size(0), mix.size(2), (2, 0, 1))
+        if weighted:
+            weights = torch.mean(torch.mean(spec, dim=1), dim=2)
+            print(weights)
+            cost = loss(estimate, target, weight=weights)
+        else:
+            cost = loss(estimate, target)
         running_loss += cost.item() * mix.size(0)
         if optimizer:
             cost.backward()
@@ -40,8 +46,9 @@ def flatten(x):
     x = x.permute(0, 2, 1).contiguous().view(-1, channels)
     return x
 
-def unflatten(x, batch, time):
-    x = x.view(batch, time, -1).permute(0, 2, 1)
+def unflatten(x, batch, time, permutation=(0, 2, 1)):
+    x = x.view(batch, time, -1)
+    x = x.permute(permutation*)
     return x
 
 def main():
