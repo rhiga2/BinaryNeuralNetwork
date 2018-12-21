@@ -24,15 +24,14 @@ def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cp
             optimizer.zero_grad()
         mix = batch['bmag'].to(device=device)
         target = batch['ibm'].to(device=device)
-        spec = batch['mix_mag'].to(device=device)
+        spec = batch['spec'].to(device=device)
+        spec = spec / torch.std(spec)
         mix = mix.to(device=device)
         model_in = flatten(mix)
         estimate = model(model_in)
-        estimate = unflatten(estimate, mix.size(0), mix.size(2), (2, 0, 1))
+        estimate = unflatten(estimate, mix.size(0), mix.size(2))
         if weighted:
-            weights = torch.mean(torch.mean(spec, dim=1), dim=2)
-            print(weights)
-            cost = loss(estimate, target, weight=weights)
+            cost = loss(estimate, target, weight=spec)
         else:
             cost = loss(estimate, target)
         running_loss += cost.item() * mix.size(0)
@@ -48,8 +47,14 @@ def flatten(x):
 
 def unflatten(x, batch, time, permutation=(0, 2, 1)):
     x = x.view(batch, time, -1)
-    x = x.permute(permutation*)
+    x = x.permute(*permutation).contiguous()
     return x
+
+def mean_squared_error(estimate, target, weight=None):
+    if weight is not None:
+        return torch.mean(weight*(estimate - target)**2)
+    else:
+        return torch.mean((estimate - target)**2)
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
@@ -74,6 +79,8 @@ def main():
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--use_noise', '-noise', action='store_true')
     parser.add_argument('--nobatchnorm', '--nobn', action='store_true')
+    parser.add_argument('--loss', '-l', type=str, default='bce')
+    parser.add_argument('--weighted', '-w', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -84,11 +91,21 @@ def main():
         device = torch.device('cpu')
     print('On device: ', device)
 
+    # Initialize loss function
+    output_activation = False
+    if args.loss == 'mse':   
+        loss = mean_squared_error
+        output_activation = True
+    else:
+        loss = F.binary_cross_entropy_with_logits
+    loss_metrics = LossMetrics()
+
     # Make model and dataset
     train_dl, val_dl = make_binary_data(args.batchsize, toy=args.toy)
     model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
         dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
-        use_noise=args.use_noise, use_batchnorm=not args.nobatchnorm)
+        use_noise=args.use_noise, use_batchnorm=not args.nobatchnorm, 
+        output_activation=output_activation)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
@@ -99,11 +116,6 @@ def main():
     model.to(device=device)
     print(model)
 
-    # Initialize loss function
-    loss = nn.BCEWithLogitsLoss()
-    loss = loss.to(device=device)
-    loss_metrics = LossMetrics()
-
     # Initialize optimizer
     vis = visdom.Visdom(port=5800)
     lr = args.learning_rate
@@ -113,12 +125,12 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
-        train_loss = evaluate(model, train_dl, optimizer, loss=loss, device=device)
+        train_loss = evaluate(model, train_dl, optimizer, loss=loss, device=device, weighted=args.weighted)
 
         if (epoch+1) % args.output_period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
-            val_loss = evaluate(model, val_dl, loss=loss, device=device)
+            val_loss = evaluate(model, val_dl, loss=loss, device=device, weighted=args.weighted)
             print('Val Cost: ', val_loss)
             loss_metrics.update(train_loss, val_loss,
                 output_period=args.output_period)

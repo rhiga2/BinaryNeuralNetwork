@@ -68,7 +68,7 @@ class BinaryDataset():
     def __getitem__(self, i):
         binary_fname = self.data_dir + ('binary_data%d.npz'%i)
         binary_data = np.load(binary_fname)
-        return {'bmag': binary_data['bmag'], 'ibm': binary_data['ibm']}
+        return {'bmag': binary_data['bmag'], 'ibm': binary_data['ibm'], 'spec': binary_data['spec']}
 
     def __len__(self):
         return self.length
