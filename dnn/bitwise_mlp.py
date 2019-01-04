@@ -17,7 +17,6 @@ class BitwiseMLP(nn.Module):
         self.use_gate = use_gate
         self.temp = nn.Parameter(torch.tensor(temp, dtype=torch.float), requires_grad=False)
         self.activation = torch.tanh
-        self.use_noise = use_noise
         self.use_batchnorm = use_batchnorm
 
         # Initialize linear layers
@@ -29,8 +28,7 @@ class BitwiseMLP(nn.Module):
         self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
             self.filter_list.append(BitwiseLinear(isize, osize,
-                use_gate=use_gate, activation=self.activation,
-                use_noise=use_noise))
+                use_gate=use_gate, activation=self.activation))
             if use_batchnorm:
                 self.bn_list.append(nn.BatchNorm1d(osize))
             if i < self.num_layers - 1:
@@ -55,8 +53,6 @@ class BitwiseMLP(nn.Module):
             if i < self.num_layers - 1:
                 if self.use_batchnorm:
                     x = self.bn_list[i](x)
-                if self.use_noise and self.mode != 'inference':
-                    x = add_logistic_noise(x)
                 x = self.activation(x)
                 x = self.dropout_list[i](x)
         if self.output_activation:
