@@ -59,9 +59,9 @@ squeezed_tanh = SqueezedTanh.apply
 bitwise_params = BitwiseParams.apply
 binarize = Binarize.apply
 
-def add_logistic_noise(x):
+def add_logistic_noise(x, sigma=0.1):
     u = torch.rand_like(x)
-    x = x + torch.log(u) - torch.log(1 - u)
+    x = x + sigma * (torch.log(u) - torch.log(1 - u))
     return x
 
 def init_weight(size, requires_grad=True, gain=1, one_sided=False):
