@@ -46,29 +46,37 @@ def istft(mag, phase, window='hann', nperseg=1024, noverlap=768):
 
 def make_binary_data(batchsize, toy=False):
     if toy:
-        trainset = BinaryDataset('/media/data/binary_audio/toy_train')
-        valset = BinaryDataset('/media/data/binary_audio/toy_val')
+        trainset = DatasetFromDirectory('/media/data/binary_audio/toy_train',
+            template='binary_data*.npz')
+        valset = DatasetFromDirectory('/media/data/binary_audio/toy_val',
+            template='binary_data*.npz')
+        rawset = DatasetFromDirectory('/media/data/binary_audio/toy_val',
+            template='raw_data*.npz')
     else:
-        trainset = BinaryDataset('/media/data/binary_audio/train')
-        valset = BinaryDataset('/media/data/binary_audio/val')
+        trainset = DatasetFromDirectory('/media/data/binary_audio/train',
+            template='binary_data*.npz')
+        valset = DatasetFromDirectory('/media/data/binary_audio/val',
+            template='binary_data*.npz')
+        rawset = DatasetFromDirectory('/media/data/binary_audio/val',
+            template='raw_data*.npz')
     collate = lambda x : collate_and_trim(x, axis=1)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)
-    val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
-    return train_dl, val_dl
+    return train_dl, valset, rawset
 
-class BinaryDataset():
-    def __init__(self, data_dir):
+class DatasetFromDirectory():
+    def __init__(self, data_dir, template='binary_data*.npz'):
         self.data_dir = data_dir
         if data_dir[-1] != '/':
             self.data_dir += '/'
-        flist = glob.glob(self.data_dir + 'binary_data*.npz')
+        flist = glob.glob(self.data_dir + template)
+        self.template = template.replace('*', '%d')
         self.length = len(flist)
 
     def __getitem__(self, i):
-        binary_fname = self.data_dir + ('binary_data%d.npz'%i)
-        binary_data = np.load(binary_fname)
-        return {'bmag': binary_data['bmag'], 'ibm': binary_data['ibm'], 'spec': binary_data['spec']}
+        fname = self.data_dir + (self.template%i)
+        data = np.load(fname)
+        return data
 
     def __len__(self):
         return self.length

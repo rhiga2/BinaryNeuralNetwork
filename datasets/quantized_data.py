@@ -105,19 +105,3 @@ class Quantizer(nn.Module):
         if self.use_mu:
             x = inverse_mu_law(x, 2**self.num_bits-1)
         return x
-
-class BinaryDataset():
-    def __init__(self, data_dir):
-        self.data_dir = data_dir
-        if data_dir[-1] != '/':
-            self.data_dir += '/'
-        flist = glob.glob(self.data_dir + 'binary_data*.npz')
-        self.length = len(flist)
-
-    def __getitem__(self, i):
-        binary_fname = self.data_dir + ('binary_data%d.npz'%i)
-        binary_data = np.load(binary_fname)
-        return {'bmag': binary_data['bmag'], 'ibm': binary_data['ibm']}
-
-    def __len__(self):
-        return self.length

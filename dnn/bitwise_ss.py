@@ -16,29 +16,57 @@ from dnn.bitwise_mlp import *
 import visdom
 import argparse
 
-def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
-    dtype=torch.float, train=True, weighted=False):
+def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
+    dtype=torch.float, weighted=False):
     running_loss = 0
+    it = iter(raw_dl)
     for batch in dl:
-        if optimizer:
-            optimizer.zero_grad()
-        mix = batch['bmag'].to(device=device)
-        target = batch['ibm'].to(device=device)
+        optimizer.zero_grad()
+        bmag = batch['bmag'].to(device=device)
+        ibm = batch['ibm'].to(device=device)
         spec = batch['spec'].to(device=device)
         spec = spec / torch.std(spec)
-        mix = mix.to(device=device)
-        model_in = flatten(mix)
+        bmag = bmag.to(device=device)
+        model_in = flatten(bmag)
         estimate = model(model_in)
-        estimate = unflatten(estimate, mix.size(0), mix.size(2))
+        estimate = unflatten(estimate, bmag.size(0), bmag.size(2))
         if weighted:
-            cost = loss(estimate, target, weight=spec)
+            cost = loss(estimate, ibm, weight=spec)
         else:
-            cost = loss(estimate, target)
-        running_loss += cost.item() * mix.size(0)
-        if optimizer:
-            cost.backward()
-            optimizer.step()
+            cost = loss(estimate, ibm)
+        running_loss += cost.item() * bmag.size(0)
+        cost.backward()
+        optimizer.step()
     return running_loss / len(dl.dataset)
+
+def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400):
+    bss_metrics = BSSMetricsList()
+    for i in range(len(dataset)):
+        if i >= max_samples:
+            return bss_metrics
+        raw_sample = rawset[i]
+        bin_sample = dataset[i]
+        mix = raw_sample['mixture']
+        target = raw_sample['target']
+        ibm = torch.FloatTensor(raw_sample['ibm'])
+        spec = torch.FloatTensor(bin_sample['spec'])
+        val_mag, val_phase = stft(mix)
+        interference = raw_sample['interference']
+        bmag = torch.FloatTensor(bin_sample['bmag']).unsqueeze(0)
+        model_in = flatten(bmag)
+        premask = model(model_in).squeeze(0)
+        if weighted:
+            cost = loss(premask, ibm, weight=spec)
+        else:
+            cost = loss(premask, ibm)
+        running_loss += cost
+        premask = unflatten(premask, bmag.size(0), bmag.size(2))
+        mask = make_binary_mask(premask).squeeze(0)
+        estimate = istft(val_mag * mask.numpy(), val_phase)
+        sources = np.stack([target, interference], axis=0)
+        metric = bss_eval_np(estimate, sources)
+        bss_metrics.append(metric)
+    return running_loss / len(dataset), bss_metrics
 
 def flatten(x):
     batch, channels, time = x.size()
@@ -99,7 +127,7 @@ def main():
     loss_metrics = LossMetrics()
 
     # Make model and dataset
-    train_dl, val_dl = make_binary_data(args.batchsize, toy=args.toy)
+    train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
     model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
         dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
         use_batchnorm=args.use_batchnorm)
@@ -122,15 +150,18 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
-        train_loss = evaluate(model, train_dl, optimizer, loss=loss, device=device, weighted=args.weighted)
+        train_loss = train(model, train_dl, optimizer, loss=loss,
+            device=device, weighted=args.weighted)
 
         if (epoch+1) % args.output_period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
-            val_loss = evaluate(model, val_dl, loss=loss, device=device, weighted=args.weighted)
-            print('Val Cost: ', val_loss)
+            val_loss, val_metrics = evaluate(model, valset, rawset, loss=loss,
+                weighted=args.weighted)
+            print('Val Cost: %f' % val_loss)
+            sdr, sir, sar = val_metrics.mean()
             loss_metrics.update(train_loss, val_loss,
-                output_period=args.output_period)
+                sdr, sir, sar, output_period=args.output_period)
             train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', None])
             torch.save(model.state_dict(), '../models/' + args.model_file)
             lr *= args.lr_decay

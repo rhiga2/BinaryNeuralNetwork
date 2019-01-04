@@ -37,6 +37,7 @@ def main():
     for directory, dataset in zip(dirs, datasets):
         for i in range(len(dataset)):
             binary_fname = directory + 'binary_data%d.npz' % i
+            raw_fname = directory + 'raw_data%d.npz' % i
             sample = dataset[i]
             mix, target, inter = sample['mixture'], sample['target'], sample['interference']
             mix_mag, mix_phase = stft(mix)
@@ -48,8 +49,17 @@ def main():
                 binary_fname,
                 bmag=bmag,
                 ibm=ibm,
-                spec=mix_mag
+                spec=mix_mag,
+                spec_phase=mix_phase
             )
+
+            if directory != train_dir:
+                np.savez(
+                    raw_fname,
+                    mix=mix,
+                    target=targ,
+                    interference=inter
+                )
 
 if __name__ == '__main__':
     main()
