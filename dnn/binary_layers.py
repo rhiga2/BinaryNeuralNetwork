@@ -17,17 +17,6 @@ class BitwiseActivation(Function):
         x = ctx.saved_tensors[0]
         return grad_output * (1 - torch.tanh(x)**2), None
 
-class SqueezedTanh(Function):
-    @staticmethod
-    def forward(ctx, x, temp):
-        ctx.save_for_backward(x)
-        return torch.tanh(temp * x)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        x = ctx.saved_tensors[0]
-        return grad_output * (1 - torch.tanh(x)**2), None
-
 class BitwiseParams(Function):
     @staticmethod
     def forward(ctx, x, beta):
@@ -55,7 +44,6 @@ class Binarize(Function):
         return grad_output * (torch.abs(x) <= 1).to(grad_output.dtype)
 
 bitwise_activation = BitwiseActivation.apply
-squeezed_tanh = SqueezedTanh.apply
 bitwise_params = BitwiseParams.apply
 binarize = Binarize.apply
 
@@ -114,13 +102,9 @@ class BitwiseAbstractClass(nn.Module):
 
     def get_effective_weight(self):
         w = self.weight
-        if self.use_noise and self.mode != 'inference':
-            w = add_logistic_noise(self.weight)
         w = self.activation(w)
         if self.use_gate:
             g = self.gate
-            if self.use_noise and self.mode != 'inference':
-                g = add_logistic_noise(self.gate)
             w = w*((self.activation(g)+1)/2)
         return w
 
@@ -129,7 +113,7 @@ class BitwiseLinear(BitwiseAbstractClass):
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
     def __init__(self, input_size, output_size, requires_grad=True, use_gate=False,
-        activation=torch.tanh, use_noise=False):
+        activation=torch.tanh):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
@@ -137,7 +121,6 @@ class BitwiseLinear(BitwiseAbstractClass):
         self.weight = init_weight((output_size, input_size), requires_grad)
         self.activation = activation
         self.use_gate = use_gate
-        self.use_noise = use_noise
         if use_gate:
             self.gate = init_weight((output_size, input_size), requires_grad, one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
@@ -157,7 +140,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True, use_gate=False,
-        activation=torch.tanh, use_noise=False):
+        activation=torch.tanh):
         super(BitwiseConv1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -169,7 +152,6 @@ class BitwiseConv1d(BitwiseAbstractClass):
         weight_size = (output_channels, input_channels//self.groups, kernel_size)
         self.weight = init_weight(weight_size, requires_grad)
         self.use_gate = use_gate
-        self.use_noise = use_noise
         self.activation = activation
         if self.use_gate:
             self.gate = init_weight(weight_size, requires_grad, one_sided=True)
@@ -194,7 +176,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True, use_gate=False,
-        activation=torch.tanh, use_noise=False):
+        activation=torch.tanh):
         super(BitwiseConvTranspose1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -203,7 +185,6 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
         self.padding = padding
         self.groups = groups
         self.use_gate = use_gate
-        self.use_noise = use_noise
         self.requires_grad = requires_grad
         self.activation = activation
         weight_size = (input_channels, output_channels // groups, kernel_size)
@@ -275,38 +256,3 @@ class BitwiseResidualLinear(nn.Module):
     def inference(self):
         self.dense1.inference()
         self.dense2.inference()
-
-def scale_only_bn(gamma, x):
-    '''
-     x is shape(N, C)
-    '''
-    return torch.abs(gamma) * x / torch.sqrt((torch.var(x, dim=0) + 1e-5))
-
-class Scaler(nn.Module):
-    '''
-    Scale-only batch normalization
-    '''
-    def __init__(self, num_features, requires_grad=True):
-        super(Scaler, self).__init__()
-        self.gamma = nn.Parameter(torch.ones(num_features), requires_grad=requires_grad)
-
-    def forward(self, x):
-        '''
-        x is shape (N, C)
-        '''
-        return scale_only_bn(self.gamma, x)
-
-class ConvScaler1d(nn.Module):
-    def __init__(self, num_features, requires_grad=True):
-        super(ConvScaler1d, self).__init__()
-        self.gamma = nn.Parameter(torch.ones(num_features), requires_grad=requires_grad)
-
-    def forward(self, x):
-        '''
-        x is shape (N, C, T)
-        '''
-        N, C, T = x.size()
-        # convert shape (N, C, T) to (NT, C)
-        x = x.permute(0, 2, 1).contiguous().view(-1, C)
-        x = scale_only_bn(self.gamma, x)
-        return x.view(-1, T, C).permute(0, 2, 1).contiguous()

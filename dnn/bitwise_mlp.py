@@ -9,15 +9,14 @@ from dnn.binary_layers import *
 
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
-        sparsity=95, temp=1, use_gate=False, use_noise=False,
-        use_batchnorm=True, output_activation=False):
+        sparsity=95, temp=1, use_gate=False, output_activation=torch.tanh,
+        use_batchnorm=True):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
-        self.output_activation = False
         self.use_gate = use_gate
         self.temp = nn.Parameter(torch.tensor(temp, dtype=torch.float), requires_grad=False)
-        self.activation = lambda x : squeezed_tanh(x, temp)
+        self.activation = torch.tanh
         self.use_noise = use_noise
         self.use_batchnorm = use_batchnorm
 
@@ -38,6 +37,7 @@ class BitwiseMLP(nn.Module):
                 self.dropout_list.append(nn.Dropout(dropout))
             isize = osize
 
+        self.output_activation = output_activation
         self.sparsity = sparsity
         self.mode = 'real'
 
@@ -52,15 +52,15 @@ class BitwiseMLP(nn.Module):
         '''
         for i in range(self.num_layers):
             x = self.filter_list[i](x)
-            if self.use_batchnorm:
-                x = self.bn_list[i](x)
             if i < self.num_layers - 1:
+                if self.use_batchnorm:
+                    x = self.bn_list[i](x)
                 if self.use_noise and self.mode != 'inference':
                     x = add_logistic_noise(x)
                 x = self.activation(x)
                 x = self.dropout_list[i](x)
         if self.output_activation:
-            x = self.activation(x)
+            x = self.output_activation(x)
         return x
 
     def noisy(self):
@@ -80,14 +80,6 @@ class BitwiseMLP(nn.Module):
         self.activation = bitwise_activation(x)
         for layer in self.filter_list:
             layer.inference()
-        for bn in self.bn_list:
-            sign_weight = torch.sign(bn.weight)
-            bias = -sign_weight * bn.running_mean
-            bias += bn.bias * bn.running_var / torch.abs(bn.weight)
-            bn.bias = nn.Parameter(bias, requires_grad=False)
-            bn.weight = nn.Parameter(sign_weight, requires_grad=False)
-            bn.running_var = torch.ones_like(running_var)
-            bn_running_mean = torch.zeros_like(running_mean)
 
     def update_betas(self):
         '''
@@ -98,12 +90,3 @@ class BitwiseMLP(nn.Module):
 
         for layer in self.filter_list:
             layer.update_beta(sparsity=self.sparsity)
-
-    def update_temp(self, temp):
-        if self.mode != 'real':
-            return
-
-        self.temp = nn.Parameter(torch.tensor(temp, dtype=self.temp.dtype, device=self.temp.device), requires_grad=False)
-        self.activation = lambda x : squeezed_tanh(x, temp)
-        for layer in self.filter_list:
-            layer.activation = self.activation
