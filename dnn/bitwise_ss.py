@@ -117,6 +117,7 @@ def main():
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--use_batchnorm', '-ub', action='store_true')
+    parser.add_argument('--activation', '-a', default='tanh')
     args = parser.parse_args()
 
     # Initialize device
@@ -134,11 +135,16 @@ def main():
         loss = F.binary_cross_entropy_with_logits
     loss_metrics = LossMetrics()
 
+    # Initialize activation
+    activation = torch.tanh
+    if args.activation == 'binarize':
+        activation = binarize
+
     # Make model and dataset
     train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
     model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
         dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
-        use_batchnorm=args.use_batchnorm, activation=torch.tanh)
+        use_batchnorm=args.use_batchnorm, activation=activation)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
