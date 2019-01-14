@@ -13,13 +13,13 @@ from datasets.two_source_mixture import *
 from loss_and_metrics.sepcosts import *
 from loss_and_metrics.bss_eval import *
 from dnn.bitwise_mlp import *
+import soundfile as sf
 import visdom
 import argparse
 
 def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
     dtype=torch.float, weighted=False):
     running_loss = 0
-    it = iter(raw_dl)
     for batch in dl:
         optimizer.zero_grad()
         bmag = batch['bmag'].to(device=device)
@@ -39,33 +39,42 @@ def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu')
         optimizer.step()
     return running_loss / len(dl.dataset)
 
-def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400):
+def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
+    device=torch.device('cpu'), weighted=False):
     bss_metrics = BSSMetricsList()
+    running_loss = 0
     for i in range(len(dataset)):
         if i >= max_samples:
             return bss_metrics
+
         raw_sample = rawset[i]
         bin_sample = dataset[i]
-        mix = raw_sample['mixture']
+        mix = raw_sample['mix']
         target = raw_sample['target']
-        ibm = torch.FloatTensor(raw_sample['ibm'])
-        spec = torch.FloatTensor(bin_sample['spec'])
-        val_mag, val_phase = stft(mix)
         interference = raw_sample['interference']
-        bmag = torch.FloatTensor(bin_sample['bmag']).unsqueeze(0)
+        mix_mag, mix_phase = stft(mix)        
+
+        bmag = torch.FloatTensor(bin_sample['bmag']).unsqueeze(0).to(device)
+        ibm = torch.FloatTensor(bin_sample['ibm']).unsqueeze(0).to(device)
+        spec = bin_sample['spec']
+        weights = torch.FloatTensor(spec).to(device)
+        weights = weights / torch.std(weights)
+        
         model_in = flatten(bmag)
-        premask = model(model_in).squeeze(0)
+        premask = model(model_in) 
+        premask = unflatten(premask, bmag.size(0), bmag.size(2))
         if weighted:
-            cost = loss(premask, ibm, weight=spec)
+            cost = loss(premask, ibm, weight=weights)
         else:
             cost = loss(premask, ibm)
-        running_loss += cost
-        premask = unflatten(premask, bmag.size(0), bmag.size(2))
-        mask = make_binary_mask(premask).squeeze(0)
-        estimate = istft(val_mag * mask.numpy(), val_phase)
+        running_loss += cost.item()
+        mask = make_binary_mask(premask).squeeze(0).cpu()
+        estimate = istft(mix_mag * mask.numpy(), mix_phase)
         sources = np.stack([target, interference], axis=0)
         metric = bss_eval_np(estimate, sources)
         bss_metrics.append(metric)
+    sf.write('estimate.wav', estimate, 16000)
+    sf.write('target.wav', target, 16000)
     return running_loss / len(dataset), bss_metrics
 
 def flatten(x):
@@ -157,9 +166,12 @@ def main():
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
             val_loss, val_metrics = evaluate(model, valset, rawset, loss=loss,
-                weighted=args.weighted)
+                weighted=args.weighted, device=device)
             print('Val Cost: %f' % val_loss)
             sdr, sir, sar = val_metrics.mean()
+            print('SDR: ', sdr)
+            print('SIR: ', sir)
+            print('SAR: ', sar)
             loss_metrics.update(train_loss, val_loss,
                 sdr, sir, sar, output_period=args.output_period)
             train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', None])

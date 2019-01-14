@@ -49,15 +49,14 @@ def main():
                 binary_fname,
                 bmag=bmag,
                 ibm=ibm,
-                spec=mix_mag,
-                spec_phase=mix_phase
+                spec=mix_mag.astype(np.float32)
             )
 
             if directory != train_dir:
                 np.savez(
                     raw_fname,
                     mix=mix,
-                    target=targ,
+                    target=target,
                     interference=inter
                 )
 

@@ -35,7 +35,7 @@ def stft(x, window='hann', nperseg=1024, noverlap=768):
         nperseg=nperseg,
         noverlap=noverlap)[2]
     real, imag = np.real(stft_x), np.imag(stft_x)
-    mag = np.sqrt(real**2 + imag**2 + 1e-6)
+    mag = np.sqrt(real**2 + imag**2)
     phase = stft_x / (mag + 1e-6)
     return mag, phase
 
