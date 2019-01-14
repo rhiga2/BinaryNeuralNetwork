@@ -91,17 +91,17 @@ def main():
     parser.add_argument('--batchsize', '-b', type=int, default=64,
                         help='Training batch size')
     parser.add_argument('--device', '-d', type=int, default=0)
+    parser.add_argument('--toy', action='store_true')
+    parser.add_argument('--model_file', '-mf', default='temp_model.model')
+    parser.add_argument('--load_file', '-lf', type=str, default=None)
+
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
-    parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', '-tn',  action='store_true')
-    parser.add_argument('--output_period', '-op', type=int, default=1)
-    parser.add_argument('--load_file', '-lf', type=str, default=None)
+    parser.add_argument('--period', '-p', type=int, default=1)
+
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
-    parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
-    parser.add_argument('--toy', action='store_true')
-    parser.add_argument('--model_file', '-mf', default='temp_model.model')
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--use_noise', '-noise', action='store_true')
     parser.add_argument('--loss', '-l', type=str, default='bce')
@@ -153,7 +153,7 @@ def main():
         train_loss = train(model, train_dl, optimizer, loss=loss,
             device=device, weighted=args.weighted)
 
-        if (epoch+1) % args.output_period == 0:
+        if (epoch+1) % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
             val_loss, val_metrics = evaluate(model, valset, rawset, loss=loss,
@@ -164,9 +164,6 @@ def main():
                 sdr, sir, sar, output_period=args.output_period)
             train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', None])
             torch.save(model.state_dict(), '../models/' + args.model_file)
-            lr *= args.lr_decay
-            optimizer = optim.Adam(model.parameters(), lr=lr,
-                weight_decay=args.weight_decay)
 
 if __name__ == '__main__':
     main()
