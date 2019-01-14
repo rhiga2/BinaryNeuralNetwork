@@ -52,12 +52,12 @@ def add_logistic_noise(x, sigma=0.1):
     x = x + sigma * (torch.log(u) - torch.log(1 - u))
     return x
 
-def init_weight(size, requires_grad=True, gain=1, one_sided=False):
+def init_weight(size, requires_grad=True, gain=1, one_sided=False, scale=1.0):
     w = torch.empty(size)
     nn.init.xavier_uniform_(w, gain=gain)
     if one_sided:
         w = torch.abs(w)
-    w = nn.Parameter(w, requires_grad=requires_grad)
+    w = nn.Parameter(scale * w, requires_grad=requires_grad)
     return w
 
 class BitwiseAbstractClass(nn.Module):
@@ -113,16 +113,18 @@ class BitwiseLinear(BitwiseAbstractClass):
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
     def __init__(self, input_size, output_size, requires_grad=True, use_gate=False,
-        activation=torch.tanh):
+        activation=torch.tanh, scale=1.0):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
         self.requires_grad = requires_grad
-        self.weight = init_weight((output_size, input_size), requires_grad)
+        self.weight = init_weight((output_size, input_size), requires_grad,
+            scale=scale)
         self.activation = activation
         self.use_gate = use_gate
         if use_gate:
-            self.gate = init_weight((output_size, input_size), requires_grad, one_sided=True)
+            self.gate = init_weight((output_size, input_size), requires_grad,
+                one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
         self.mode = 'real'
 
@@ -140,7 +142,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True, use_gate=False,
-        activation=torch.tanh):
+        activation=torch.tanh, scale=1.0):
         super(BitwiseConv1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -150,12 +152,13 @@ class BitwiseConv1d(BitwiseAbstractClass):
         self.groups = groups
         self.requires_grad = requires_grad
         weight_size = (output_channels, input_channels//self.groups, kernel_size)
-        self.weight = init_weight(weight_size, requires_grad)
+        self.weight = init_weight(weight_size, requires_grad, scale=scale)
         self.use_gate = use_gate
         self.activation = activation
         if self.use_gate:
             self.gate = init_weight(weight_size, requires_grad, one_sided=True)
-        self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
+        self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
+            requires_grad=False)
         self.mode = 'real'
 
     def forward(self, x):
@@ -176,7 +179,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
     '''
     def __init__(self, input_channels, output_channels, kernel_size,
         stride=1, padding=0, groups=1, requires_grad=True, use_gate=False,
-        activation=torch.tanh):
+        activation=torch.tanh, scale=1.0):
         super(BitwiseConvTranspose1d, self).__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
@@ -188,7 +191,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
         self.requires_grad = requires_grad
         self.activation = activation
         weight_size = (input_channels, output_channels // groups, kernel_size)
-        self.weight = init_weight(weight_size, requires_grad)
+        self.weight = init_weight(weight_size, requires_grad, scale=scale)
         if use_gate:
             self.gate = init_weight(weight_size, requires_grad, one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)

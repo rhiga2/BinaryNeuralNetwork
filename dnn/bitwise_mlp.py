@@ -9,14 +9,14 @@ from dnn.binary_layers import *
 
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
-        sparsity=95, temp=1, use_gate=False, output_activation=torch.tanh,
+        sparsity=95, temp=1, use_gate=False, activation=torch.tanh,
         use_batchnorm=True):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
         self.temp = nn.Parameter(torch.tensor(temp, dtype=torch.float), requires_grad=False)
-        self.activation = torch.tanh
+        self.activation = activation
         self.use_batchnorm = use_batchnorm
 
         # Initialize linear layers
@@ -35,7 +35,6 @@ class BitwiseMLP(nn.Module):
                 self.dropout_list.append(nn.Dropout(dropout))
             isize = osize
 
-        self.output_activation = output_activation
         self.sparsity = sparsity
         self.mode = 'real'
 
@@ -55,8 +54,7 @@ class BitwiseMLP(nn.Module):
                     x = self.bn_list[i](x)
                 x = self.activation(x)
                 x = self.dropout_list[i](x)
-        if self.output_activation:
-            x = self.output_activation(x)
+        x = self.activation(x)
         return x
 
     def noisy(self):

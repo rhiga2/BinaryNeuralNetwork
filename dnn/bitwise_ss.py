@@ -90,9 +90,9 @@ def unflatten(x, batch, time, permutation=(0, 2, 1)):
 
 def mean_squared_error(estimate, target, weight=None):
     if weight is not None:
-        return torch.mean(weight*(estimate - target)**2)
+        return 0.5 * torch.mean(weight*(estimate - target)**2)
     else:
-        return torch.mean((estimate - target)**2)
+        return 0.5 * torch.mean((estimate - target)**2)
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
@@ -116,7 +116,6 @@ def main():
 
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--use_gate', '-ug', action='store_true')
-    parser.add_argument('--use_noise', '-noise', action='store_true')
     parser.add_argument('--use_batchnorm', '-ub', action='store_true')
     args = parser.parse_args()
 
@@ -129,23 +128,17 @@ def main():
     print('On device: ', device)
 
     # Initialize loss function
-    output_activation = False
     if args.loss == 'mse':
         loss = mean_squared_error
-        output_activation = True
     else:
         loss = F.binary_cross_entropy_with_logits
     loss_metrics = LossMetrics()
 
     # Make model and dataset
     train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
-    if args.model == 'bitwise':
-        model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
-            dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
-            use_batchnorm=args.use_batchnorm)
-    elif args.model == 'binarized':
-        model = BinarizedMLP(2052, 513, fc_sizes = [2048, 2048],
-            dropout=args.dropout, output_activation=binarize)
+    model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
+        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
+        use_batchnorm=args.use_batchnorm, activation=torch.tanh)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
@@ -163,8 +156,7 @@ def main():
 
     for epoch in range(args.epochs):
         total_cost = 0
-        if args.model == 'bitwise':
-            model.update_betas()
+        model.update_betas()
         model.train()
         train_loss = train(model, train_dl, optimizer, loss=loss,
             device=device, weighted=args.weighted)
