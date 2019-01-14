@@ -8,7 +8,6 @@ import torch.nn.functional as F
 import glob
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-from datasets.quantized import *
 from dnn.binary_layers import *
 import argparse
 
