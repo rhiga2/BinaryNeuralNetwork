@@ -28,18 +28,12 @@ class BitwiseAutoencoder(nn.Module):
         self.kernel_size = kernel_size
         self.conv1 = nn.Conv1d(1, kernel_size, kernel_size, stride=stride,
             padding=kernel_size)
-        # self.conv1 = BitwiseConv1d(in_channels, kernel_size,
-        #     kernel_size, stride=stride, padding=kernel_size, groups=groups,
-        #     use_gate=use_gate)
         self.autoencode = autoencode
         self.activation = torch.tanh
         self.batchnorm = nn.BatchNorm1d(kernel_size)
 
         # Initialize inverse of front end transform
         self.conv1_transpose = nn.ConvTranspose1d(kernel_size, 1, kernel_size, stride=stride)
-        # self.conv1_transpose = BitwiseConvTranspose1d(kernel_size,
-        #    out_channels, kernel_size, stride=stride, use_gate=use_gate)
-        # self.output_activation = nn.Softmax(dim=1)
         self.sparsity = sparsity
         self.mode = 'real'
 
@@ -130,7 +124,6 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
         estimate = estimate.squeeze(1)
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
-        # estimate = torch.argmax(estimate, dim=1).to(torch.float)
         if quantizer:
             estimate = quantizer.inverse(estimate)
         estimate = estimate.to(device='cpu')
@@ -161,7 +154,6 @@ def main():
     parser.add_argument('--toy', action='store_true')
     parser.add_argument('--autoencode', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
-    parser.add_argument('--num_bits', '-nb', type=int, default=8)
     args = parser.parse_args()
 
     # Initialize device
@@ -173,8 +165,6 @@ def main():
     print('On device: ', device)
 
     # Initialize quantizer and dequantizer
-    # delta = 2/(2**args.num_bits)
-    # quantizer = Quantizer(-1, delta, num_bits=args.num_bits, use_mu=True)
     quantizer=None
     transform = None
 
@@ -194,13 +184,6 @@ def main():
     model.to(device=device, dtype=dtype)
     print(model)
 
-    # Initialize loss function
-    # col = torch.arange(0, 2**args.num_bits).to(torch.float)
-    # col = quantizer.inverse(col)
-    # dist_matrix = torch.abs(col.unsqueeze(1)-col)
-    # loss = DiscreteWasserstein(2**args.num_bits, mode='interger',
-    #      default_dist=False, dist_matrix=dist_matrix)
-    # loss = loss.to(device=device, dtype=dtype)
     loss = SignalDistortionRatio()
     loss_metrics = LossMetrics()
 

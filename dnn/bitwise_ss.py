@@ -13,6 +13,7 @@ from datasets.two_source_mixture import *
 from loss_and_metrics.sepcosts import *
 from loss_and_metrics.bss_eval import *
 from dnn.bitwise_mlp import *
+from dnn.binarized_network import *
 import soundfile as sf
 import visdom
 import argparse
@@ -52,16 +53,16 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
         mix = raw_sample['mix']
         target = raw_sample['target']
         interference = raw_sample['interference']
-        mix_mag, mix_phase = stft(mix)        
+        mix_mag, mix_phase = stft(mix)
 
         bmag = torch.FloatTensor(bin_sample['bmag']).unsqueeze(0).to(device)
         ibm = torch.FloatTensor(bin_sample['ibm']).unsqueeze(0).to(device)
         spec = bin_sample['spec']
         weights = torch.FloatTensor(spec).to(device)
         weights = weights / torch.std(weights)
-        
+
         model_in = flatten(bmag)
-        premask = model(model_in) 
+        premask = model(model_in)
         premask = unflatten(premask, bmag.size(0), bmag.size(2))
         if weighted:
             cost = loss(premask, ibm, weight=weights)
@@ -103,18 +104,19 @@ def main():
     parser.add_argument('--toy', action='store_true')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
     parser.add_argument('--load_file', '-lf', type=str, default=None)
+    parser.add_argument('--model', '-m', default='bitwise')
 
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--train_noisy', '-tn',  action='store_true')
     parser.add_argument('--period', '-p', type=int, default=1)
+    parser.add_argument('--loss', '-l', type=str, default='bce')
+    parser.add_argument('--weighted', '-w', action='store_true')
 
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--use_noise', '-noise', action='store_true')
-    parser.add_argument('--loss', '-l', type=str, default='bce')
-    parser.add_argument('--weighted', '-w', action='store_true')
     parser.add_argument('--use_batchnorm', '-ub', action='store_true')
     args = parser.parse_args()
 
@@ -137,9 +139,13 @@ def main():
 
     # Make model and dataset
     train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
-    model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
-        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
-        use_batchnorm=args.use_batchnorm)
+    if args.model == 'bitwise':
+        model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
+            dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
+            use_batchnorm=args.use_batchnorm)
+    elif args.model == 'binarized':
+        model = BinarizedMLP(2052, 513, fc_sizes = [2048, 2048],
+            dropout=args.dropout, output_activation=binarize)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
@@ -157,7 +163,8 @@ def main():
 
     for epoch in range(args.epochs):
         total_cost = 0
-        model.update_betas()
+        if args.model == 'bitwise':
+            model.update_betas()
         model.train()
         train_loss = train(model, train_dl, optimizer, loss=loss,
             device=device, weighted=args.weighted)

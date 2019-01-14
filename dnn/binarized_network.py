@@ -12,10 +12,10 @@ from datasets.quantized import *
 from dnn.binary_layers import *
 import argparse
 
-class BinarizedNetwork(nn.Module):
+class BinarizedMLP(nn.Module):
     def __init__(self, input_size, output_size, fc_sizes = [],
         dropout=0, output_activation=binarize):
-        super(BinarizedNetwork, self).__init__()
+        super(BinarizedMLP, self).__init__()
         self.params = {}
         self.num_layers = len(fc_sizes) + 1
         fc_sizes = fc_sizes + [output_size,]
