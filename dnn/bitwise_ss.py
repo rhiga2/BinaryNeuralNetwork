@@ -178,7 +178,7 @@ def main():
             print('SIR: ', sir)
             print('SAR: ', sar)
             loss_metrics.update(train_loss, val_loss,
-                sdr, sir, sar, output_period=args.output_period)
+                sdr, sir, sar, output_period=args.period)
             train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', None])
             torch.save(model.state_dict(), '../models/' + args.model_file)
 
