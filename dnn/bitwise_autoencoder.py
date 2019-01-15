@@ -21,13 +21,16 @@ class BitwiseAutoencoder(nn.Module):
     Adaptive transform network inspired by Minje Kim
     '''
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
-        out_channels=1, fc_sizes = [], dropout=0,
-        sparsity=95, adapt=True, autoencode=False, use_gate=True):
+        out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
+        adapt=True, autoencode=False, use_gate=True, scale=1.0):
         super(BitwiseAutoencoder, self).__init__()
+
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.conv1 = nn.Conv1d(1, kernel_size, kernel_size, stride=stride,
             padding=kernel_size)
+        self.conv1.weight = nn.Parameter(self.conv1.weight * scale,
+            requires_grad=True)
         self.autoencode = autoencode
         self.activation = torch.tanh
         self.batchnorm = nn.BatchNorm1d(kernel_size)
@@ -49,7 +52,6 @@ class BitwiseAutoencoder(nn.Module):
         time = x.size(2)
         h = self.activation(self.batchnorm(self.conv1(x)))
         h = self.conv1_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
-        # h = self.output_activation(h)
         return h
 
     def noisy(self):
@@ -171,9 +173,9 @@ def main():
     # Make model and dataset
     train_dl, val_dl, _ = make_data(args.batchsize, hop=args.stride, toy=args.toy)
     model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
-        in_channels=1, out_channels=1,
-        dropout=args.dropout, sparsity=args.sparsity, adapt=not args.no_adapt,
-        autoencode=args.autoencode)
+        in_channels=1, out_channels=1, dropout=args.dropout,
+        sparsity=args.sparsity, adapt=not args.no_adapt,
+        autoencode=args.autoencode, scale=10.0)
     if args.train_noisy:
         print('Noisy Network Training')
         if args.load_file:
