@@ -103,9 +103,8 @@ def main():
                         help='Training batch size')
     parser.add_argument('--device', '-d', type=int, default=0)
     parser.add_argument('--toy', action='store_true')
-    parser.add_argument('--exp_name', '-exp', default='temp')
+    parser.add_argument('--exp', '-exp', default='temp')
     parser.add_argument('--load_file', '-lf', type=str, default=None)
-    parser.add_argument('--model', '-m', default='bitwise')
 
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
