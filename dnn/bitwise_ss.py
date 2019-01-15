@@ -16,6 +16,7 @@ from dnn.bitwise_mlp import *
 from dnn.binarized_network import *
 import soundfile as sf
 import visdom
+import pickle as pkl
 import argparse
 
 def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
@@ -102,7 +103,7 @@ def main():
                         help='Training batch size')
     parser.add_argument('--device', '-d', type=int, default=0)
     parser.add_argument('--toy', action='store_true')
-    parser.add_argument('--model_file', '-mf', default='temp_model.model')
+    parser.add_argument('--exp_name', '-exp', default='temp')
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--model', '-m', default='bitwise')
 
@@ -180,7 +181,10 @@ def main():
             loss_metrics.update(train_loss, val_loss,
                 sdr, sir, sar, output_period=args.period)
             train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', None])
-            torch.save(model.state_dict(), '../models/' + args.model_file)
+            torch.save(model.state_dict(), '../models/' + args.exp + '.model')
+
+    with open('../results/' + args.exp + '.pkl', 'wb') as f:
+        pkl.dump(loss_metrics, f)
 
 if __name__ == '__main__':
     main()
