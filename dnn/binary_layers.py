@@ -96,7 +96,9 @@ class BitwiseAbstractClass(nn.Module):
             self.gate = nn.Parameter(torch.clamp(self.weight, -1, 1))
 
     def get_effective_weight(self):
-        w = self.weight * (torch.abs(self.weight) >= self.beta)
+        w = self.weight
+        if self.beta != 0:
+            w = w * (torch.abs(self.weight) >= self.beta).to(float)
         w = self.activation(w)
         if self.use_gate:
             w = w*((self.activation(self.gate)+1)/2)

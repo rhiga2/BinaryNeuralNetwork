@@ -13,7 +13,6 @@ from datasets.two_source_mixture import *
 from loss_and_metrics.sepcosts import *
 from loss_and_metrics.bss_eval import *
 from dnn.bitwise_mlp import *
-from dnn.binarized_network import *
 import soundfile as sf
 import visdom
 import pickle as pkl
