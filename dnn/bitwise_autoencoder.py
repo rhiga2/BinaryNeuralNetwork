@@ -54,20 +54,6 @@ class BitwiseAutoencoder(nn.Module):
         h = self.conv1_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
         return h
 
-    def noisy(self):
-        '''
-        Converts real network to noisy training network
-        '''
-        self.mode = 'noisy'
-        self.activation = bitwise_activation
-
-    def inference(self):
-        '''
-        Converts noisy training network to bitwise network
-        '''
-        self.mode = 'inference'
-        self.activation = bitwise_activation
-
     def update_betas(self):
         '''
         Updates sparsity parameter beta

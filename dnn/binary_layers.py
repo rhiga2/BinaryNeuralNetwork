@@ -25,11 +25,10 @@ class BitwiseParams(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        # relax as tanh or use straight through estimator?
         x = ctx.saved_tensors[0]
         return grad_output * (torch.abs(x) <= 1).to(grad_output.dtype), None
 
-class Binarize(Function):
+class ClippedSTE(Function):
     @staticmethod
     def forward(ctx, x):
         ctx.save_for_backward(x)
@@ -37,15 +36,24 @@ class Binarize(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        # There are two options:
-        # 1. Clamp gradients exceeding +/- 1
-        # 2. Zero gradients exceeding +/- 1
         x = ctx.saved_tensors[0]
         return grad_output * (torch.abs(x) <= 1).to(grad_output.dtype)
 
+class STE(Function):
+    @staticmethod
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        return torch.sign(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_tensors[0]
+        return grad_output
+
 bitwise_activation = BitwiseActivation.apply
 bitwise_params = BitwiseParams.apply
-binarize = Binarize.apply
+clipped_ste = ClippedSTE.apply
+ste = STE.apply
 
 def add_logistic_noise(x, sigma=0.1):
     u = torch.rand_like(x)
@@ -75,37 +83,23 @@ class BitwiseAbstractClass(nn.Module):
         pass
 
     def update_beta(self, sparsity):
-        if sparsity == 0 or self.use_gate:
+        if sparsity == 0:
             return
         w = self.weight.cpu().data.numpy()
         beta = torch.tensor(np.percentile(np.abs(w), sparsity),
             dtype=self.weight.dtype, device=self.weight.device)
         self.beta = nn.Parameter(beta, requires_grad=False)
 
-    def noisy(self):
-        self.mode = 'noisy'
-        self.weight = nn.Parameter(torch.tanh(self.weight),
-            requires_grad=self.requires_grad)
+    def clip_weights(self):
+        self.weight = nn.Parameter(torch.clamp(self.weight, -1, 1))
         if self.use_gate:
-            self.gate = nn.Parameter(torch.tanh(self.gate),
-                requires_grad=self.requires_grad)
-        self.activation = lambda x : bitwise_params(x, self.beta)
-
-    def inference(self):
-        self.mode = 'inference'
-        self.activation = lambda x : bitwise_params(x, self.beta)
-        self.weight = nn.Parameter(bitwise_params(self.weight, self.beta),
-            requires_grad=self.requires_grad)
-        if self.use_gate:
-            self.gate = nn.Parameter((bitwise_params(self.gate, 0)+1)/2,
-                requires_grad=self.requires_grad)
+            self.gate = nn.Parameter(torch.clamp(self.weight, -1, 1))
 
     def get_effective_weight(self):
-        w = self.weight
+        w = self.weight * (torch.abs(self.weight) >= self.beta)
         w = self.activation(w)
         if self.use_gate:
-            g = self.gate
-            w = w*((self.activation(g)+1)/2)
+            w = w*((self.activation(self.gate)+1)/2)
         return w
 
 class BitwiseLinear(BitwiseAbstractClass):
@@ -125,7 +119,8 @@ class BitwiseLinear(BitwiseAbstractClass):
         if use_gate:
             self.gate = init_weight((output_size, input_size), requires_grad,
                 one_sided=True)
-        self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype), requires_grad=False)
+        self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
+            requires_grad=False)
         self.mode = 'real'
 
     def forward(self, x):
@@ -208,37 +203,6 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
             (self.input_channels, self.output_channels, self.kernel_size,
             self.stride, self.padding, self.groups, self.requires_grad,
             self.use_gate)
-
-class BLRLinear(nn.Module):
-    '''
-    Binary local reparameterization linear
-    '''
-    def __init__(self, input_size, output_size):
-        super(BLRLinear, self).__init__()
-        w = torch.empty(out_size, in_size)
-        nn.init.xavier_uniform_(w)
-        self.weight = nn.Parameter(w, requires_grad=True)
-
-    def forward(self, x):
-        expect = torch.tanh(self.weight)
-        mean = F.linear(x, expect)
-        var = F.linear(x**2, 1-expect**2)
-        return mean, var
-
-class BLRSampler(Function):
-    '''
-    Binary local reparameterization activation
-    '''
-    def __init__(self, temp=0.1, eps=1e-5):
-        self.temp = temp
-        self.eps = eps
-
-    @staticmethod
-    def forward(self, mean, var):
-        q = Normal(mean, var).cdf(0)
-        U = torch.rand_like(mean)
-        L = torch.log(U) - torch.log(1 - U)
-        return torch.tanh((torch.log(1/(1-q+eps)-1+eps) + L)/temp)
 
 class BitwiseResidualLinear(nn.Module):
     def __init__(self, input_size):

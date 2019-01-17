@@ -20,7 +20,7 @@ import pickle as pkl
 import argparse
 
 def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
-    dtype=torch.float, weighted=False):
+    dtype=torch.float, weighted=False, clip_weights=False):
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
@@ -39,6 +39,8 @@ def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu')
         running_loss += cost.item() * bmag.size(0)
         cost.backward()
         optimizer.step()
+        if clip_weights:
+            model.clip_weights()
     return running_loss / len(dl.dataset)
 
 def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
@@ -109,7 +111,6 @@ def main():
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
-    parser.add_argument('--train_noisy', '-tn',  action='store_true')
     parser.add_argument('--period', '-p', type=int, default=1)
     parser.add_argument('--loss', '-l', type=str, default='bce')
     parser.add_argument('--weighted', '-w', action='store_true')
@@ -118,6 +119,7 @@ def main():
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--use_batchnorm', '-ub', action='store_true')
     parser.add_argument('--activation', '-a', default='tanh')
+    parser.add_argument('--clip_weights', '-cw', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -137,19 +139,22 @@ def main():
 
     # Initialize activation
     activation = torch.tanh
-    if args.activation == 'binarize':
-        activation = binarize
+    if args.activation == 'ste':
+        activation = ste
+    elif args.activation == 'clipped_ste':
+        activation = clipped_ste
+    elif args.activation == 'bitwise_activation':
+        activation = bitwise_activation
+    elif args.activation == 'relu':
+        activation = nn.ReLU()
 
     # Make model and dataset
     train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
     model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
         dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
         use_batchnorm=args.use_batchnorm, activation=activation)
-    if args.train_noisy:
-        print('Noisy Network Training')
-        if args.load_file:
-            model.load_state_dict(torch.load('../models/' + args.load_file))
-        model.noisy()
+    if args.load_file:
+        model.load_state_dict(torch.load('../models/' + args.load_file))
     else:
         print('Real Network Training')
     model.to(device=device)
@@ -165,7 +170,7 @@ def main():
         model.update_betas()
         model.train()
         train_loss = train(model, train_dl, optimizer, loss=loss,
-            device=device, weighted=args.weighted)
+            device=device, weighted=args.weighted, clip_weights=args.clip_weights)
 
         if (epoch+1) % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)

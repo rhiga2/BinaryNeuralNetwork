@@ -9,7 +9,7 @@ from dnn.binary_layers import *
 
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
-        sparsity=95, temp=1, use_gate=False, activation=torch.tanh,
+        sparsity=0, temp=1, use_gate=False, activation=torch.tanh,
         use_batchnorm=True):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
@@ -57,29 +57,15 @@ class BitwiseMLP(nn.Module):
         x = self.activation(x)
         return x
 
-    def noisy(self):
-        '''
-        Converts real network to noisy training network
-        '''
-        self.mode = 'noisy'
-        self.activation = bitwise_activation
+    def clip_weights(self):
         for layer in self.filter_list:
-            layer.noisy()
-
-    def inference(self):
-        '''
-        Converts noisy training network to bitwise network
-        '''
-        self.mode = 'inference'
-        self.activation = bitwise_activation(x)
-        for layer in self.filter_list:
-            layer.inference()
+            layer.clip_weights()
 
     def update_betas(self):
         '''
         Updates sparsity parameter beta
         '''
-        if self.mode != 'noisy' or self.use_gate:
+        if self.sparsity == 0:
             return
 
         for layer in self.filter_list:
