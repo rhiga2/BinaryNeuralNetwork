@@ -76,8 +76,6 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
         sources = np.stack([target, interference], axis=0)
         metric = bss_eval_np(estimate, sources)
         bss_metrics.append(metric)
-    sf.write('estimate.wav', estimate, 16000)
-    sf.write('target.wav', target, 16000)
     return running_loss / len(dataset), bss_metrics
 
 def flatten(x):
@@ -98,7 +96,7 @@ def mean_squared_error(estimate, target, weight=None):
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
-    parser.add_argument('--epochs', '-e', type=int, default=256,
+    parser.add_argument('--epochs', '-e', type=int, default=128,
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=64,
                         help='Training batch size')
@@ -147,15 +145,17 @@ def main():
         activation = bitwise_activation
     elif args.activation == 'relu':
         activation = nn.ReLU()
-    elif args.activation == 'leaky_relu':
-        activation = nn.LeakyReLU(0.5)
+    elif args.activation == 'prelu':
+        activation = nn.PReLU()
+    else:
+        print('Activation not recognized, using default activation: tanh')
 
     # Make model and dataset
     train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
     model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
         dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
         use_batchnorm=args.use_batchnorm, activation=activation,
-        bn_momentum=bn)
+        bn_momentum=args.bn_momentum)
 
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
