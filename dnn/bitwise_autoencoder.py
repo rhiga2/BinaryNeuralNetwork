@@ -152,17 +152,7 @@ def main():
         device = torch.device('cpu')
     print('On device: ', device)
 
-    activation = torch.tanh
-    if args.activation == 'ste':
-        activation = ste
-    elif args.activation == 'clipped_ste':
-        activation = clipped_ste
-    elif args.activation == 'bitwise_activation':
-        activation = bitwise_activation
-    elif args.activation == 'relu':
-        activation = nn.ReLU()
-    elif args.activation == 'leaky_relu':
-        activation = nn.LeakyReLU(0.5)
+    activation = pick_activation(args.activation)
 
     # Initialize quantizer and dequantizer
     quantizer = None

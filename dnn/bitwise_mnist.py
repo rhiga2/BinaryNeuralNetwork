@@ -51,7 +51,7 @@ def main():
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
-    parser.add_argument('--toy', action='store_true')
+    parser.add_argument('--data', '-data', default='mnist')
     parser.add_argument('--model_file', '-mf', default='temp_model.model')
     parser.add_argument('--use_gate', '-ug', action='store_true')
     args = parser.parse_args()
@@ -72,15 +72,13 @@ def main():
                            transforms.ToTensor(), flatten]), download=True)
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
-    model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[784, 784],
-        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate)
-    if args.train_noisy:
-        print('Noisy Network Training')
-        if args.load_file:
-            model.load_state_dict(torch.load('../models/' + args.load_file))
-        model.noisy()
-    else:
-        print('Real Network Training')
+
+    if args.data == 'mnist':
+        model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[784, 784],
+            dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate)
+    if args.load_file:
+        model.load_state_dict(torch.load('../models/' + args.load_file))
+
     model.to(device=device)
     print(model)
 

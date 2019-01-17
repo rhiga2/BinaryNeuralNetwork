@@ -116,6 +116,7 @@ def main():
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--use_batchnorm', '-ub', action='store_true')
     parser.add_argument('--activation', '-a', default='tanh')
+    parser.add_argument('--weight_activation', '-wa', default='tanh')
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.2)
     args = parser.parse_args()
@@ -136,32 +137,19 @@ def main():
     loss_metrics = LossMetrics()
 
     # Initialize activation
-    activation = torch.tanh
-    if args.activation == 'ste':
-        activation = ste
-    elif args.activation == 'clipped_ste':
-        activation = clipped_ste
-    elif args.activation == 'bitwise_activation':
-        activation = bitwise_activation
-    elif args.activation == 'relu':
-        activation = nn.ReLU()
-    elif args.activation == 'prelu':
-        activation = nn.PReLU()
-    elif args.activation == 'tanh':
-        activation = torch.tanh
-    else:
-        print('Activation not recognized, using default activation: tanh')
+    activation = pick_activation(args.activation)
+    weight_activation = pick_activation(args.weight_activation)
 
     # Make model and dataset
     train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
     model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
         dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
         use_batchnorm=args.use_batchnorm, activation=activation,
-        bn_momentum=args.bn_momentum)
+        weight_activation=weight_activation, bn_momentum=args.bn_momentum)
 
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
-        
+
     model.to(device=device)
     print(model)
 

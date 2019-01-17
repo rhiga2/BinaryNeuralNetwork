@@ -50,10 +50,42 @@ class STE(Function):
         x = ctx.saved_tensors[0]
         return grad_output
 
+class STE_Tanh(Function):
+    @staticmethod
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        return torch.tanh(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_tensors[0]
+        return grad_output
+
 bitwise_activation = BitwiseActivation.apply
 bitwise_params = BitwiseParams.apply
 clipped_ste = ClippedSTE.apply
 ste = STE.apply
+ste_tanh = STE_Tanh.apply
+
+def pick_activation(activation_name):
+    if activation_name == 'ste':
+        activation = ste
+    elif activation_name == 'clipped_ste':
+        activation = clipped_ste
+    elif activation_name == 'bitwise_activation':
+        activation = bitwise_activation
+    elif activation_name == 'relu':
+        activation = nn.ReLU()
+    elif activation_name == 'prelu':
+        activation = nn.PReLU()
+    elif args.activation == 'tanh':
+        activation = torch.tanh
+    elif args.activation == 'ste_tanh':
+        activation = ste_tanh
+    else:
+        print('Activation not recognized, using default activation: idenity')
+        activation = lambda x : x
+    return activation
 
 def add_logistic_noise(x, sigma=0.1):
     u = torch.rand_like(x)
