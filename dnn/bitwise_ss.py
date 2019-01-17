@@ -115,11 +115,12 @@ def main():
     parser.add_argument('--loss', '-l', type=str, default='bce')
     parser.add_argument('--weighted', '-w', action='store_true')
 
-    parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
+    parser.add_argument('--sparsity', '-s', type=float, default=0)
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--use_batchnorm', '-ub', action='store_true')
     parser.add_argument('--activation', '-a', default='tanh')
     parser.add_argument('--clip_weights', '-cw', action='store_true')
+    parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.2)
     args = parser.parse_args()
 
     # Initialize device
@@ -147,16 +148,19 @@ def main():
         activation = bitwise_activation
     elif args.activation == 'relu':
         activation = nn.ReLU()
+    elif args.activation == 'leaky_relu':
+        activation = nn.LeakyReLU(0.5)
 
     # Make model and dataset
     train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
     model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
         dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
-        use_batchnorm=args.use_batchnorm, activation=activation)
+        use_batchnorm=args.use_batchnorm, activation=activation,
+        bn_momentum=bn)
+
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
-    else:
-        print('Real Network Training')
+        
     model.to(device=device)
     print(model)
 

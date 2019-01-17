@@ -22,7 +22,8 @@ class BitwiseAutoencoder(nn.Module):
     '''
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
-        adapt=True, autoencode=False, use_gate=True, scale=1.0):
+        adapt=True, autoencode=False, use_gate=True, scale=1.0,
+        activation=torch.tanh):
         super(BitwiseAutoencoder, self).__init__()
 
         # Initialize adaptive front end
@@ -32,7 +33,7 @@ class BitwiseAutoencoder(nn.Module):
         self.conv1.weight = nn.Parameter(self.conv1.weight * scale,
             requires_grad=True)
         self.autoencode = autoencode
-        self.activation = torch.tanh
+        self.activation = activation
         self.batchnorm = nn.BatchNorm1d(kernel_size)
 
         # Initialize inverse of front end transform
@@ -122,26 +123,25 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
+    parser.add_argument('--exp', '-exp', default='temp')
     parser.add_argument('--epochs', '-e', type=int, default=64,
                         help='Number of epochs')
-    parser.add_argument('--kernel', '-k', type=int, default=256)
-    parser.add_argument('--stride', '-s', type=int, default=16)
     parser.add_argument('--batchsize', '-b', type=int, default=64,
                         help='Training batch size')
     parser.add_argument('--device', '-d', type=int, default=0)
+    parser.add_argument('--period', '-p', type=int, default=1)
+    parser.add_argument('--load_file', '-lf', type=str, default=None)
+    parser.add_argument('--toy', '-toy', action='store_true')
+    parser.add_argument('--autoencode', '-autoencode', action='store_true')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
-    parser.add_argument('--no_adapt', '-no_adapt', action='store_true')
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
+
+    parser.add_argument('--kernel', '-k', type=int, default=256)
+    parser.add_argument('--stride', '-s', type=int, default=16)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
-    parser.add_argument('--train_noisy', '-tn',  action='store_true')
-    parser.add_argument('--load_file', '-lf', type=str, default=None)
-    parser.add_argument('--output_period', '-op', type=int, default=1)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
-    parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
-    parser.add_argument('--toy', action='store_true')
-    parser.add_argument('--autoencode', action='store_true')
-    parser.add_argument('--model_file', '-mf', default='temp_model.model')
+    parser.add_argument('--activation', '-a', default='tanh')
     args = parser.parse_args()
 
     # Initialize device
@@ -152,23 +152,30 @@ def main():
         device = torch.device('cpu')
     print('On device: ', device)
 
+    activation = torch.tanh
+    if args.activation == 'ste':
+        activation = ste
+    elif args.activation == 'clipped_ste':
+        activation = clipped_ste
+    elif args.activation == 'bitwise_activation':
+        activation = bitwise_activation
+    elif args.activation == 'relu':
+        activation = nn.ReLU()
+    elif args.activation == 'leaky_relu':
+        activation = nn.LeakyReLU(0.5)
+
     # Initialize quantizer and dequantizer
-    quantizer=None
+    quantizer = None
     transform = None
 
     # Make model and dataset
     train_dl, val_dl, _ = make_data(args.batchsize, hop=args.stride, toy=args.toy)
     model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=1, out_channels=1, dropout=args.dropout,
-        sparsity=args.sparsity, adapt=not args.no_adapt,
-        autoencode=args.autoencode, scale=10.0)
-    if args.train_noisy:
-        print('Noisy Network Training')
-        if args.load_file:
-            model.load_state_dict(torch.load('../models/' + args.load_file))
-        model.noisy()
-    else:
-        print('Real Network Training')
+        sparsity=args.sparsity, autoencode=args.autoencode,
+        scale=1.0, activation=activation)
+    if args.load_file:
+        model.load_state_dict(torch.load('../models/' + args.load_file))
     model.to(device=device, dtype=dtype)
     print(model)
 
@@ -188,7 +195,7 @@ def main():
             autoencode=args.autoencode, quantizer=quantizer, transform=transform,
             dtype=dtype)
 
-        if epoch % args.output_period == 0:
+        if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
             val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device,
@@ -196,16 +203,19 @@ def main():
                 transform=transform, dtype=dtype)
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
-                output_period=args.output_period)
+                output_period=args.period)
             train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', 'BSS Eval'])
             print('Validation Cost: ', val_loss)
             print('Val SDR: ', sdr)
             print('Val SIR: ', sir)
             print('Val SAR: ', sar)
-            torch.save(model.state_dict(), '../models/' + args.model_file)
+            torch.save(model.state_dict(), '../models/' + args.exp + '.model')
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)
+
+    with open('../results/' + args.exp + '.pkl', 'wb') as f:
+        pkl.dump(loss_metrics, f)
 
 if __name__ == '__main__':
     main()
