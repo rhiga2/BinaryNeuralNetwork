@@ -147,6 +147,8 @@ def main():
         activation = nn.ReLU()
     elif args.activation == 'prelu':
         activation = nn.PReLU()
+    elif args.activation == 'tanh':
+        activation = torch.tanh
     else:
         print('Activation not recognized, using default activation: tanh')
 

@@ -17,4 +17,4 @@
 # activation -a string
 # clip_weights -cw
 
-python bitwise_ss.py -exp net_prelu -e 128 -a prelu
+python bitwise_ss.py -exp net_tanh_logloss -e 128
