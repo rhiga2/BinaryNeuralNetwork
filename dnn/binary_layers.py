@@ -78,9 +78,9 @@ def pick_activation(activation_name):
         activation = nn.ReLU()
     elif activation_name == 'prelu':
         activation = nn.PReLU()
-    elif args.activation == 'tanh':
+    elif activation_name == 'tanh':
         activation = torch.tanh
-    elif args.activation == 'ste_tanh':
+    elif activation_name == 'ste_tanh':
         activation = ste_tanh
     else:
         print('Activation not recognized, using default activation: idenity')
