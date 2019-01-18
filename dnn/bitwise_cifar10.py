@@ -45,7 +45,6 @@ def main():
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
-    parser.add_argument('--train_noisy', '-tn',  action='store_true')
     parser.add_argument('--output_period', '-op', type=int, default=1)
     parser.add_argument('--update_period', '-up', type=int, default=16)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
