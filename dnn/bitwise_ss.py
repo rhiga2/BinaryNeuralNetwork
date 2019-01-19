@@ -134,18 +134,6 @@ def main():
         loss = F.binary_cross_entropy_with_logits
     loss_metrics = bss_eval.LossMetrics()
 
-<<<<<<< HEAD
-||||||| merged common ancestors
-    # Initialize activation
-    activation = pick_activation(args.activation)
-    weight_activation = pick_activation(args.weight_activation)
-
-=======
-    # Initialize activation
-    activation = binary_layers.pick_activation(args.activation)
-    weight_activation = binary_layers.pick_activation(args.weight_activation)
-
->>>>>>> f9d323f86418f4e447813a63225313eb6f29f053
     # Make model and dataset
     train_dl, valset, rawset = binary_data.make_binary_data(args.batchsize, toy=args.toy)
     model = bitwise_mlp.BitwiseMLP(
