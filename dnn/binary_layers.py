@@ -142,16 +142,16 @@ class BitwiseLinear():
         return F.linear(x, w, None)
 
     def __repr__(self):
-        return 'BitwiseLinear({}, {}, user_gate={}, \
-            activation_name={})'.format(self.input_size, self.output_size,
+        return 'BitwiseLinear({}, {}, use_gate={}, \
+            activation={})'.format(self.input_size, self.output_size,
             self.use_gate, self.activation_name)
 
 class BitwiseConv1d(nn.Conv1d):
-    def __init__(self, input_channels, output_channels, kernel_size,
+    def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
         activation='tanh'):
         super(BitwiseConv1d, self).__init__(
-            input_channels, output_channels, kernel_size, stride=stride,
+            in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, dilation=dilation,
             groups=groups, bias=False)
         self.use_gate = use_gate
@@ -176,22 +176,23 @@ class BitwiseConv1d(nn.Conv1d):
 
     def __repr__(self):
         return 'BitwiseConv1d({}, {}, {}, stride={}, padding={}, groups={}, \
-            dilation={}, use_gate={}, activation={})'.format(self.input_channels,
-            self.output_channels, self.kernel_size, self.stride, self.padding,
+            dilation={}, use_gate={}, activation={})'.format(self.in_channels,
+            self.out_channels, self.kernel_size, self.stride, self.padding,
             self.groups, self.dilation, self.use_gate, self.activation_name)
 
 class BitwiseConv2d(nn.Conv2d):
-    def __init__(self, input_channels, output_channels, kernel_size,
+    def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        activation=torch.tanh):
+        activation='tanh'):
         super(BitwiseConv2d, self).__init__(
-            input_channels, output_channels, kernel_size, stride=stride,
+            in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, bias=False, dilation=dilation
         )
         self.use_gate = use_gate
-        self.activation = activation
+        self.activation_name = activation
+        self.activation = pick_activation(activation)
         if use_gate:
-            self.gate = init_weight(self.weight.size(), requires_grad, one_sided=True)
+            self.gate = init_weight(self.weight.size(), one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
             requires_grad=False)
 
@@ -208,21 +209,26 @@ class BitwiseConv2d(nn.Conv2d):
             padding=self.padding, groups=self.groups, dilation=self.dilation)
 
     def __repr__(self):
-        return 'BitwiseConv2d'
+        return 'BitwiseConv2d({}, {}, {}, stride={}, padding={}, groups={} \
+            dilation={}, use_gate={}, activation={})'.format(
+            self.in_channels, self.out_channels, self.kernel_size,
+            self.stride, self.padding, self.groups, self.dilation,
+            self.use_gate, self.activation_name)
 
 
 class BitwiseConvTranspose1d(nn.ConvTranspose1d):
-    def __init__(self, input_channels, output_channels, kernel_size,
-        stride=1, padding=0, groups=1, requires_grad=True, use_gate=False,
-        dilation=1, activation=torch.tanh):
+    def __init__(self, in_channels, out_channels, kernel_size,
+        stride=1, padding=0, groups=1, use_gate=False,
+        dilation=1, activation='tanh'):
         super(BitwiseConvTranspose1d, self).__init__(
             input_channels, output_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, bias=False, dilation=dilation
         )
         self.use_gate = True
-        self.activation = activation
+        self.activation_name = activation
+        self.activation = pick_activation(activation)
         if use_gate:
-            self.gate = init_weight(self.weight.size(), requires_grad, one_sided=True)
+            self.gate = init_weight(self.weight.size(), one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
             requires_grad=False)
 
@@ -239,24 +245,8 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
             padding=self.padding, groups=self.groups, dilation=self.dilation)
 
     def __repr__(self):
-        return 'BitwiseConvTranspose1d'
-
-class BitwiseResidualLinear(nn.Module):
-    def __init__(self, input_size):
-        super(BitwiseResidualLinear, self).__init__()
-        self.input_size = input_size
-        self.activation = torch.tanh
-        self.dense1 = BitwiseLinear(input_size, input_size)
-        self.dense2 = BitwiseLinear(input_size, input_size)
-
-    def forward(self, x):
-        x = self.activation(self.dense1(x))
-        return x + self.dense2(x)
-
-    def noisy(self):
-        self.dense1.noisy()
-        self.dense2.noisy()
-
-    def inference(self):
-        self.dense1.inference()
-        self.dense2.inference()
+        return 'BitwiseConvTranspose1d({}, {}, {}, stride={}, padding={}, \
+            groups={}, use_gate={}, dilation={}, activation={})'.format(
+            self.in_channels, self.out_channels, self.kernel_size, self.stride,
+            self.padding, self.groups, self.use_gate, self.dilation,
+            self.activation_name)
