@@ -7,8 +7,9 @@ import torch.optim as optim
 import torch.nn.functional as F
 import math
 import numpy as np
-import dnn.binary_data as binary_data
+import datasets.binary_data as binary_data
 import loss_and_metrics.bss_eval as bss_eval
+import dnn.binary_layers as binary_layers
 import dnn.bitwise_mlp as bitwise_mlp
 import soundfile as sf
 import visdom
@@ -41,7 +42,7 @@ def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu')
 
 def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
     device=torch.device('cpu'), weighted=False):
-    bss_metrics = BSSMetricsList()
+    bss_metrics = bss_eval.BSSMetricsList()
     running_loss = 0
     for i in range(len(dataset)):
         if i >= max_samples:
@@ -68,7 +69,7 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
         else:
             cost = loss(premask, ibm)
         running_loss += cost.item()
-        mask = make_binary_mask(premask).squeeze(0).cpu()
+        mask = binary_data.make_binary_mask(premask).squeeze(0).cpu()
         estimate = binary_data.istft(mix_mag * mask.numpy(), mix_phase)
         sources = np.stack([target, interference], axis=0)
         metric = bss_eval.bss_eval_np(estimate, sources)
@@ -131,14 +132,14 @@ def main():
         loss = mean_squared_error
     else:
         loss = F.binary_cross_entropy_with_logits
-    loss_metrics = LossMetrics()
+    loss_metrics = bss_eval.LossMetrics()
 
     # Initialize activation
-    activation = pick_activation(args.activation)
-    weight_activation = pick_activation(args.weight_activation)
+    activation = binary_layers.pick_activation(args.activation)
+    weight_activation = binary_layers.pick_activation(args.weight_activation)
 
     # Make model and dataset
-    train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
+    train_dl, valset, rawset = binary_data.make_binary_data(args.batchsize, toy=args.toy)
     model = bitwise_mlp.BitwiseMLP(
         in_size=2052,
         out_size=513,
@@ -182,7 +183,7 @@ def main():
             print('SAR: ', sar)
             loss_metrics.update(train_loss, val_loss,
                 sdr, sir, sar, output_period=args.period)
-            train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', None])
+            bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', None])
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
 
     with open('../results/' + args.exp + '.pkl', 'wb') as f:

@@ -147,9 +147,8 @@ class BitwiseLinear(BitwiseAbstractClass):
         return F.linear(x, w, None)
 
     def __repr__(self):
-        return 'BitwiseLinear({}, {}, requires_grad={}, user_gate={}, \
-            activation={}, scale={})'.format(self.input_size, self.output_size,
-            self.requires_grad, self.use_gate, self.activation, self.scale)
+        return 'BitwiseLinear({}, {}, requires_grad={}, use_gate={})'.format(self.input_size, self.output_size,
+            self.requires_grad, self.use_gate)
 
 class BitwiseConv1d(BitwiseAbstractClass):
     '''
