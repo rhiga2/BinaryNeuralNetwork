@@ -74,7 +74,7 @@ def main():
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
-    model = models.resnet10(pretrained=True, num_classes=10)
+    model = models.resnet18(pretrained=True, num_classes=10)
 
     model.to(device=device)
     print(model)
