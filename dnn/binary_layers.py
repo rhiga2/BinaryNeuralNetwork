@@ -17,17 +17,6 @@ class BitwiseActivation(Function):
         x = ctx.saved_tensors[0]
         return grad_output * (1 - torch.tanh(x)**2), None
 
-class BitwiseParams(Function):
-    @staticmethod
-    def forward(ctx, x, beta):
-        ctx.save_for_backward(x)
-        return (x > beta).to(dtype=x.dtype, device=x.device) - (x < -beta).to(dtype=x.dtype, device=x.device)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        x = ctx.saved_tensors[0]
-        return grad_output * (torch.abs(x) <= 1).to(grad_output.dtype), None
-
 class ClippedSTE(Function):
     @staticmethod
     def forward(ctx, x):
@@ -62,7 +51,6 @@ class STE_Tanh(Function):
         return grad_output
 
 bitwise_activation = BitwiseActivation.apply
-bitwise_params = BitwiseParams.apply
 clipped_ste = ClippedSTE.apply
 ste = STE.apply
 ste_tanh = STE_Tanh.apply
@@ -76,14 +64,11 @@ def pick_activation(activation_name):
         activation = bitwise_activation
     elif activation_name == 'relu':
         activation = nn.ReLU()
-    elif activation_name == 'prelu':
-        activation = nn.PReLU()
     elif activation_name == 'tanh':
         activation = torch.tanh
     elif activation_name == 'ste_tanh':
         activation = ste_tanh
-    else:
-        print('Activation not recognized, using default activation: idenity')
+    elif activation_name == 'identity':
         activation = lambda x : x
     return activation
 
@@ -162,8 +147,9 @@ class BitwiseLinear(BitwiseAbstractClass):
         return F.linear(x, w, None)
 
     def __repr__(self):
-        return 'BitwiseLinear(%d, %d, requires_grad=%r, use_gate=%r)' % \
-        (self.input_size, self.output_size, self.requires_grad, self.use_gate)
+        return 'BitwiseLinear({}, {}, requires_grad={}, user_gate={}, \
+            activation={}, scale={})'.format(self.input_size, self.output_size,
+            self.requires_grad, self.use_gate, self.activation, self.scale)
 
 class BitwiseConv1d(BitwiseAbstractClass):
     '''
@@ -196,11 +182,7 @@ class BitwiseConv1d(BitwiseAbstractClass):
             padding=self.padding, groups=self.groups)
 
     def __repr__(self):
-        return 'BitwiseConv1d(%d, %d, kernel_size=%d, stride=%d, padding=%d, \
-            groups=%d, requires_grad=%r, use_gate=%r)' % \
-            (self.input_channels, self.output_channels, self.kernel_size,
-            self.stride, self.padding, self.groups, self.requires_grad,
-            self.use_gate)
+        return 'BitwiseConv1d'
 
 class BitwiseConvTranspose1d(BitwiseAbstractClass):
     '''
@@ -232,11 +214,7 @@ class BitwiseConvTranspose1d(BitwiseAbstractClass):
             padding=self.padding, groups=self.groups)
 
     def __repr__(self):
-        return 'BitwiseConvTranspose1d(%d, %d, kernel_size=%d, stride=%d, \
-            padding=%d, groups=%d, requires_grad=%r, use_gate=%r)' % \
-            (self.input_channels, self.output_channels, self.kernel_size,
-            self.stride, self.padding, self.groups, self.requires_grad,
-            self.use_gate)
+        return 'BitwiseConvTranspose1d'
 
 class BitwiseResidualLinear(nn.Module):
     def __init__(self, input_size):

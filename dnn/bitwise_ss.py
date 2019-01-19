@@ -7,12 +7,9 @@ import torch.optim as optim
 import torch.nn.functional as F
 import math
 import numpy as np
-from datasets.binary_data import *
-from datasets.quantized_data import *
-from datasets.two_source_mixture import *
-from loss_and_metrics.sepcosts import *
-from loss_and_metrics.bss_eval import *
-from dnn.bitwise_mlp import *
+import dnn.binary_data as binary_data
+import loss_and_metrics.bss_eval as bss_eval
+import dnn.bitwise_mlp as bitwise_mlp
 import soundfile as sf
 import visdom
 import pickle as pkl
@@ -55,7 +52,7 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
         mix = raw_sample['mix']
         target = raw_sample['target']
         interference = raw_sample['interference']
-        mix_mag, mix_phase = stft(mix)
+        mix_mag, mix_phase = binary_data.stft(mix)
 
         bmag = torch.FloatTensor(bin_sample['bmag']).unsqueeze(0).to(device)
         ibm = torch.FloatTensor(bin_sample['ibm']).unsqueeze(0).to(device)
@@ -72,9 +69,9 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
             cost = loss(premask, ibm)
         running_loss += cost.item()
         mask = make_binary_mask(premask).squeeze(0).cpu()
-        estimate = istft(mix_mag * mask.numpy(), mix_phase)
+        estimate = binary_data.istft(mix_mag * mask.numpy(), mix_phase)
         sources = np.stack([target, interference], axis=0)
-        metric = bss_eval_np(estimate, sources)
+        metric = bss_eval.bss_eval_np(estimate, sources)
         bss_metrics.append(metric)
     return running_loss / len(dataset), bss_metrics
 
@@ -142,10 +139,18 @@ def main():
 
     # Make model and dataset
     train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
-    model = BitwiseMLP(in_size=2052, out_size=513, fc_sizes=[2048, 2048],
-        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
-        use_batchnorm=args.use_batchnorm, activation=activation,
-        weight_activation=weight_activation, bn_momentum=args.bn_momentum)
+    model = bitwise_mlp.BitwiseMLP(
+        in_size=2052,
+        out_size=513,
+        fc_sizes=[2048, 2048],
+        dropout=args.dropout,
+        sparsity=args.sparsity,
+        use_gate=args.use_gate,
+        use_batchnorm=args.use_batchnorm,
+        activation=activation,
+        weight_activation=weight_activation,
+        bn_momentum=args.bn_momentum
+    )
 
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))

@@ -5,17 +5,16 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from dnn.binary_layers import *
+import dnn.binary_layers as binary_layers
 
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
-        sparsity=0, temp=1, use_gate=False, activation=torch.tanh,
+        sparsity=0, use_gate=False, activation=torch.tanh,
         weight_activation=torch.tanh, use_batchnorm=True, bn_momentum=0.1):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
-        self.temp = nn.Parameter(torch.tensor(temp, dtype=torch.float), requires_grad=False)
         self.activation = activation
         self.weight_activation = weight_activation
         self.use_batchnorm = use_batchnorm
@@ -28,8 +27,10 @@ class BitwiseMLP(nn.Module):
         self.bn_list = nn.ModuleList()
         self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
-            self.filter_list.append(BitwiseLinear(isize, osize,
-                use_gate=use_gate, activation=weight_activation))
+            self.filter_list.append(
+                binary_layers.BitwiseLinear(isize, osize,
+                    use_gate=use_gate, activation=weight_activation)
+            )
             if use_batchnorm:
                 self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
             if i < self.num_layers - 1:
