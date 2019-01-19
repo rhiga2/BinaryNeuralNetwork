@@ -9,14 +9,13 @@ import dnn.binary_layers as binary_layers
 
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
-        sparsity=0, use_gate=False, activation=torch.tanh,
-        weight_activation=torch.tanh, use_batchnorm=True, bn_momentum=0.1):
+        sparsity=0, use_gate=False, activation='tanh',
+        weight_activation='tanh', use_batchnorm=True, bn_momentum=0.1):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
-        self.activation = activation
-        self.weight_activation = weight_activation
+        self.activation = binary_layers.pick_activation(activation)
         self.use_batchnorm = use_batchnorm
 
         # Initialize linear layers

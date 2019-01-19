@@ -133,10 +133,6 @@ def main():
         loss = F.binary_cross_entropy_with_logits
     loss_metrics = LossMetrics()
 
-    # Initialize activation
-    activation = pick_activation(args.activation)
-    weight_activation = pick_activation(args.weight_activation)
-
     # Make model and dataset
     train_dl, valset, rawset = make_binary_data(args.batchsize, toy=args.toy)
     model = bitwise_mlp.BitwiseMLP(
