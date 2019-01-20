@@ -77,12 +77,12 @@ def add_logistic_noise(x, sigma=0.1):
     x = x + sigma * (torch.log(u) - torch.log(1 - u))
     return x
 
-def init_weight(size, requires_grad=True, one_sided=False):
+def init_weight(size, gain=1, one_sided=False):
     w = torch.empty(size)
     nn.init.xavier_uniform_(w, gain=gain)
     if one_sided:
         w = torch.abs(w)
-    w = nn.Parameter(w, requires_grad=requires_grad)
+    w = nn.Parameter(w, requires_grad=True)
     return w
 
 def update_beta(weight, sparsity):
@@ -109,7 +109,7 @@ def get_effective_weight(weight, gate, activation, beta=0, use_gate=False):
         w = w * ((activation(gate)+1)/2)
     return w
 
-class BitwiseLinear():
+class BitwiseLinear(nn.Module):
     '''
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
@@ -138,13 +138,12 @@ class BitwiseLinear():
 
     def forward(self, x):
         w = get_effective_weight(self.weight, self.gate, self.activation,
-            self.beta=0, self.use_gate=False)
+            beta=self.beta, use_gate=self.use_gate)
         return F.linear(x, w, None)
 
     def __repr__(self):
-        return 'BitwiseLinear({}, {}, use_gate={}, \
-            activation={})'.format(self.input_size, self.output_size,
-            self.use_gate, self.activation_name)
+        return 'BitwiseLinear({}, {}, use_gate={}, activation={})'.format(self.input_size, self.output_size,
+        self.use_gate, self.activation_name)
 
 class BitwiseConv1d(nn.Conv1d):
     def __init__(self, in_channels, out_channels, kernel_size,
@@ -170,15 +169,14 @@ class BitwiseConv1d(nn.Conv1d):
 
     def forward(self, x):
         w = get_effective_weight(self.weight, self.gate, self.activation,
-            self.beta=0, self.use_gate=False)
+            beta=self.beta, use_gate=self.use_gate)
         return F.conv1d(x, w, None, stride=self.stride,
             padding=self.padding, groups=self.groups, dilation=self.dilation)
 
     def __repr__(self):
-        return 'BitwiseConv1d({}, {}, {}, stride={}, padding={}, groups={}, \
-            dilation={}, use_gate={}, activation={})'.format(self.in_channels,
-            self.out_channels, self.kernel_size, self.stride, self.padding,
-            self.groups, self.dilation, self.use_gate, self.activation_name)
+        return 'BitwiseConv1d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={}, activation={})'.format(self.in_channels,
+        self.out_channels, self.kernel_size, self.stride, self.padding,
+        self.groups, self.dilation, self.use_gate, self.activation_name)
 
 class BitwiseConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,
@@ -204,16 +202,15 @@ class BitwiseConv2d(nn.Conv2d):
 
     def forward(self, x):
         w = get_effective_weight(self.weight, self.gate, self.activation,
-            self.beta=0, self.use_gate=False)
+            beta=self.beta, use_gate=self.use_gate)
         return F.conv2d(x, w, None, stride=self.stride,
             padding=self.padding, groups=self.groups, dilation=self.dilation)
 
     def __repr__(self):
-        return 'BitwiseConv2d({}, {}, {}, stride={}, padding={}, groups={} \
-            dilation={}, use_gate={}, activation={})'.format(
-            self.in_channels, self.out_channels, self.kernel_size,
-            self.stride, self.padding, self.groups, self.dilation,
-            self.use_gate, self.activation_name)
+        return 'BitwiseConv2d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={}, activation={})'.format(
+        self.in_channels, self.out_channels, self.kernel_size,
+        self.stride, self.padding, self.groups, self.dilation,
+        self.use_gate, self.activation_name)
 
 
 class BitwiseConvTranspose1d(nn.ConvTranspose1d):
@@ -240,13 +237,12 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
 
     def forward(self, x):
         w = get_effective_weight(self.weight, self.gate, self.activation,
-            self.beta=0, self.use_gate=False)
+            beta=self.beta, use_gate=self.use_gate)
         return F.conv_transpose1d(x, w, None, stride=self.stride,
             padding=self.padding, groups=self.groups, dilation=self.dilation)
 
     def __repr__(self):
-        return 'BitwiseConvTranspose1d({}, {}, {}, stride={}, padding={}, \
-            groups={}, use_gate={}, dilation={}, activation={})'.format(
-            self.in_channels, self.out_channels, self.kernel_size, self.stride,
-            self.padding, self.groups, self.use_gate, self.dilation,
-            self.activation_name)
+        return 'BitwiseConvTranspose1d({}, {}, {}, stride={}, padding={}, groups={}, use_gate={}, dilation={}, activation={})'.format(
+        self.in_channels, self.out_channels, self.kernel_size, self.stride,
+        self.padding, self.groups, self.use_gate, self.dilation,
+        self.activation_name)
