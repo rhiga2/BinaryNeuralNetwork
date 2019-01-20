@@ -129,7 +129,7 @@ def main():
     parser.add_argument('--period', '-p', type=int, default=1)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--toy', '-toy', action='store_true')
-    parser.add_argument('--autoencode', '-autoencode', action='store_true')
+    parser.add_argument('--autoencode', '-ae', action='store_true')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
@@ -138,7 +138,8 @@ def main():
     parser.add_argument('--stride', '-s', type=int, default=16)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
-    parser.add_argument('--activation', '-a', default='tanh')
+    parser.add_argument('--activation', '-a', default='relu')
+    parser.add_argument('--weight_activation', '-wa', default='tanh')
     args = parser.parse_args()
 
     # Initialize device
@@ -158,7 +159,7 @@ def main():
     model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=1, out_channels=1, dropout=args.dropout,
         sparsity=args.sparsity, autoencode=args.autoencode,
-        activation=activation)
+        activation=activation, weight_activation=weight_activation)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
     model.to(device=device, dtype=dtype)
