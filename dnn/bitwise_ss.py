@@ -144,8 +144,8 @@ def main():
         sparsity=args.sparsity,
         use_gate=args.use_gate,
         use_batchnorm=args.use_batchnorm,
-        activation=activation,
-        weight_activation=weight_activation,
+        activation=args.activation,
+        weight_activation=args.weight_activation,
         bn_momentum=args.bn_momentum
     )
 
