@@ -7,12 +7,12 @@ import torch.optim as optim
 import torch.nn.functional as F
 import math
 import numpy as np
-from datasets.make_data import *
-from datasets.quantized_data import *
-from datasets.two_source_mixture import *
-from loss_and_metrics.sepcosts import *
-from loss_and_metrics.bss_eval import *
-from dnn.binary_layers import *
+import datasets.make_data as make_data
+import datasets.quantized_data as quantized_data
+import datasets.two_source_mixture as two_source_mixture
+import loss_and_metrics.sepcosts as sepcosts
+import loss_and_metrics.bss_eval as bss_eval
+import dnn.binary_layers as binary_layers
 import visdom
 import argparse
 
@@ -21,25 +21,23 @@ class BitwiseAutoencoder(nn.Module):
     Adaptive transform network inspired by Minje Kim
     '''
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
-        out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
-        adapt=True, autoencode=False, use_gate=True, scale=1.0,
-        activation=torch.tanh):
+        out_channels=1, fc_sizes = [], dropout=0, sparsity=95, adapt=True,
+        autoencode=False, use_gate=True, activation='relu',
+        weight_activation='tanh'):
         super(BitwiseAutoencoder, self).__init__()
 
         # Initialize adaptive front end
         self.kernel_size = kernel_size
-        self.conv1 = nn.Conv1d(1, kernel_size, kernel_size, stride=stride,
-            padding=kernel_size)
-        self.conv1.weight = nn.Parameter(self.conv1.weight * scale,
-            requires_grad=True)
         self.autoencode = autoencode
-        self.activation = activation
+        self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
+            stride=stride, padding=kernel_size, activation=weight_activation)
+        self.activation = binary_layers.pick_activation(activation)
         self.batchnorm = nn.BatchNorm1d(kernel_size)
 
         # Initialize inverse of front end transform
-        self.conv1_transpose = nn.ConvTranspose1d(kernel_size, 1, kernel_size, stride=stride)
+        self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
+            kernel_size, 1, kernel_size, stride=stride)
         self.sparsity = sparsity
-        self.mode = 'real'
 
     def forward(self, x):
         '''
@@ -51,20 +49,19 @@ class BitwiseAutoencoder(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        h = self.activation(self.batchnorm(self.conv1(x)))
-        h = self.conv1_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
+        h = self.activation(self.batchnorm(self.conv(x)))
+        h = self.conv_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
         return h
 
     def update_betas(self):
         '''
         Updates sparsity parameter beta
         '''
-        if self.mode != 'noisy':
+        if self.sparsity == 0:
             return
 
-        if not self.autoencode:
-            for layer in self.linear_list:
-                layer.update_beta(sparsity=self.sparsity)
+        self.conv.update_betas(sparsity=args.sparsity)
+        self.conv_transpose.update_betas(sparsity=args.sparsity)
 
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
     autoencode=False, quantizer=None, transform=None, dtype=torch.float):
@@ -95,7 +92,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
     quantizer=None, transform=None, device=torch.device('cpu'),
     dtype=torch.float):
     running_loss = 0
-    bss_metrics = BSSMetricsList()
+    bss_metrics = bss_eval.BSSMetricsList()
     for batch in dl:
         mix, target = batch['mixture'], batch['target']
         if autoencode:
@@ -117,7 +114,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
             estimate = quantizer.inverse(estimate)
         estimate = estimate.to(device='cpu')
         sources = torch.stack([batch['target'], batch['interference']], dim=1)
-        metrics = bss_eval_batch(estimate, sources)
+        metrics = bss_eval.bss_eval_batch(estimate, sources)
         bss_metrics.extend(metrics)
     return running_loss / len(dl.dataset), bss_metrics
 
@@ -152,25 +149,23 @@ def main():
         device = torch.device('cpu')
     print('On device: ', device)
 
-    activation = pick_activation(args.activation)
-
     # Initialize quantizer and dequantizer
     quantizer = None
     transform = None
 
     # Make model and dataset
-    train_dl, val_dl, _ = make_data(args.batchsize, hop=args.stride, toy=args.toy)
+    train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=args.stride, toy=args.toy)
     model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=1, out_channels=1, dropout=args.dropout,
         sparsity=args.sparsity, autoencode=args.autoencode,
-        scale=1.0, activation=activation)
+        activation=activation)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
     model.to(device=device, dtype=dtype)
     print(model)
 
-    loss = SignalDistortionRatio()
-    loss_metrics = LossMetrics()
+    loss = sepcosts.SignalDistortionRatio()
+    loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer
     vis = visdom.Visdom(port=5800)
@@ -194,7 +189,7 @@ def main():
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 output_period=args.period)
-            train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', 'BSS Eval'])
+            bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', 'BSS Eval'])
             print('Validation Cost: ', val_loss)
             print('Val SDR: ', sdr)
             print('Val SIR: ', sir)
