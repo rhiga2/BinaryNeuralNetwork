@@ -155,7 +155,8 @@ def main():
     transform = None
 
     # Make model and dataset
-    train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=args.stride, toy=args.toy)
+    train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=args.stride,
+        toy=args.toy)
     model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=1, out_channels=1, dropout=args.dropout,
         sparsity=args.sparsity, autoencode=args.autoencode,

@@ -9,14 +9,15 @@ import dnn.binary_layers as binary_layers
 
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
-        sparsity=0, use_gate=False, activation='tanh',
-        weight_activation='tanh', output_activation='identity',
-        use_batchnorm=True, bn_momentum=0.1):
+        sparsity=0, use_gate=False, activation=nn.ReLU(),
+        in_bin=binary_layers.clipped_ste, weight_bin=binary_layers.clipped_ste,
+        use_batchnorm=True,
+        bn_momentum=0.1):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
-        self.activation = binary_layers.pick_activation(activation)
+        self.activation = activation
         self.use_batchnorm = use_batchnorm
 
         # Initialize linear layers
@@ -27,18 +28,15 @@ class BitwiseMLP(nn.Module):
         self.bn_list = nn.ModuleList()
         self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
+            if i < self.num_layers - 1 and use_batchnorm:
+                self.bn_list.append(nn.BatchNorm1d(isize, momentum=bn_momentum))
             self.filter_list.append(
-                binary_layers.BitwiseLinear(isize, osize,
-                    use_gate=use_gate, activation=weight_activation)
+                binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
+                in_bin=in_bin, weight_bin=weight_bin)
             )
             if i < self.num_layers - 1:
-                if use_batchnorm:
-                    self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
                 self.dropout_list.append(nn.Dropout(dropout))
-
             isize = osize
-
-        self.output_activation = binary_layers.pick_activation(output_activation)
         self.sparsity = sparsity
 
     def forward(self, x):
@@ -51,13 +49,12 @@ class BitwiseMLP(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         for i in range(self.num_layers):
+            if i < self.num_layers - 1 and self.use_batchnorm:
+                x = self.bn_list[i](x)
             x = self.filter_list[i](x)
             if i < self.num_layers - 1:
-                if self.use_batchnorm:
-                    x = self.bn_list[i](x)
                 x = self.activation(x)
                 x = self.dropout_list[i](x)
-            self.output_activation(x)
         return x
 
     def clip_weights(self):
