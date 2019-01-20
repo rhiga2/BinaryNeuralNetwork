@@ -115,6 +115,7 @@ def main():
     parser.add_argument('--use_batchnorm', '-ub', action='store_true')
     parser.add_argument('--activation', '-a', default='tanh')
     parser.add_argument('--weight_activation', '-wa', default='tanh')
+    parser.add_argument('--output_activation', '-oa', default='identity')
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.2)
     args = parser.parse_args()
