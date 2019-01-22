@@ -22,8 +22,8 @@ class BitwiseAutoencoder(nn.Module):
     '''
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95, adapt=True,
-        autoencode=False, use_gate=True, activation='relu',
-        weight_activation='tanh'):
+        autoencode=False, use_gate=True, activation=nn.ReLU(),
+        in_bin=binary_layers.clipped_ste, weight_bin=binary_layers.clipped_ste):
         super(BitwiseAutoencoder, self).__init__()
 
         # Initialize adaptive front end

@@ -121,6 +121,7 @@ class BitwiseLinear(nn.Module):
         self.input_size = input_size
         self.output_size = output_size
         self.weight = init_weight((output_size, input_size), True)
+        self.bias = nn.Parameter(torch.zeros(output_size), requires_grad=True)
         self.in_bin = in_bin
         self.weight_bin = weight_bin
         self.use_gate = use_gate
@@ -147,7 +148,7 @@ class BitwiseLinear(nn.Module):
         if self.adaptive_scaling:
             in_scale = torch.mean(torch.abs(x), dim=1, keepdim=True)
             weight_scale = torch.mean(torch.abs(self.weight))
-        return in_scale * weight_scale * F.linear(x, w, None)
+        return in_scale * weight_scale * F.linear(x, w, self.bias)
 
     def __repr__(self):
         return 'BitwiseLinear({}, {}, use_gate={})'.format(self.input_size,
@@ -159,8 +160,7 @@ class BitwiseConv1d(nn.Conv1d):
         adaptive_scaling=False, in_bin=clipped_ste, weight_bin=clipped_ste):
         super(BitwiseConv1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
-            padding=padding, dilation=dilation,
-            groups=groups, bias=False)
+            padding=padding, dilation=dilation, groups=groups)
         self.use_gate = use_gate
         self.in_bin = in_bin
         self.weight_bin = weight_bin
@@ -191,9 +191,9 @@ class BitwiseConv1d(nn.Conv1d):
         if self.adaptive_scaling:
             in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1))
             weight_scale = torch.mean(torch.abs(self.weight))
-        return weight_scale * in_scale * F.conv1d(x, w, None,
-            stride=self.stride, padding=self.padding,
-            groups=self.groups, dilation=self.dilation)
+        return weight_scale * in_scale * F.conv1d(x, w, self.bias,
+            stride=self.stride, padding=self.padding, groups=self.groups,
+            dilation=self.dilation)
 
     def __repr__(self):
         return 'BitwiseConv1d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={})'.format(self.in_channels,
@@ -206,7 +206,7 @@ class BitwiseConv2d(nn.Conv2d):
         in_bin=clipped_ste, weight_bin=clipped_ste, adaptive_scaling=False):
         super(BitwiseConv2d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
-            padding=padding, groups=groups, bias=False, dilation=dilation
+            padding=padding, groups=groups, dilation=dilation
         )
         self.use_gate = use_gate
         self.in_bin = in_bin
@@ -238,8 +238,9 @@ class BitwiseConv2d(nn.Conv2d):
         if self.adaptive_scaling:
             in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1))
             weight_scale = torch.mean(torch.abs(self.weight))
-        return weight_scale * in_scale * F.conv2d(x, w, None, stride=self.stride,
-            padding=self.padding, groups=self.groups, dilation=self.dilation)
+        return weight_scale * in_scale * F.conv2d(x, w, self.bias,
+            stride=self.stride, padding=self.padding, groups=self.groups,
+            dilation=self.dilation)
 
     def __repr__(self):
         return 'BitwiseConv2d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={})'.format(
@@ -254,7 +255,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         weight_bin=clipped_ste):
         super(BitwiseConvTranspose1d, self).__init__(
             input_channels, output_channels, kernel_size, stride=stride,
-            padding=padding, groups=groups, bias=False, dilation=dilation
+            padding=padding, groups=groups, dilation=dilation
         )
         self.use_gate = True
         self.in_bin = in_bin
@@ -286,7 +287,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         if self.adaptive_scaling:
             in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1))
             weight_scale = torch.mean(torch.abs(self.weight))
-        return F.conv_transpose1d(x, w, None, stride=self.stride,
+        return F.conv_transpose1d(x, w, self.bias, stride=self.stride,
             padding=self.padding, groups=self.groups, dilation=self.dilation)
 
     def __repr__(self):

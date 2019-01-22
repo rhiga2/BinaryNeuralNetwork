@@ -45,14 +45,15 @@ def main():
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
-    parser.add_argument('--output_period', '-op', type=int, default=1)
+    parser.add_argument('--period', '-p', type=int, default=1)
     parser.add_argument('--update_period', '-up', type=int, default=16)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
-    parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
-    parser.add_argument('--data', '-data', default='mnist')
-    parser.add_argument('--model_file', '-mf', default='temp_model.model')
+    parser.add_argument('--exp', '-exp', default='temp')
     parser.add_argument('--use_gate', '-ug', action='store_true')
+    parser.add_argument('--in_bin', '-ib', default='identity')
+    parser.add_argument('--weight_bin', '-wb', default='identity')
+    parser.add_argument('--adaptive_scaling', '-as', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -72,9 +73,11 @@ def main():
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
-    if args.data == 'mnist':
-        model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[784, 784],
-            dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate)
+    in_bin = binary_layers.pick_activation(args.in_bin)
+    weight_bin = binary_layers.pick_activation(args.weight_bin)
+    model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[2048, 2048, 2048],
+        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
+        adaptive_scaling=args.adaptive_scaling)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
 
@@ -95,12 +98,12 @@ def main():
         model.train()
         train_accuracy, train_loss = evaluate(model, train_dl, optimizer, loss=loss, device=device)
 
-        if epoch % args.output_period == 0:
+        if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss, train_accuracy)
             model.eval()
             val_accuracy, val_loss = evaluate(model, val_dl, loss=loss, device=device)
             print('Val Cost: ', val_loss, val_accuracy)
-            torch.save(model.state_dict(), '../models/' + args.model_file)
+            torch.save(model.state_dict(), '../models/' + args.exp + '.model')
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)

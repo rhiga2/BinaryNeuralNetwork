@@ -9,14 +9,103 @@ from torchvision import datasets, transforms, models
 from torch.utils.data import Dataset, DataLoader
 import math
 import numpy as np
-from dnn.bitwise_ss import BitwiseMLP
-from dnn.binary_layers import *
-from datasets.quantized_data import *
+import dnn.binary_layers as binary_layers
+import datasets.quantized_data import quantized_data
 import visdom
 import argparse
 
-def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
-    dtype=torch.float, train=True):
+class BitwiseBasicBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1, use_gate=False,
+            downsample=None, in_bin=binary_layers.identity,
+            weight_bin=binary_layers.identity):
+        super(BitwiseBasicBlock, self).__init__()
+        self.conv1 = binary_layers.BitwiseConv2d(in_channels, out_channels, 3,
+        stride=stride, padding=1, in_bin=in_bin, weight_bin=weight_bin,
+        use_gate=use_gate, adaptive_scaling=True)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = binary_layers.BitwiseConv2d(out_channels, out_channels, 3,
+        stride=stride, padding=1, in_bin=in_bin, weight_bin=weight_bin,
+        use_gate=use_gate, adaptive_scaling=True)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.downsample=downsample
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        super(BitwiseResnet18, self).__init__()
+        identity = x
+        out = self.conv1(x)
+        out = self.relu(out)
+        out = self.bn1(out)
+        out = self.conv2(x)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(x)
+        out = self.bn2(out)
+        return out
+
+class BitwiseResnet18(nn.Module):
+    def __init__(self, in_bin=binary_layers.identity,
+        weight_bin=binary_layers.identity, use_gate=False):
+        super(BitwiseResnet18, self).__init__()
+        self.in_bin = in_bin
+        self.weight_bin = weight_bin
+        self.use_gate = use_gate
+        self.conv1 = binary_layers.BitwiseConv2d(3, 64, kernel_size=7, stride=2,
+        padding=3, bias=False)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.relu = nn.ReLU(inplace=True)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.layer1 = self._make_layer(64, 64)
+        self.layer2 = self._make_layer(64, 128, stride=2)
+        self.layer3 = self._make_layer(128, 256, stride=2)
+        self.layer4 = self.make_layer(256, 512, stride=2)
+        self.avgpool = nn.AdaptiveAvgPool1d((1, 1)) # convert to binary
+        self.fc = BitwiseLinear(512, num_classes, use_gate=self.use_gate,
+            adaptive_scaling=True, in_bin=binary_layers.clipped_ste,
+            weight_bin=binary_layers.clipped_ste)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.maxpool(x)
+        x = self.relu(x)
+        x = self.bn1(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        return self.fc(x)
+
+    def _make_layer(self, in_channels, out_channels, stride=1):
+        downsample=None
+        if stride != 1 or in_channels != out_channels:
+            downsample = nn.Sequential(
+                binary_layers.BitwiseConv2d(in_channels, out_channels, 1,
+                    stride=stride, padding=1, in_bin=self.in_bin,
+                    weight_bin=self.weight_bin, use_gate=self.use_gate,
+                    adaptive_scaling=True),
+                nn.BatchNorm2d(out_channels)
+            )
+        layers = []
+        layers.append(BitwiseBasicBlock(in_channels, out_channels, stride=stride,
+            use_gate=self.use_gate, downsample=downsample, in_bin=self.in_bin,
+            weight_bin=self.weight_bin))
+        layers.append(BitwiseBasicBlock(out_channels, out_channels, use_gate=self.use_gate,
+            in_bin=self.in_bin, weight_bin=self.weight_bin))
+        return nn.Sequential(*layers)
+
+    def load_pretrained_state_dict(self, state_dict):
+        state = self.state_dict()
+        for name, param in state_dict.items():
+            if state[name].size() == param.size():
+                state[name].copy_(param)
+
+def evaluate(model, dl, optimizer=None, loss=F.mse_loss,
+    device=torch.device('cpu'), dtype=torch.float, train=True):
     running_loss = 0
     running_accuracy = 0
     for batch_idx, (data, target) in enumerate(dl):
@@ -45,14 +134,14 @@ def main():
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
-    parser.add_argument('--output_period', '-op', type=int, default=1)
-    parser.add_argument('--update_period', '-up', type=int, default=16)
+    parser.add_argument('--period', '-p', type=int, default=1)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
+    parser.add_argument('--pretrained', '-pt', action='store_true')
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
-    parser.add_argument('--l1_reg', '-l1r', type=float, default=0)
-    parser.add_argument('--data', '-data', default='mnist')
-    parser.add_argument('--model_file', '-mf', default='temp_model.model')
+    parser.add_argument('--exp', '-exp', default='temp')
     parser.add_argument('--use_gate', '-ug', action='store_true')
+    parser.add_argument('--in_bin', '-ib', default='identity')
+    parser.add_argument('--weight_bin', '-wb', default='identity')
     args = parser.parse_args()
 
     # Initialize device
@@ -74,7 +163,16 @@ def main():
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
-    model = models.resnet18(pretrained=True, num_classes=10)
+    in_bin = binary_layers.pick_activation(args.in_bin)
+    weight_bin = binary_layers.pick_activation(args.weight_bin)
+    model = BitwiseResnet18(in_bin=in_bin, weight_bin=weight_bin,
+        num_classes=10)
+
+    if args.load_file:
+        model.load_state_dict(torch.load('../models/' + args.load_file))
+    elif args.pretrained:
+        resnet18 = torchvision.resnet18(pretrained=True)
+        model.load_pretrained_state_dict(resnet18)
 
     model.to(device=device)
     print(model)
@@ -93,12 +191,12 @@ def main():
         model.train()
         train_accuracy, train_loss = evaluate(model, train_dl, optimizer, loss=loss, device=device)
 
-        if epoch % args.output_period == 0:
+        if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss, train_accuracy)
             model.eval()
             val_accuracy, val_loss = evaluate(model, val_dl, loss=loss, device=device)
             print('Val Cost: ', val_loss, val_accuracy)
-            torch.save(model.state_dict(), '../models/' + args.model_file)
+            torch.save(model.state_dict(), '../models/' + args.exp + '.model')
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)
