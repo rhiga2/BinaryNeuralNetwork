@@ -119,6 +119,7 @@ def main():
     parser.add_argument('--output_activation', '-oa', default='identity')
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.2)
+    parser.add_argument('--adaptive_scaling', '-as', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -153,7 +154,8 @@ def main():
         activation=activation,
         weight_bin=weight_bin,
         in_bin=in_bin,
-        bn_momentum=args.bn_momentum
+        bn_momentum=args.bn_momentum,
+        adaptive_scaling=args.adaptive_scaling
     )
 
     if args.load_file:

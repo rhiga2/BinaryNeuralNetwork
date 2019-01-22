@@ -54,6 +54,7 @@ bitwise_activation = BitwiseActivation.apply
 clipped_ste = ClippedSTE.apply
 ste = STE.apply
 ste_tanh = STE_Tanh.apply
+identity = lambda x : x
 
 def pick_activation(activation_name):
     if activation_name == 'ste':
@@ -69,7 +70,7 @@ def pick_activation(activation_name):
     elif activation_name == 'ste_tanh':
         activation = ste_tanh
     elif activation_name == 'identity':
-        activation = lambda x : x
+        activation = identity
     return activation
 
 def add_logistic_noise(x, sigma=0.1):
@@ -114,8 +115,8 @@ class BitwiseLinear(nn.Module):
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
     def __init__(self, input_size, output_size, use_gate=False,
-        adaptive_scaling=False, in_bin=torch.clippedste,
-        weight_bin=torch.clippedste):
+        adaptive_scaling=False, in_bin=clipped_ste,
+        weight_bin=clipped_ste):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
@@ -129,7 +130,6 @@ class BitwiseLinear(nn.Module):
                 one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
             requires_grad=False)
-        self.mode = 'real'
         self.adaptive_scaling = adaptive_scaling
 
     def update_beta(self, sparsity):
@@ -144,8 +144,8 @@ class BitwiseLinear(nn.Module):
             beta=self.beta, use_gate=self.use_gate)
         weight_scale = 1
         in_scale = 1
-        if self.adaptive_scale:
-            in_scale = torch.mean(torch.abs(x))
+        if self.adaptive_scaling:
+            in_scale = torch.mean(torch.abs(x), dim=1, keepdim=True)
             weight_scale = torch.mean(torch.abs(self.weight))
         return in_scale * weight_scale * F.linear(x, w, None)
 
@@ -203,7 +203,7 @@ class BitwiseConv1d(nn.Conv1d):
 class BitwiseConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        in_bin=clipped_ste, weight_bin=clipped_ste):
+        in_bin=clipped_ste, weight_bin=clipped_ste, adaptive_scaling=False):
         super(BitwiseConv2d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, bias=False, dilation=dilation
@@ -251,7 +251,7 @@ class BitwiseConv2d(nn.Conv2d):
 class BitwiseConvTranspose1d(nn.ConvTranspose1d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, use_gate=False,
-        dilation=1, adaptive_scale=False, in_bin=clipped_ste,
+        dilation=1, adaptive_scaling=False, in_bin=clipped_ste,
         weight_bin=clipped_ste):
         super(BitwiseConvTranspose1d, self).__init__(
             input_channels, output_channels, kernel_size, stride=stride,
