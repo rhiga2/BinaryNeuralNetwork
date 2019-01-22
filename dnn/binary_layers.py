@@ -247,7 +247,6 @@ class BitwiseConv2d(nn.Conv2d):
         self.stride, self.padding, self.groups, self.dilation,
         self.use_gate)
 
-
 class BitwiseConvTranspose1d(nn.ConvTranspose1d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, use_gate=False,
