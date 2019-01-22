@@ -22,21 +22,24 @@ class BitwiseAutoencoder(nn.Module):
     '''
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95, adapt=True,
-        autoencode=False, use_gate=True, activation=nn.ReLU(),
-        in_bin=binary_layers.clipped_ste, weight_bin=binary_layers.clipped_ste):
+        autoencode=False, use_gate=True, in_bin=binary_layers.identity,
+        weight_bin=binary_layers.identity):
         super(BitwiseAutoencoder, self).__init__()
 
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.autoencode = autoencode
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
-            stride=stride, padding=kernel_size, activation=weight_activation)
-        self.activation = binary_layers.pick_activation(activation)
+            stride=stride, padding=kernel_size, activation=weight_activation,
+            in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=True)
         self.batchnorm = nn.BatchNorm1d(kernel_size)
+        self.activation = nn.ReLU(inplace=True)
 
         # Initialize inverse of front end transform
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
-            kernel_size, 1, kernel_size, stride=stride)
+            kernel_size, 1, kernel_size, stride=stride, in_bin=in_bin,
+            weight_bin=weight_bin, adaptive_scaling=True
+        )
         self.sparsity = sparsity
 
     def forward(self, x):
@@ -49,9 +52,13 @@ class BitwiseAutoencoder(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        h = self.activation(self.batchnorm(self.conv(x)))
+        h = self.batchnorm(self.activation(self.conv(x)))
         h = self.conv_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
         return h
+
+    def clip_weights(self):
+        self.conv.clip_weights()
+        self.conv_transpose.clip_weights()
 
     def update_betas(self):
         '''
@@ -64,7 +71,8 @@ class BitwiseAutoencoder(nn.Module):
         self.conv_transpose.update_betas(sparsity=args.sparsity)
 
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
-    autoencode=False, quantizer=None, transform=None, dtype=torch.float):
+    autoencode=False, quantizer=None, transform=None, dtype=torch.float,
+    clip_weights=False):
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
@@ -86,6 +94,8 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
         optimizer.step()
+        if clip_weights:
+            model.clip_weights()
     return running_loss / len(dl.dataset)
 
 def val(model, dl, loss=F.mse_loss, autoencode=False,
@@ -133,13 +143,14 @@ def main():
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
+    parser.add_argument('--clip_weights', '-cw', action='store_true')
 
     parser.add_argument('--kernel', '-k', type=int, default=256)
     parser.add_argument('--stride', '-s', type=int, default=16)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
-    parser.add_argument('--activation', '-a', default='relu')
-    parser.add_argument('--weight_activation', '-wa', default='tanh')
+    parser.add_argument('--in_bin', '-ib', default='identity')
+    parser.add_argument('--weight_bin', '-wb', default='identity')
     args = parser.parse_args()
 
     # Initialize device
@@ -154,13 +165,16 @@ def main():
     quantizer = None
     transform = None
 
+    in_bin = binary_layers.pick_activation(args.in_bin)
+    weight_bin = binary_layers.pick_activation(args.weight_bin)
+
     # Make model and dataset
     train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=args.stride,
         toy=args.toy)
     model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=1, out_channels=1, dropout=args.dropout,
         sparsity=args.sparsity, autoencode=args.autoencode,
-        activation=activation, weight_activation=weight_activation)
+        in_bin=in_bin, weight_bin=weight_bin)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
     model.to(device=device, dtype=dtype)
@@ -180,7 +194,7 @@ def main():
         model.train()
         train_loss = train(model, train_dl, optimizer, loss=loss, device=device,
             autoencode=args.autoencode, quantizer=quantizer, transform=transform,
-            dtype=dtype)
+            dtype=dtype, clip_weights=args.clip_weights)
 
         if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
