@@ -291,8 +291,9 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         if self.adaptive_scaling:
             in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1, keepdim=True))
             weight_scale = torch.mean(torch.abs(self.weight))
-        return F.conv_transpose1d(x, w, self.bias, stride=self.stride,
-            padding=self.padding, groups=self.groups, dilation=self.dilation)
+        return in_scale * weight_scale * F.conv_transpose1d(x, w, self.bias,
+            stride=self.stride, padding=self.padding, groups=self.groups,
+            dilation=self.dilation)
 
     def __repr__(self):
         return 'BitwiseConvTranspose1d({}, {}, {}, stride={}, padding={}, groups={}, use_gate={}, dilation={})'.format(
