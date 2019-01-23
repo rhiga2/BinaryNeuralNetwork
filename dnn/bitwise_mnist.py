@@ -76,7 +76,8 @@ def main():
     in_bin = binary_layers.pick_activation(args.in_bin)
     weight_bin = binary_layers.pick_activation(args.weight_bin)
     model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[2048, 2048, 2048],
-        dropout=args.dropout, sparsity=args.sparsity, use_gate=args.use_gate,
+        activation=nn.ReLU(inplace=True), dropout=args.dropout,
+        sparsity=args.sparsity, use_gate=args.use_gate,
         adaptive_scaling=args.adaptive_scaling)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))

@@ -9,7 +9,7 @@ import dnn.binary_layers as binary_layers
 
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
-        sparsity=0, use_gate=False, activation=nn.ReLU(),
+        sparsity=0, use_gate=False, activation=binary_layers.identity,
         in_bin=binary_layers.clipped_ste, weight_bin=binary_layers.clipped_ste,
         use_batchnorm=True, bn_momentum=0.1, adaptive_scaling=False):
         super(BitwiseMLP, self).__init__()
@@ -29,7 +29,8 @@ class BitwiseMLP(nn.Module):
         for i, osize in enumerate(fc_sizes):
             self.filter_list.append(
                 binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
-                in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=adaptive_scaling)
+                in_bin=in_bin, weight_bin=weight_bin,
+                adaptive_scaling=adaptive_scaling)
             )
             if self.use_batchnorm:
                 self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
