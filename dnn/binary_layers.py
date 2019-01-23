@@ -137,7 +137,8 @@ class BitwiseLinear(nn.Module):
         self.beta = update_beta(self.weight, sparsity)
 
     def clip_weights(self):
-        self.weight, self.gate = clip_weights(self.weight, self.gate, self.use_gate)
+        with torch.no_grad():
+            self.weight, self.gate = clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
         x = self.in_bin(x)
@@ -164,6 +165,7 @@ class BitwiseConv1d(nn.Conv1d):
         self.use_gate = use_gate
         self.in_bin = in_bin
         self.weight_bin = weight_bin
+        self.gate = None
         if use_gate:
             self.gate = init_weight(self.weight.size(), one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
@@ -189,7 +191,7 @@ class BitwiseConv1d(nn.Conv1d):
         weight_scale = 1
         in_scale = 1
         if self.adaptive_scaling:
-            in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1))
+            in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1, keepdim=True))
             weight_scale = torch.mean(torch.abs(self.weight))
         return weight_scale * in_scale * F.conv1d(x, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
@@ -211,6 +213,7 @@ class BitwiseConv2d(nn.Conv2d):
         self.use_gate = use_gate
         self.in_bin = in_bin
         self.weight_bin = weight_bin
+        self.gate = None
         if use_gate:
             self.gate = init_weight(self.weight.size(), one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
@@ -236,7 +239,7 @@ class BitwiseConv2d(nn.Conv2d):
         weight_scale = 1
         in_scale = 1
         if self.adaptive_scaling:
-            in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1))
+            in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1, keepdim=True))
             weight_scale = torch.mean(torch.abs(self.weight))
         return weight_scale * in_scale * F.conv2d(x, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
@@ -254,10 +257,11 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         dilation=1, adaptive_scaling=False, in_bin=clipped_ste,
         weight_bin=clipped_ste):
         super(BitwiseConvTranspose1d, self).__init__(
-            input_channels, output_channels, kernel_size, stride=stride,
+            in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation
         )
-        self.use_gate = True
+        self.use_gate = use_gate
+        self.gate = None
         self.in_bin = in_bin
         self.weight_bin = weight_bin
         if use_gate:
@@ -285,7 +289,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         in_scale = 1
         weight_scale = 1
         if self.adaptive_scaling:
-            in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1))
+            in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1, keepdim=True))
             weight_scale = torch.mean(torch.abs(self.weight))
         return F.conv_transpose1d(x, w, self.bias, stride=self.stride,
             padding=self.padding, groups=self.groups, dilation=self.dilation)

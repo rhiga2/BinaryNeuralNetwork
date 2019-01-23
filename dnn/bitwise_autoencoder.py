@@ -30,7 +30,7 @@ class BitwiseAutoencoder(nn.Module):
         self.kernel_size = kernel_size
         self.autoencode = autoencode
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
-            stride=stride, padding=kernel_size, activation=weight_activation,
+            stride=stride, padding=kernel_size,
             in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=True)
         self.batchnorm = nn.BatchNorm1d(kernel_size)
         self.activation = nn.ReLU(inplace=True)
