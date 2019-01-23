@@ -118,7 +118,7 @@ def main():
     parser.add_argument('--in_bin', '-ib', default='tanh')
     parser.add_argument('--output_activation', '-oa', default='identity')
     parser.add_argument('--clip_weights', '-cw', action='store_true')
-    parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.2)
+    parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.1)
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
     args = parser.parse_args()
 

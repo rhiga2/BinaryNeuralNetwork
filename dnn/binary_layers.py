@@ -120,15 +120,14 @@ class BitwiseLinear(nn.Module):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
-        self.weight = init_weight((output_size, input_size), True)
+        self.weight = init_weight((output_size, input_size))
         self.bias = nn.Parameter(torch.zeros(output_size), requires_grad=True)
         self.in_bin = in_bin
         self.weight_bin = weight_bin
         self.use_gate = use_gate
         self.gate = None
         if use_gate:
-            self.gate = init_weight((output_size, input_size), True,
-                one_sided=True)
+            self.gate = init_weight((output_size, input_size), one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
             requires_grad=False)
         self.adaptive_scaling = adaptive_scaling
