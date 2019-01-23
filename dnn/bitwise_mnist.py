@@ -46,7 +46,6 @@ def main():
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--period', '-p', type=int, default=1)
-    parser.add_argument('--update_period', '-up', type=int, default=16)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--exp', '-exp', default='temp')
@@ -108,9 +107,6 @@ def main():
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)
-
-        if (epoch+1) % args.update_period == 0:
-            model.update_gamma(model.gamma + 1)
 
 if __name__ == '__main__':
     main()
