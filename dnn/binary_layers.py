@@ -95,11 +95,9 @@ def update_beta(weight, sparsity):
     return nn.Parameter(beta, requires_grad=False)
 
 def clip_weights(weight, gate, use_gate=False):
-    new_weight = nn.Parameter(torch.clamp(weight, -1, 1))
-    new_gate = None
+    weight.data.clamp_(-1, 1)
     if use_gate:
-        new_gate = nn.Parameter(torch.clamp(gate, -1, 1))
-    return new_weight, new_gate
+        gate.data.clamp_(-1, 1)
 
 def get_effective_weight(weight, gate, binactiv, beta=0, use_gate=False):
     w = weight
@@ -136,8 +134,7 @@ class BitwiseLinear(nn.Module):
         self.beta = update_beta(self.weight, sparsity)
 
     def clip_weights(self):
-        with torch.no_grad():
-            self.weight, self.gate = clip_weights(self.weight, self.gate, self.use_gate)
+        clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
         x = self.in_bin(x)
@@ -146,8 +143,8 @@ class BitwiseLinear(nn.Module):
         weight_scale = 1
         in_scale = 1
         if self.adaptive_scaling:
-            in_scale = torch.mean(torch.abs(x), dim=1, keepdim=True)
-            weight_scale = torch.mean(torch.abs(self.weight))
+            in_scale = torch.abs(x).mean(1, keepdim=True)
+            weight_scale = torch.abs(self.weight).mean(1)
         return in_scale * weight_scale * F.linear(x, w, self.bias)
 
     def __repr__(self):
@@ -178,7 +175,7 @@ class BitwiseConv1d(nn.Conv1d):
         self.beta = update_beta(self.weight, sparsity)
 
     def clip_weights(self):
-        self.weight, self.gate = clip_weights(self.weight, self.gate, self.use_gate)
+        clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
         '''
@@ -190,8 +187,9 @@ class BitwiseConv1d(nn.Conv1d):
         weight_scale = 1
         in_scale = 1
         if self.adaptive_scaling:
-            in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1, keepdim=True))
-            weight_scale = torch.mean(torch.abs(self.weight))
+            in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
+            weight_scale = torch.abs(self.weight).mean(1).mean(1)
+            weight_scale = weight_scale.unsqueeze(1)
         return weight_scale * in_scale * F.conv1d(x, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
@@ -226,7 +224,7 @@ class BitwiseConv2d(nn.Conv2d):
         self.beta = update_beta(self.weight, sparsity)
 
     def clip_weights(self):
-        self.weight, self.gate = clip_weights(self.weight, self.gate, self.use_gate)
+        clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
         '''
@@ -238,8 +236,9 @@ class BitwiseConv2d(nn.Conv2d):
         weight_scale = 1
         in_scale = 1
         if self.adaptive_scaling:
-            in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1, keepdim=True))
-            weight_scale = torch.mean(torch.abs(self.weight))
+            in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
+            weight_scale = torch.abs(self.weight).mean(1).mean(1).mean(1)
+            weight_scale = weight_scale.unsqueeze(1).unsqueeze(1)
         return weight_scale * in_scale * F.conv2d(x, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
@@ -276,7 +275,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         self.beta = update_beta(self.weight, sparsity)
 
     def clip_weights(self):
-        self.weight, self.gate = clip_weights(self.weight, self.gate, self.use_gate)
+        clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
         '''
@@ -288,8 +287,9 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         in_scale = 1
         weight_scale = 1
         if self.adaptive_scaling:
-            in_scale = self.scale_conv(torch.mean(torch.abs(x), dim=1, keepdim=True))
-            weight_scale = torch.mean(torch.abs(self.weight))
+            in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
+            weight_scale = torch.abs(self.weight).mean(0).mean(1)
+            weight_scale = weight_scale.unsqueeze(1)
         return in_scale * weight_scale * F.conv_transpose1d(x, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
