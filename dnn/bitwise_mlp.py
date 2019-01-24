@@ -27,9 +27,13 @@ class BitwiseMLP(nn.Module):
         self.bn_list = nn.ModuleList()
         self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
+            if i == 0:
+                input_bin = binary_layers.identity
+            else:
+                input_bin = in_bin
             self.filter_list.append(
                 binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
-                in_bin=in_bin, weight_bin=weight_bin,
+                in_bin=input_bin, weight_bin=weight_bin,
                 adaptive_scaling=adaptive_scaling)
             )
             if self.use_batchnorm:
@@ -54,7 +58,7 @@ class BitwiseMLP(nn.Module):
                 x = self.activation(x)
                 x = self.dropout_list[i](x)
             if self.use_batchnorm:
-                self.bn_list[i](x)
+                x = self.bn_list[i](x)
         return x
 
     def clip_weights(self):

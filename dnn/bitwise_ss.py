@@ -23,17 +23,19 @@ def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu')
         optimizer.zero_grad()
         bmag = batch['bmag'].to(device=device)
         ibm = batch['ibm'].to(device=device)
-        spec = batch['spec'].to(device=device)
-        spec = spec / torch.std(spec)
+        bmag = 2*bmag - 1
         bmag = bmag.to(device=device)
-        model_in = flatten(bmag)
-        estimate = model(model_in)
-        estimate = unflatten(estimate, bmag.size(0), bmag.size(2))
+        bmag_size = bmag.size()
+        bmag = flatten(bmag)
+        estimate = model(bmag)
+        estimate = unflatten(estimate, bmag_size[0], bmag_size[2])
         if weighted:
+            spec = batch['spec'].to(device=device)
+            spec = spec / torch.std(spec)
             cost = loss(estimate, ibm, weight=spec)
         else:
             cost = loss(estimate, ibm)
-        running_loss += cost.item() * bmag.size(0)
+        running_loss += cost.item() * bmag_size[0]
         cost.backward()
         optimizer.step()
         if clip_weights:
@@ -57,15 +59,17 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
 
         bmag = torch.FloatTensor(bin_sample['bmag']).unsqueeze(0).to(device)
         ibm = torch.FloatTensor(bin_sample['ibm']).unsqueeze(0).to(device)
-        spec = bin_sample['spec']
-        weights = torch.FloatTensor(spec).to(device)
-        weights = weights / torch.std(weights)
+        bmag = 2*bmag - 1
+        bmag_size = bmag.size()
 
-        model_in = flatten(bmag)
-        premask = model(model_in)
-        premask = unflatten(premask, bmag.size(0), bmag.size(2))
+        bmag = flatten(bmag)
+        premask = model(bmag)
+        premask = unflatten(premask, bmag_size[0], bmag_size[2])
         if weighted:
-            cost = loss(premask, ibm, weight=weights)
+            spec =  bin_sample['spec']
+            spec = torch.FloatTensor(spec).to(device)
+            spec = spec / torch.std(spec)
+            cost = loss(premask, ibm, weight=spec)
         else:
             cost = loss(premask, ibm)
         running_loss += cost.item()
@@ -116,7 +120,6 @@ def main():
     parser.add_argument('--activation', '-a', default='tanh')
     parser.add_argument('--weight_bin', '-wb', default='tanh')
     parser.add_argument('--in_bin', '-ib', default='tanh')
-    parser.add_argument('--output_activation', '-oa', default='identity')
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.1)
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
