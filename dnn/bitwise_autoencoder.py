@@ -31,14 +31,14 @@ class BitwiseAutoencoder(nn.Module):
         self.autoencode = autoencode
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
             stride=stride, padding=kernel_size,
-            in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=True)
+            in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=True, use_gate=True)
 
         # Initialize conv weights to FFT
         fft = np.fft.fft(np.eye(kernel_size))
         real_fft = np.real(fft)
         im_fft = np.imag(fft)
-        basis = torch.FloatTensor(np.concatenate([real_fft[:cutoff], im_fft[:cutoff]], axis=0))
-        conv.weight = nn.Parameter(conv.weight, requires_grad=True)
+        basis = torch.FloatTensor(np.concatenate([real_fft[:kernel_size // 2], im_fft[:kernel_size // 2]], axis=0))
+        self.conv.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=True)
 
         self.batchnorm = nn.BatchNorm1d(kernel_size)
         self.activation = nn.ReLU(inplace=True)
@@ -46,14 +46,14 @@ class BitwiseAutoencoder(nn.Module):
         # Initialize inverse of front end transform
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
             kernel_size, 1, kernel_size, stride=stride, in_bin=in_bin,
-            weight_bin=weight_bin, adaptive_scaling=True
+            weight_bin=weight_bin, adaptive_scaling=True, use_gate=True
         )
 
         # Initialize conv transpose weights to FFT
         scale = kernel_size/stride
         invbasis = torch.t(torch.pinverse(scale*basis))
         invbasis = invbasis.contiguous().unsqueeze(1)
-        conv_transpose.weight = nn.Parameter(invbasis, requires_grad=True)
+        self.conv_transpose.weight = nn.Parameter(invbasis, requires_grad=True)
 
         self.sparsity = sparsity
 
@@ -166,6 +166,7 @@ def main():
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--in_bin', '-ib', default='identity')
     parser.add_argument('--weight_bin', '-wb', default='identity')
+    parser.add_argument('--loss', '-l', default='mse')
     args = parser.parse_args()
 
     # Initialize device
@@ -195,7 +196,10 @@ def main():
     model.to(device=device, dtype=dtype)
     print(model)
 
-    loss = sepcosts.SignalDistortionRatio()
+    if args.loss == 'mse':
+        loss = nn.MSELoss()
+    else:
+        loss = sepcosts.SignalDistortionRatio()
     loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer
