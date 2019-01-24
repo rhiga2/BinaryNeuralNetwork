@@ -32,6 +32,14 @@ class BitwiseAutoencoder(nn.Module):
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
             stride=stride, padding=kernel_size,
             in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=True)
+
+        # Initialize conv weights to FFT
+        fft = np.fft.fft(np.eye(kernel_size))
+        real_fft = np.real(fft)
+        im_fft = np.imag(fft)
+        basis = torch.FloatTensor(np.concatenate([real_fft[:cutoff], im_fft[:cutoff]], axis=0))
+        conv.weight = nn.Parameter(conv.weight, requires_grad=True)
+
         self.batchnorm = nn.BatchNorm1d(kernel_size)
         self.activation = nn.ReLU(inplace=True)
 
@@ -40,6 +48,13 @@ class BitwiseAutoencoder(nn.Module):
             kernel_size, 1, kernel_size, stride=stride, in_bin=in_bin,
             weight_bin=weight_bin, adaptive_scaling=True
         )
+
+        # Initialize conv transpose weights to FFT
+        scale = kernel_size/stride
+        invbasis = torch.t(torch.pinverse(scale*basis))
+        invbasis = invbasis.contiguous().unsqueeze(1)
+        conv_transpose.weight = nn.Parameter(invbasis, requires_grad=True)
+
         self.sparsity = sparsity
 
     def forward(self, x):
