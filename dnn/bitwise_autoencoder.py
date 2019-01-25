@@ -15,6 +15,7 @@ import loss_and_metrics.bss_eval as bss_eval
 import dnn.binary_layers as binary_layers
 import visdom
 import argparse
+import pickle as pkl
 
 class BitwiseAutoencoder(nn.Module):
     '''
