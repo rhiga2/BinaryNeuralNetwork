@@ -50,11 +50,23 @@ class STE_Tanh(Function):
         x = ctx.saved_tensors[0]
         return grad_output
 
+class HardTanh(Function):
+    @staticmethod
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        return torch.clamp(x, -1, 1)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_tensors[0]
+        return torch.clamp(grad_output, -1, 1)
+
 bitwise_activation = BitwiseActivation.apply
 clipped_ste = ClippedSTE.apply
 ste = STE.apply
 ste_tanh = STE_Tanh.apply
 identity = lambda x : x
+hard_tanh = HardTanh.apply
 
 def pick_activation(activation_name):
     if activation_name == 'ste':
@@ -69,6 +81,8 @@ def pick_activation(activation_name):
         activation = torch.tanh
     elif activation_name == 'ste_tanh':
         activation = ste_tanh
+    elif activation_name == 'hard_tanh':
+        activation = hard_tanh
     elif activation_name == 'identity':
         activation = identity
     return activation

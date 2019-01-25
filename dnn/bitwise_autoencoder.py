@@ -16,6 +16,27 @@ import dnn.binary_layers as binary_layers
 import visdom
 import argparse
 
+def _haar_matrix(n):
+    '''
+    n is a power of 2
+    Produce unnormalized haar
+    '''
+    assert n > 1
+    if n == 2:
+        return np.array([[1, 1], [1, -1]])
+    prev_haar = haar_matrix(n // 2)
+    prev_id = np.eye(n // 2)
+    haar_top = np.kron(prev_haar, np.array([1, 1]))
+    haar_bottom = np.kron(prev_id, np.array([1, -1]))
+    return np.concatenate((haar_top, haar_bottom))
+
+def haar_matrix(n):
+    '''
+    n is a power of 2
+    '''
+    haar = _haar_matrix(n)
+    return haar / np.linalg.norm(haar, axis=1)
+
 class BitwiseAutoencoder(nn.Module):
     '''
     Adaptive transform network inspired by Minje Kim
@@ -33,12 +54,9 @@ class BitwiseAutoencoder(nn.Module):
             stride=stride, padding=kernel_size,
             in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=True, use_gate=True)
 
-        # Initialize conv weights to FFT
-        fft = np.fft.fft(np.eye(kernel_size))
-        real_fft = np.real(fft)
-        im_fft = np.imag(fft)
-        basis = torch.FloatTensor(np.concatenate([real_fft[:kernel_size // 2], im_fft[:kernel_size // 2]], axis=0))
-        self.conv.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=True)
+        # Initialize conv weights
+        haar = torch.FloatTensor(haar_matrix(kernel_size))
+        self.conv.weight = nn.Parameter(haar.unsqueeze(1), requires_grad=True)
 
         self.batchnorm = nn.BatchNorm1d(kernel_size)
         self.activation = nn.ReLU(inplace=True)
@@ -51,9 +69,9 @@ class BitwiseAutoencoder(nn.Module):
 
         # Initialize conv transpose weights to FFT
         scale = kernel_size/stride
-        invbasis = torch.t(torch.pinverse(scale*basis))
-        invbasis = invbasis.contiguous().unsqueeze(1)
-        self.conv_transpose.weight = nn.Parameter(invbasis, requires_grad=True)
+        invhaar = torch.t(haar)
+        invhaar = invhaar.contiguous().unsqueeze(1)
+        self.conv_transpose.weight = nn.Parameter(invhaar, requires_grad=True)
 
         self.sparsity = sparsity
 
