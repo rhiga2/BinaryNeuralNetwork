@@ -105,7 +105,7 @@ def update_beta(weight, sparsity):
         return
     w = weight.cpu().data.numpy()
     beta = torch.tensor(np.percentile(np.abs(w), sparsity),
-        dtype=self.weight.dtype, device=weight.device)
+        dtype=weight.dtype, device=weight.device)
     return nn.Parameter(beta, requires_grad=False)
 
 def clip_weights(weight, gate, use_gate=False):

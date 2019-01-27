@@ -45,15 +45,16 @@ class BitwiseAutoencoder(nn.Module):
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95, adapt=True,
         autoencode=False, in_bin=binary_layers.identity,
-        weight_bin=binary_layers.identity, use_gate=False):
+        weight_bin=binary_layers.identity, use_gate=False,
+        adaptive_scaling=True):
         super(BitwiseAutoencoder, self).__init__()
 
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.autoencode = autoencode
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
-            stride=stride, padding=kernel_size,
-            in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=True,
+            stride=stride, padding=kernel_size, in_bin=in_bin,
+            weight_bin=weight_bin, adaptive_scaling=adaptive_scaling,
             use_gate=use_gate)
 
         # Initialize conv weights
@@ -66,7 +67,8 @@ class BitwiseAutoencoder(nn.Module):
         # Initialize inverse of front end transform
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
             kernel_size, 1, kernel_size, stride=stride, in_bin=in_bin,
-            weight_bin=weight_bin, adaptive_scaling=True, use_gate=use_gate
+            weight_bin=weight_bin, adaptive_scaling=adaptive_scaling,
+            use_gate=use_gate
         )
 
         # Initialize conv transpose weights to FFT
@@ -85,7 +87,7 @@ class BitwiseAutoencoder(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        h = self.batchnorm(self.activation(self.conv(x)))
+        h = self.batchnorm(self.conv(x))
         h = self.conv_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
         return h
 
@@ -102,6 +104,16 @@ class BitwiseAutoencoder(nn.Module):
 
         self.conv.update_betas(sparsity=args.sparsity)
         self.conv_transpose.update_betas(sparsity=args.sparsity)
+
+    def load_partial_state_dict(self, state_dict, use_gate=False):
+        own_state_dict = self.state_dict()
+        for name, param in state_dict.items():
+            if name in own_state_dict:
+                own_state_dict[name].copy_(param)
+
+        if use_gate:
+            self.conv.gate[self.conv.weight == 0] = -1
+            self.conv_transpose.gate[self.conv_transpose.weight == 0] = -1
 
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
     autoencode=False, quantizer=None, transform=None, dtype=torch.float,
@@ -154,7 +166,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
         reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
         if quantizer:
-            estimate = quantizer.inverse(estimate)
+            estimate = quantizer.inverse(255 * estimate)
         estimate = estimate.to(device='cpu')
         sources = torch.stack([batch['target'], batch['interference']], dim=1)
         metrics = bss_eval.bss_eval_batch(estimate, sources)
@@ -186,6 +198,7 @@ def main():
     parser.add_argument('--weight_bin', '-wb', default='identity')
     parser.add_argument('--loss', '-l', default='mse')
     parser.add_argument('--use_gate', '-ug', action='store_true')
+    parser.add_argument('--adaptive_scaling', '-as', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -197,7 +210,7 @@ def main():
     print('On device: ', device)
 
     # Initialize quantizer and dequantizer
-    quantizer = quantized_data.Quantizer()
+    quantizer = None
     transform = None
 
     in_bin = binary_layers.pick_activation(args.in_bin)
@@ -209,9 +222,10 @@ def main():
     model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=1, out_channels=1, dropout=args.dropout,
         sparsity=args.sparsity, autoencode=args.autoencode,
-        in_bin=in_bin, weight_bin=weight_bin, use_gate=args.use_gate)
+        in_bin=in_bin, weight_bin=weight_bin,
+        adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate)
     if args.load_file:
-        model.load_state_dict(torch.load('../models/' + args.load_file))
+        model.load_partial_state_dict(torch.load('../models/' + args.load_file))
     model.to(device=device, dtype=dtype)
     print(model)
 
@@ -222,7 +236,7 @@ def main():
     loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer
-    vis = visdom.Visdom(port=5800)
+    vis = visdom.Visdom(port=5801)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
