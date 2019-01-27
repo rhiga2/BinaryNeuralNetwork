@@ -127,8 +127,8 @@ class BitwiseLinear(nn.Module):
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
     def __init__(self, input_size, output_size, use_gate=False,
-        adaptive_scaling=False, in_bin=clipped_ste,
-        weight_bin=clipped_ste):
+        adaptive_scaling=False, in_bin=identity,
+        weight_bin=identity):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
@@ -168,7 +168,7 @@ class BitwiseLinear(nn.Module):
 class BitwiseConv1d(nn.Conv1d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        adaptive_scaling=False, in_bin=clipped_ste, weight_bin=clipped_ste):
+        adaptive_scaling=False, in_bin=identity, weight_bin=identity):
         super(BitwiseConv1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, dilation=dilation, groups=groups)
@@ -216,7 +216,7 @@ class BitwiseConv1d(nn.Conv1d):
 class BitwiseConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        in_bin=clipped_ste, weight_bin=clipped_ste, adaptive_scaling=False):
+        in_bin=identity, weight_bin=identity, adaptive_scaling=False):
         super(BitwiseConv2d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation
@@ -266,8 +266,8 @@ class BitwiseConv2d(nn.Conv2d):
 class BitwiseConvTranspose1d(nn.ConvTranspose1d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, use_gate=False,
-        dilation=1, adaptive_scaling=False, in_bin=clipped_ste,
-        weight_bin=clipped_ste):
+        dilation=1, adaptive_scaling=False, in_bin=identity,
+        weight_bin=identity):
         super(BitwiseConvTranspose1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation

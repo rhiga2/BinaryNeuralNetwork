@@ -56,8 +56,8 @@ class BitwiseAutoencoder(nn.Module):
             in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=adaptive_scaling, use_gate=True)
 
         # Initialize conv weights
-        haar = torch.FloatTensor(haar_matrix(kernel_size))
-        self.conv.weight = nn.Parameter(haar.unsqueeze(1), requires_grad=True)
+        haar = torch.FloatTensor(haar_matrix(kernel_size)).unsqueeze(1)
+        self.conv.weight = nn.Parameter(haar, requires_grad=True)
 
         self.batchnorm = nn.BatchNorm1d(kernel_size)
         self.activation = nn.ReLU(inplace=True)
@@ -69,10 +69,8 @@ class BitwiseAutoencoder(nn.Module):
         )
 
         # Initialize conv transpose weights to FFT
-        scale = kernel_size/stride
-        invhaar = torch.t(haar)
-        invhaar = invhaar.contiguous().unsqueeze(1)
-        self.conv_transpose.weight = nn.Parameter(invhaar, requires_grad=True)
+        scale = stride / kernel_size
+        self.conv_transpose.weight = nn.Parameter(scale * haar, requires_grad=True)
 
         self.sparsity = sparsity
 
