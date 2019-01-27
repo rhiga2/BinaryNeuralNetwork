@@ -44,8 +44,8 @@ class BitwiseAutoencoder(nn.Module):
     '''
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95, adapt=True,
-        autoencode=False, use_gate=True, in_bin=binary_layers.identity,
-        weight_bin=binary_layers.identity):
+        autoencode=False, in_bin=binary_layers.identity,
+        weight_bin=binary_layers.identity, use_gate=False):
         super(BitwiseAutoencoder, self).__init__()
 
         # Initialize adaptive front end
@@ -53,7 +53,8 @@ class BitwiseAutoencoder(nn.Module):
         self.autoencode = autoencode
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
             stride=stride, padding=kernel_size,
-            in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=True, use_gate=True)
+            in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=True,
+            use_gate=use_gate)
 
         # Initialize conv weights
         haar = torch.FloatTensor(haar_matrix(kernel_size)).unsqueeze(1)
@@ -65,7 +66,7 @@ class BitwiseAutoencoder(nn.Module):
         # Initialize inverse of front end transform
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
             kernel_size, 1, kernel_size, stride=stride, in_bin=in_bin,
-            weight_bin=weight_bin, adaptive_scaling=True, use_gate=True
+            weight_bin=weight_bin, adaptive_scaling=True, use_gate=use_gate
         )
 
         # Initialize conv transpose weights to FFT
@@ -141,7 +142,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
             mix = target
         if quantizer:
             mix = quantizer(mix).to(device=device, dtype=dtype) / 255
-            target = quantizer(target).to(device=device, dtype=torch.long)
+            target = quantizer(target).to(device=device, dtype=dtype) / 255
         if transform:
             mix = transform(mix)
         else:
@@ -184,6 +185,7 @@ def main():
     parser.add_argument('--in_bin', '-ib', default='identity')
     parser.add_argument('--weight_bin', '-wb', default='identity')
     parser.add_argument('--loss', '-l', default='mse')
+    parser.add_argument('--use_gate', '-ug', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -195,7 +197,7 @@ def main():
     print('On device: ', device)
 
     # Initialize quantizer and dequantizer
-    quantizer = None
+    quantizer = quantized_data.Quantizer()
     transform = None
 
     in_bin = binary_layers.pick_activation(args.in_bin)
@@ -207,7 +209,7 @@ def main():
     model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=1, out_channels=1, dropout=args.dropout,
         sparsity=args.sparsity, autoencode=args.autoencode,
-        in_bin=in_bin, weight_bin=weight_bin)
+        in_bin=in_bin, weight_bin=weight_bin, use_gate=args.use_gate)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
     model.to(device=device, dtype=dtype)
