@@ -74,6 +74,9 @@ class BitwiseAutoencoder(nn.Module):
         # Initialize conv transpose weights to FFT
         scale = stride / kernel_size
         self.conv_transpose.weight = nn.Parameter(scale * haar, requires_grad=True)
+        if use_gate:
+            self.conv.gate[self.conv.weight == 0] = -self.conv.gate[self.conv.weight == 0]
+            self.conv_transpose.gate[self.conv_transpose.weight == 0] = -self.conv_transpose.gate[self.conv_transpose.weight == 0]
 
         self.sparsity = sparsity
 
@@ -110,10 +113,6 @@ class BitwiseAutoencoder(nn.Module):
         for name, param in state_dict.items():
             if name in own_state_dict:
                 own_state_dict[name].copy_(param)
-
-        if use_gate:
-            self.conv.gate[self.conv.weight == 0] = -1
-            self.conv_transpose.gate[self.conv_transpose.weight == 0] = -1
 
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
     autoencode=False, quantizer=None, transform=None, dtype=torch.float,
