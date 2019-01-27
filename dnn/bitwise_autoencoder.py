@@ -45,7 +45,7 @@ class BitwiseAutoencoder(nn.Module):
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95, adapt=True,
         autoencode=False, use_gate=True, in_bin=binary_layers.identity,
-        weight_bin=binary_layers.identity):
+        weight_bin=binary_layers.identity, adaptive_scaling=True):
         super(BitwiseAutoencoder, self).__init__()
 
         # Initialize adaptive front end
@@ -53,7 +53,7 @@ class BitwiseAutoencoder(nn.Module):
         self.autoencode = autoencode
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
             stride=stride, padding=kernel_size,
-            in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=True, use_gate=True)
+            in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=adaptive_scaling, use_gate=True)
 
         # Initialize conv weights
         haar = torch.FloatTensor(haar_matrix(kernel_size))
@@ -65,7 +65,7 @@ class BitwiseAutoencoder(nn.Module):
         # Initialize inverse of front end transform
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
             kernel_size, 1, kernel_size, stride=stride, in_bin=in_bin,
-            weight_bin=weight_bin, adaptive_scaling=True, use_gate=True
+            weight_bin=weight_bin, adaptive_scaling=adaptive_scaling, use_gate=True
         )
 
         # Initialize conv transpose weights to FFT
@@ -86,7 +86,7 @@ class BitwiseAutoencoder(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        h = self.batchnorm(self.activation(self.conv(x)))
+        h = self.batchnorm(self.conv(x))
         h = self.conv_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
         return h
 
@@ -103,6 +103,12 @@ class BitwiseAutoencoder(nn.Module):
 
         self.conv.update_betas(sparsity=args.sparsity)
         self.conv_transpose.update_betas(sparsity=args.sparsity)
+
+    def load_partial_state_dict(self, state_dict):
+        own_state_dict = self.state_dict()
+        for name, param in state_dict.items():
+            if name in own_state_dict:
+                own_state_dict[name].copy_(param)
 
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
     autoencode=False, quantizer=None, transform=None, dtype=torch.float,
@@ -186,6 +192,7 @@ def main():
     parser.add_argument('--in_bin', '-ib', default='identity')
     parser.add_argument('--weight_bin', '-wb', default='identity')
     parser.add_argument('--loss', '-l', default='mse')
+    parser.add_argument('--adaptive_scaling', '-as', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -209,9 +216,9 @@ def main():
     model = BitwiseAutoencoder(args.kernel, args.stride, fc_sizes=[2048, 2048],
         in_channels=1, out_channels=1, dropout=args.dropout,
         sparsity=args.sparsity, autoencode=args.autoencode,
-        in_bin=in_bin, weight_bin=weight_bin)
+        in_bin=in_bin, weight_bin=weight_bin, adaptive_scaling=args.adaptive_scaling)
     if args.load_file:
-        model.load_state_dict(torch.load('../models/' + args.load_file))
+        model.load_partial_state_dict(torch.load('../models/' + args.load_file))
     model.to(device=device, dtype=dtype)
     print(model)
 
@@ -222,7 +229,7 @@ def main():
     loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer
-    vis = visdom.Visdom(port=5800)
+    vis = visdom.Visdom(port=5801)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
