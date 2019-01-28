@@ -99,6 +99,7 @@ def main():
     parser.add_argument('--loss', '-l', default='mse')
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
+    parser.add_argument('--activation', '-a', default='tanh')
     args = parser.parse_args()
 
     # Initialize device
@@ -120,6 +121,7 @@ def main():
     train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=args.stride,
         toy=args.toy)
     if args.wavenet:
+        filter 
         model = bitwise_autoencoder.BitwiseAutoencoder(1, 256,
             kernel_size=args.kernel_size, filter_activation=torch.tanh,
             gate_activation=torch.sigmoid, in_bin=in_bin, weight_bin=weight_bin,

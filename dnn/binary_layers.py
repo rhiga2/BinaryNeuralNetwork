@@ -68,7 +68,7 @@ ste_tanh = STE_Tanh.apply
 identity = lambda x : x
 hard_tanh = HardTanh.apply
 
-def pick_activation(activation_name):
+def pick_activation(activation_name, bipolar_shift=True):
     if activation_name == 'ste':
         activation = ste
     elif activation_name == 'clipped_ste':
@@ -85,6 +85,10 @@ def pick_activation(activation_name):
         activation = hard_tanh
     elif activation_name == 'identity':
         activation = identity
+
+    if not bipolar_shift:
+        activation = lambda x : (activation(x) + 1)/2
+        
     return activation
 
 def add_logistic_noise(x, sigma=0.1):
