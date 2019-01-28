@@ -75,8 +75,8 @@ class BitwiseAutoencoder(nn.Module):
         scale = stride / kernel_size
         self.conv_transpose.weight = nn.Parameter(scale * haar, requires_grad=True)
         if use_gate:
-            self.conv.gate[self.conv.weight == 0] = -self.conv.gate[self.conv.weight == 0]
-            self.conv_transpose.gate[self.conv_transpose.weight == 0] = -self.conv_transpose.gate[self.conv_transpose.weight == 0]
+            self.conv.gate.data[self.conv.weight == 0] = -self.conv.gate.data[self.conv.weight == 0]
+            self.conv_transpose.gate.data[self.conv_transpose.weight == 0] = -self.conv_transpose.gate.data[self.conv_transpose.weight == 0]
 
         self.sparsity = sparsity
 
@@ -90,7 +90,7 @@ class BitwiseAutoencoder(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        h = self.batchnorm(self.conv(x))
+        h = self.batchnorm(self.activation(self.conv(x)))
         h = self.conv_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
         return h
 
