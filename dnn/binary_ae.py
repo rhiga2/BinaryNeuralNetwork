@@ -20,7 +20,7 @@ import pickle as pkl
 
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
     autoencode=False, quantizer=None, transform=None, dtype=torch.float,
-    clip_weights=False):
+    clip_weights=False, classification=False):
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
@@ -30,15 +30,17 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
         if quantizer:
             mix = quantizer(mix).to(device=device, dtype=dtype) / 255
             target = quantizer(target).to(device=device, dtype=torch.long).view(-1)
-        if transform:
-            mix = transform(mix)
-        else:
-            mix = mix.unsqueeze(1)
+        mix = mix.unsqueeze(1)
         mix = mix.to(device=device)
         target = target.to(device=device)
         estimate = model(mix)
-        logits = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
-        reconst_loss = loss(logits, target)
+
+        if classification:
+            estimate = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
+        else:
+            estimate = estimate.squeeze(1)
+
+        reconst_loss = loss(estimate, target)
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
         optimizer.step()
@@ -59,20 +61,25 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
         if quantizer:
             mix = quantizer(mix).to(device=device, dtype=dtype) / 255
             target = quantizer(target).to(device=device, dtype=torch.long).view(-1)
-        if transform:
-            mix = transform(mix)
-        else:
-            mix = mix.unsqueeze(1)
+        mix = mix.unsqueeze(1)
         mix = mix.to(device=device)
         target = target.to(device=device)
         with torch.no_grad():
             estimate = model(mix)
-        logits = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
-        reconst_loss = loss(logits, target)
-        running_loss += reconst_loss.item() * mix.size(0)
-        if quantizer:
-            estimate = torch.argmax(estimate, dim=1).to(dtype=dtype)
-            estimate = quantizer.inverse(estimate)
+            estimate_size = estimate.size()
+            if classification:
+                estimate = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
+            else:
+                estimate = estimate.squeeze(1)
+
+            reconst_loss = loss(estimate, target)
+            running_loss += reconst_loss.item() * mix.size(0)
+            estimate = estimate.view(estimate_size[0], estimate_size[2], 256).contiguous().permute(0, 2, 1)
+
+            if quantizer:
+                estimate = torch.argmax(estimate, dim=1).to(dtype=dtype)
+                estimate = quantizer.inverse(estimate)
+                
         estimate = estimate.to(device='cpu')
         sources = torch.stack([batch['target'], batch['interference']], dim=1)
         metrics = bss_eval.bss_eval_batch(estimate, sources)
@@ -117,10 +124,6 @@ def main():
         device = torch.device('cpu')
     print('On device: ', device)
 
-    # Initialize quantizer and dequantizer
-    quantizer = quantized_data.Quantizer()
-    transform = None
-
     in_bin = binary_layers.pick_activation(args.in_bin)
     weight_bin = binary_layers.pick_activation(args.weight_bin)
 
@@ -148,11 +151,13 @@ def main():
     model.to(device=device, dtype=dtype)
     print(model)
 
+    quantizer = None
     if args.loss == 'mse':
         loss = nn.MSELoss()
     elif args.loss == 'sdr':
         loss = sepcosts.SignalDistortionRatio()
     elif args.loss == 'cel':
+        quantizer = quantized_data.Quantizer()
         loss = nn.CrossEntropyLoss()
     loss_metrics = bss_eval.LossMetrics()
 
