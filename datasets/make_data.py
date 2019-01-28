@@ -61,11 +61,11 @@ def make_mixture_set(hop=256, toy=False, max_length=None):
 
     return trainset, valset, testset
 
-def make_data(batchsize, hop=256, toy=False):
+def make_data(batchsize, hop=256, toy=False, max_length=32000):
     '''
     Make two mixture dataset
     '''
-    trainset, valset, testset = make_mixture_set(hop=hop, toy=toy)
+    trainset, valset, testset = make_mixture_set(hop=hop, toy=toy, max_length=max_length)
     collate = lambda x: collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)

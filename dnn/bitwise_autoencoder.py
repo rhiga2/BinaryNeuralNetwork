@@ -35,7 +35,7 @@ class BitwiseAutoencoder(nn.Module):
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
         in_bin=binary_layers.identity, weight_bin=binary_layers.identity,
-        use_gate=False, adaptive_scaling=True):
+        use_gate=False, adaptive_scaling=True, activation=nn.ReLU(inplace=True)):
         super(BitwiseAutoencoder, self).__init__()
 
         # Initialize adaptive front end
@@ -50,7 +50,7 @@ class BitwiseAutoencoder(nn.Module):
         self.conv.weight = nn.Parameter(haar, requires_grad=True)
 
         self.batchnorm = nn.BatchNorm1d(kernel_size)
-        self.activation = nn.ReLU(inplace=True)
+        self.activation = activation
 
         # Initialize inverse of front end transform
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
@@ -96,7 +96,7 @@ class BitwiseAutoencoder(nn.Module):
         self.conv.update_betas(sparsity=args.sparsity)
         self.conv_transpose.update_betas(sparsity=args.sparsity)
 
-    def load_partial_state_dict(self, state_dict, use_gate=False):
+    def load_partial_state_dict(self, state_dict):
         own_state_dict = self.state_dict()
         for name, param in state_dict.items():
             if name in own_state_dict:
