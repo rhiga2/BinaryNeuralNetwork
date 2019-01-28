@@ -10,7 +10,7 @@ class BitwiseWavenetBlock(nn.Module):
     def __init__(self, res_channels, dl_channels, layers=10, kernel_size=2,
         filter_activation=torch.tanh, gate_activation=torch.sigmoid,
         in_bin=binary_layers.identity, weight_bin=binary_layers.identity,
-        use_gate=True, adaptive_scaling=True):
+        use_gate=True, adaptive_scaling=True, use_batchnorm=False):
         super(BitwiseWavenetBlock, self).__init__()
         dilation = 1
         self.layers = layers
@@ -20,6 +20,11 @@ class BitwiseWavenetBlock(nn.Module):
         self.gate_list = nn.ModuleList()
         self.residual_list = nn.ModuleList()
         self.skip_list = nn.ModuleList()
+        self.use_batchnorm = use_batchnorm
+
+        if use_batchnorm:
+            self.batchnorm_list = nn.ModuleList()
+
         for i in range(layers):
             padding = dilation * (kernel_size-1) // 2
             if i == 0:
@@ -33,6 +38,10 @@ class BitwiseWavenetBlock(nn.Module):
                 dl_channels, kernel_size, dilation=dilation,
                 use_gate=use_gate, adaptive_scaling=adaptive_scaling,
                 in_bin=in_bin, weight_bin=weight_bin, padding=padding))
+
+            if use_batchnorm:
+                self.batchnorm_list.append(nn.BatchNorm1d(res_channels))
+
             self.residual_list.append(binary_layers.BitwiseConv1d(dl_channels,
                 res_channels, 1, use_gate=use_gate,
                 adaptive_scaling=adaptive_scaling, in_bin=in_bin,
@@ -55,7 +64,11 @@ class BitwiseWavenetBlock(nn.Module):
             if i == 0:
                 filtered = filtered[:, :, :-1]
                 gated = gated[:, :, :-1]
+
             layer_out = filtered * gated
+            if self.use_batchnorm:
+                layer_out = self.batchnorm_list[i](layer_out)
+
             skip = skip + self.skip_list[i](layer_out)
             resid = resid + self.residual_list[i](layer_out)
         return resid, skip
@@ -73,9 +86,9 @@ class BitwiseWavenet(nn.Module):
         kernel_size=2, filter_activation=torch.tanh,
         gate_activation=torch.sigmoid, in_bin=binary_layers.identity,
         weight_bin=binary_layers.identity, adaptive_scaling=True,
-        use_gate=True):
+        use_gate=True, use_batchnorm=False):
         super(BitwiseWavenet, self).__init__()
-        self.front_conv = binary_layers.BitwiseConv1d(in_channels, res_channels,
+        self.start_conv = binary_layers.BitwiseConv1d(in_channels, res_channels,
             1, in_bin=in_bin, weight_bin=weight_bin,
             use_gate=use_gate, adaptive_scaling=adaptive_scaling)
         self.blocks = blocks
@@ -85,7 +98,7 @@ class BitwiseWavenet(nn.Module):
                 kernel_size=kernel_size, layers=layers,
                 filter_activation=filter_activation,
                 gate_activation=gate_activation, use_gate=use_gate,
-                adaptive_scaling=adaptive_scaling))
+                adaptive_scaling=adaptive_scaling, use_batchnorm=use_batchnorm))
         self.end_conv1 = binary_layers.BitwiseConv1d(res_channels, out_channels,
             1, in_bin=in_bin, weight_bin=weight_bin, use_gate=use_gate,
             adaptive_scaling=adaptive_scaling)
@@ -93,8 +106,12 @@ class BitwiseWavenet(nn.Module):
             1, in_bin=in_bin, weight_bin=weight_bin,
             use_gate=use_gate, adaptive_scaling=adaptive_scaling)
 
+        if use_batchnorm:
+            self.start_bn = nn.BatchNorm1d(res_channels)
+            self.end_conv1 = nn.BatchNorm1d(out_channels)
+
     def forward(self, x):
-        resid = self.front_conv(x)
+        resid = self.start_conv(x)
         skip = torch.zeros_like(resid)
         for i in range(self.blocks):
             resid, new_skip = self.block_list[i](resid)

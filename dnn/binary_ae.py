@@ -114,6 +114,7 @@ def main():
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
     parser.add_argument('--activation', '-a', default='tanh')
+    parser.add_argument('--use_batchnorm', '-ub', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -138,7 +139,8 @@ def main():
         model = bitwise_wavenet.BitwiseWavenet(1, 256,
             kernel_size=args.kernel, filter_activation=torch.tanh,
             gate_activation=torch.sigmoid, in_bin=in_bin, weight_bin=weight_bin,
-            adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate)
+            adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
+            use_batchnorm=args.use_batchnorm)
         classification = True
     else:
         model = bitwise_autoencoder.BitwiseAutoencoder(args.kernel, args.stride,
@@ -146,7 +148,7 @@ def main():
             dropout=args.dropout, sparsity=args.sparsity,
             autoencode=args.autoencode, in_bin=in_bin, weight_bin=weight_bin,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
-            activation=args.activation)
+            activation=args.activation, weight_init='haar')
 
     if args.load_file:
         model.load_partial_state_dict(torch.load('../models/' + args.load_file))
