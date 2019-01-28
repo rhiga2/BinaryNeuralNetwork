@@ -7,9 +7,13 @@ import torch.optim as optim
 import torch.nn.functional as F
 import math
 import numpy as np
+import datasets.quantized_data as quantized_data
 import datasets.two_source_mixture as two_source_mixture
+import datasets.make_data as make_data
 import dnn.binary_layers as binary_layers
 import dnn.bitwise_autoencoder as bitwise_autoencoder
+import dnn.bitwise_wavenet as bitwise_wavenet
+import loss_and_metrics.bss_eval as bss_eval
 import visdom
 import argparse
 import pickle as pkl
@@ -25,7 +29,7 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
             mix = target
         if quantizer:
             mix = quantizer(mix).to(device=device, dtype=dtype) / 255
-            target = quantizer(target).to(device=device, dtype=torch.long)
+            target = quantizer(target).to(device=device, dtype=torch.long).view(-1)
         if transform:
             mix = transform(mix)
         else:
@@ -33,13 +37,14 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
         mix = mix.to(device=device)
         target = target.to(device=device)
         estimate = model(mix)
-        estimate = estimate.squeeze(1)
-        reconst_loss = loss(estimate, target)
+        logits = estimate.permute(0, 2, 1).contiguous().view(-1, 256) 
+        reconst_loss = loss(logits, target)
         running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
         optimizer.step()
         if clip_weights:
             model.clip_weights()
+    optimizer.zero_grad()
     return running_loss / len(dl.dataset)
 
 def val(model, dl, loss=F.mse_loss, autoencode=False,
@@ -53,19 +58,21 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
             mix = target
         if quantizer:
             mix = quantizer(mix).to(device=device, dtype=dtype) / 255
-            target = quantizer(target).to(device=device, dtype=torch.long)
+            target = quantizer(target).to(device=device, dtype=torch.long).view(-1)
         if transform:
             mix = transform(mix)
         else:
             mix = mix.unsqueeze(1)
         mix = mix.to(device=device)
         target = target.to(device=device)
-        estimate = model(mix)
-        estimate = estimate.squeeze(1)
-        reconst_loss = loss(estimate, target)
+        with torch.no_grad():
+            estimate = model(mix)
+        logits = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
+        reconst_loss = loss(logits, target)
         running_loss += reconst_loss.item() * mix.size(0)
         if quantizer:
-            estimate = quantizer.inverse(255 * estimate)
+            estimate = torch.argmax(estimate, dim=1).to(dtype=dtype)
+            estimate = quantizer.inverse(estimate)
         estimate = estimate.to(device='cpu')
         sources = torch.stack([batch['target'], batch['interference']], dim=1)
         metrics = bss_eval.bss_eval_batch(estimate, sources)
@@ -118,10 +125,10 @@ def main():
 
     # Make model and dataset
     train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=args.stride,
-        toy=args.toy)
+        toy=args.toy, max_length=24000)
     if args.wavenet:
-        model = bitwise_autoencoder.BitwiseAutoencoder(1, 256,
-            kernel_size=args.kernel_size, filter_activation=torch.tanh,
+        model = bitwise_wavenet.BitwiseWavenet(1, 256,
+            kernel_size=args.kernel, filter_activation=torch.tanh,
             gate_activation=torch.sigmoid, in_bin=in_bin, weight_bin=weight_bin,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate)
     else:
@@ -140,8 +147,8 @@ def main():
         loss = nn.MSELoss()
     elif args.loss == 'sdr':
         loss = sepcosts.SignalDistortionRatio()
-    elif args.loss = 'bce':
-        loss = nn.BCEWithLogitsLoss()
+    elif args.loss == 'cel':
+        loss = nn.CrossEntropyLoss()
     loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer
@@ -158,7 +165,7 @@ def main():
             dtype=dtype, clip_weights=args.clip_weights)
 
         if epoch % args.period == 0:
-            print('Epoch %d Training Cost: ' % epoch, train_loss)
+            # print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
             val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device,
                 autoencode=args.autoencode, quantizer=quantizer,
@@ -166,7 +173,7 @@ def main():
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 output_period=args.period)
-            bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', 'BSS Eval'])
+            bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['{} Loss'.format(args.exp), '{} BSS Eval'.format(args.exp)])
             print('Validation Cost: ', val_loss)
             print('Val SDR: ', sdr)
             print('Val SIR: ', sir)
