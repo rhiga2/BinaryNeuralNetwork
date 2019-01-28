@@ -35,7 +35,8 @@ class BitwiseAutoencoder(nn.Module):
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
         in_bin=binary_layers.identity, weight_bin=binary_layers.identity,
-        use_gate=False, adaptive_scaling=True, activation=nn.ReLU(inplace=True)):
+        use_gate=False, adaptive_scaling=True, activation=nn.ReLU(inplace=True),
+        weight_init=None):
         super(BitwiseAutoencoder, self).__init__()
 
         # Initialize adaptive front end
@@ -44,10 +45,6 @@ class BitwiseAutoencoder(nn.Module):
             stride=stride, padding=kernel_size, in_bin=in_bin,
             weight_bin=weight_bin, adaptive_scaling=adaptive_scaling,
             use_gate=use_gate)
-
-        # Initialize conv weights
-        haar = torch.FloatTensor(haar_matrix(kernel_size)).unsqueeze(1)
-        self.conv.weight = nn.Parameter(haar, requires_grad=True)
 
         self.batchnorm = nn.BatchNorm1d(kernel_size)
         self.activation = activation
@@ -59,9 +56,26 @@ class BitwiseAutoencoder(nn.Module):
             use_gate=use_gate
         )
 
-        # Initialize conv transpose weights to FFT
-        scale = stride / kernel_size
-        self.conv_transpose.weight = nn.Parameter(scale * haar, requires_grad=True)
+        # Initialize weights
+        if weight_init == 'haar'
+            haar = torch.FloatTensor(haar_matrix(kernel_size)).unsqueeze(1)
+            self.conv.weight = nn.Parameter(haar, requires_grad=True)
+
+            scale = stride / kernel_size
+            self.conv_transpose.weight = nn.Parameter(scale * haar,
+                requires_grad=True)
+
+        elif weight_init == 'fft':
+            fft = np.fft.fft(np.eye(kernel_size))
+            real_fft = np.real(fft)
+            im_fft = np.imag(fft)
+            basis = torch.FloatTensor(np.concatenate([real_fft[:kernel_size//2], im_fft[:kernel_size//2]], axis=0))
+            conv.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=True)
+            scale = stride / kernel_size
+            invbasis = torch.t(scale * torch.pinverse(basis))
+            invbasis = invbasis.contiguous().unsqueeze(1)
+            conv_transpose.weight = nn.Parameter(invbasis, requires_grad=True)
+
         if use_gate:
             self.conv.gate.data[self.conv.weight == 0] = -self.conv.gate.data[self.conv.weight == 0]
             self.conv_transpose.gate.data[self.conv_transpose.weight == 0] = -self.conv_transpose.gate.data[self.conv_transpose.weight == 0]
