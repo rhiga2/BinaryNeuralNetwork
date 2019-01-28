@@ -79,7 +79,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
             if quantizer:
                 estimate = torch.argmax(estimate, dim=1).to(dtype=dtype)
                 estimate = quantizer.inverse(estimate)
-                
+
         estimate = estimate.to(device='cpu')
         sources = torch.stack([batch['target'], batch['interference']], dim=1)
         metrics = bss_eval.bss_eval_batch(estimate, sources)
@@ -130,6 +130,7 @@ def main():
     # Make model and dataset
     train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=args.stride,
         toy=args.toy, max_length=24000)
+    classification = False
     if args.wavenet:
         filter_activation = binary_layers.pick_activation(args.activation)
         gate_activation = binary_layers.pick_activation(args.activation,
@@ -138,6 +139,7 @@ def main():
             kernel_size=args.kernel, filter_activation=torch.tanh,
             gate_activation=torch.sigmoid, in_bin=in_bin, weight_bin=weight_bin,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate)
+        classification = True
     else:
         model = bitwise_autoencoder.BitwiseAutoencoder(args.kernel, args.stride,
             fc_sizes=[2048, 2048], in_channels=1, out_channels=1,
@@ -172,18 +174,20 @@ def main():
         model.train()
         train_loss = train(model, train_dl, optimizer, loss=loss, device=device,
             autoencode=args.autoencode, quantizer=quantizer, transform=transform,
-            dtype=dtype, clip_weights=args.clip_weights)
+            dtype=dtype, clip_weights=args.clip_weights,
+            classification=classifcation)
 
         if epoch % args.period == 0:
-            # print('Epoch %d Training Cost: ' % epoch, train_loss)
+            print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
             val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device,
                 autoencode=args.autoencode, quantizer=quantizer,
-                transform=transform, dtype=dtype)
+                transform=transform, dtype=dtype, classifcation=classification)
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 output_period=args.period)
-            bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['{} Loss'.format(args.exp), '{} BSS Eval'.format(args.exp)])
+            bss_eval.train_plot(vis, loss_metrics, eid='Ryley',
+                win=['{} Loss'.format(args.exp), '{} BSS Eval'.format(args.exp)])
             print('Validation Cost: ', val_loss)
             print('Val SDR: ', sdr)
             print('Val SIR: ', sir)
