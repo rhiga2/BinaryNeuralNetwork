@@ -19,7 +19,7 @@ import argparse
 import pickle as pkl
 
 def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
-    autoencode=False, quantizer=None, transform=None, dtype=torch.float,
+    autoencode=False, quantizer=None, dtype=torch.float,
     clip_weights=False, classification=False):
     running_loss = 0
     for batch in dl:
@@ -50,8 +50,8 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
     return running_loss / len(dl.dataset)
 
 def val(model, dl, loss=F.mse_loss, autoencode=False,
-    quantizer=None, transform=None, device=torch.device('cpu'),
-    dtype=torch.float):
+    quantizer=None, device=torch.device('cpu'),
+    dtype=torch.float, classification=False):
     running_loss = 0
     bss_metrics = bss_eval.BSSMetricsList()
     for batch in dl:
@@ -173,16 +173,16 @@ def main():
         model.update_betas()
         model.train()
         train_loss = train(model, train_dl, optimizer, loss=loss, device=device,
-            autoencode=args.autoencode, quantizer=quantizer, transform=transform,
+            autoencode=args.autoencode, quantizer=quantizer,
             dtype=dtype, clip_weights=args.clip_weights,
-            classification=classifcation)
+            classification=classification)
 
         if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
             val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device,
                 autoencode=args.autoencode, quantizer=quantizer,
-                transform=transform, dtype=dtype, classifcation=classification)
+                dtype=dtype, classification=classification)
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 output_period=args.period)
