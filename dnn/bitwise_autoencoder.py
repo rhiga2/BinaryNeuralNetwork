@@ -57,7 +57,7 @@ class BitwiseAutoencoder(nn.Module):
         )
 
         # Initialize weights
-        if weight_init == 'haar'
+        if weight_init == 'haar':
             haar = torch.FloatTensor(haar_matrix(kernel_size)).unsqueeze(1)
             self.conv.weight = nn.Parameter(haar, requires_grad=True)
 

@@ -88,6 +88,7 @@ class BitwiseWavenet(nn.Module):
         weight_bin=binary_layers.identity, adaptive_scaling=True,
         use_gate=True, use_batchnorm=False):
         super(BitwiseWavenet, self).__init__()
+        self.use_batchnorm = use_batchnorm
         self.start_conv = binary_layers.BitwiseConv1d(in_channels, res_channels,
             1, in_bin=in_bin, weight_bin=weight_bin,
             use_gate=use_gate, adaptive_scaling=adaptive_scaling)
@@ -98,7 +99,7 @@ class BitwiseWavenet(nn.Module):
                 kernel_size=kernel_size, layers=layers,
                 filter_activation=filter_activation,
                 gate_activation=gate_activation, use_gate=use_gate,
-                adaptive_scaling=adaptive_scaling, use_batchnorm=use_batchnorm))
+                adaptive_scaling=adaptive_scaling, use_batchnorm=False))
         self.end_conv1 = binary_layers.BitwiseConv1d(res_channels, out_channels,
             1, in_bin=in_bin, weight_bin=weight_bin, use_gate=use_gate,
             adaptive_scaling=adaptive_scaling)
@@ -107,17 +108,24 @@ class BitwiseWavenet(nn.Module):
             use_gate=use_gate, adaptive_scaling=adaptive_scaling)
 
         if use_batchnorm:
-            self.start_bn = nn.BatchNorm1d(res_channels)
-            self.end_conv1 = nn.BatchNorm1d(out_channels)
+            self.start_bn = nn.BatchNorm1d(res_channels, eps=5e-4)
+            self.end_bn1 = nn.BatchNorm1d(res_channels, eps=5e-4)
+            self.end_bn2 = nn.BatchNorm1d(out_channels, eps=5e-4)
 
     def forward(self, x):
         resid = self.start_conv(x)
+        if self.use_batchnorm:
+            resid = self.start_bn(resid)
         skip = torch.zeros_like(resid)
         for i in range(self.blocks):
             resid, new_skip = self.block_list[i](resid)
             skip = skip + new_skip
         out = F.relu(skip)
+        if self.use_batchnorm:
+            out = self.end_bn1(out)
         out = F.relu(self.end_conv1(out))
+        if self.use_batchnorm:
+            out = self.end_bn2(out)
         return self.end_conv2(out)
 
     def clip_weights(self):
