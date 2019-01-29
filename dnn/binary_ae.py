@@ -41,13 +41,13 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
             estimate = estimate.squeeze(1)
 
         reconst_loss = loss(estimate, target)
-        running_loss += reconst_loss.item() * mix.size(0)
+        running_loss += reconst_loss * mix.size(0)
         reconst_loss.backward()
         optimizer.step()
         if clip_weights:
             model.clip_weights()
     optimizer.zero_grad()
-    return running_loss / len(dl.dataset)
+    return running_loss.item() / len(dl.dataset)
 
 def val(model, dl, loss=F.mse_loss, autoencode=False,
     quantizer=None, transform=None, device=torch.device('cpu'),
@@ -55,15 +55,17 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
     running_loss = 0
     bss_metrics = bss_eval.BSSMetricsList()
     for batch in dl:
-        mix, target = batch['mixture'], batch['target']
+        mix, target, inter = batch['mixture'], batch['target'], batch['interference']
+        features = mix
+        labels = target
         if autoencode:
-            mix = target
+            features = target
         if quantizer:
-            mix = quantizer(mix).to(device=device, dtype=dtype) / 255
-            target = quantizer(target).to(device=device, dtype=torch.long).view(-1)
-        mix = mix.unsqueeze(1)
-        mix = mix.to(device=device)
-        target = target.to(device=device)
+            features = quantizer(features).to(device=device, dtype=dtype) / 255
+            labels = quantizer(labels).to(device=device, dtype=torch.long).view(-1)
+        features = features.unsqueeze(1)
+        features = features.to(device=device)
+        labels = labels.to(device=device)
         with torch.no_grad():
             estimate = model(mix)
             estimate_size = estimate.size()
@@ -72,19 +74,18 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
             else:
                 estimate = estimate.squeeze(1)
 
-            reconst_loss = loss(estimate, target)
-            running_loss += reconst_loss.item() * mix.size(0)
+            reconst_loss = loss(estimate, labels)
+            running_loss += reconst_loss * mix.size(0)
             estimate = estimate.view(estimate_size[0], estimate_size[2], 256).contiguous().permute(0, 2, 1)
 
             if quantizer:
                 estimate = torch.argmax(estimate, dim=1).to(dtype=dtype)
                 estimate = quantizer.inverse(estimate)
 
-        estimate = estimate.to(device='cpu')
-        sources = torch.stack([batch['target'], batch['interference']], dim=1)
+        sources = torch.stack([target, inter], dim=1)
         metrics = bss_eval.bss_eval_batch(estimate, sources)
         bss_metrics.extend(metrics)
-    return running_loss / len(dl.dataset), bss_metrics
+    return running_loss.item() / len(dl.dataset), bss_metrics
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
