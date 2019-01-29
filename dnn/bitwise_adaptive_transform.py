@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import dnn.binary_layers as binary_layers
+import dnn.bitwise_mlp as bitwise_mlp
 
 def _haar_matrix(n):
     '''
@@ -28,7 +29,7 @@ def haar_matrix(n):
     haar = _haar_matrix(n)
     return haar / np.linalg.norm(haar, axis=1)
 
-class BitwiseAutoencoder(nn.Module):
+class BitwiseAdaptiveTransform(nn.Module):
     '''
     Adaptive transform network inspired by Minje Kim
     '''
@@ -36,24 +37,36 @@ class BitwiseAutoencoder(nn.Module):
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
         in_bin=binary_layers.identity, weight_bin=binary_layers.identity,
         use_gate=False, adaptive_scaling=True, activation=nn.ReLU(inplace=True),
-        weight_init=None):
+        weight_init=None, autoencode=False):
         super(BitwiseAutoencoder, self).__init__()
 
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
-            stride=stride, padding=kernel_size, in_bin=in_bin,
-            weight_bin=weight_bin, adaptive_scaling=adaptive_scaling,
-            use_gate=use_gate)
+            stride=stride, padding=kernel_size, in_bin=binary_layers.identity,
+            weight_bin=binary_layers.identity, adaptive_scaling=False,
+            use_gate=False
+        )
 
         self.batchnorm = nn.BatchNorm1d(kernel_size)
         self.activation = activation
+        self.autoencode = autoencode
+
+        if not autoencode:
+            self.mlp = bitwise_mlp.BitwiseMLP(kernel_size, kernel_size,
+                fc_sizes=[2048, 2048], dropout=dropout,
+                activation=binary_layers.identity,
+                in_bin=in_bin, weight_bin=weight_bin, use_batchnorm=True,
+                adaptive_scaling=adaptive_scaling, use_gate=use_gate
+            )
 
         # Initialize inverse of front end transform
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
-            kernel_size, 1, kernel_size, stride=stride, in_bin=in_bin,
-            weight_bin=weight_bin, adaptive_scaling=adaptive_scaling,
-            use_gate=use_gate
+            kernel_size, 1, kernel_size, stride=stride,
+            in_bin=binary_layers.identity,
+            weight_bin=binary_layers.identity,
+            adaptive_scaling=False,
+            use_gate=False
         )
 
         # Initialize weights
@@ -93,6 +106,13 @@ class BitwiseAutoencoder(nn.Module):
         '''
         time = x.size(2)
         h = self.batchnorm(self.activation(self.conv(x)))
+
+        if not self.autoencode:
+            h_size = h.size()
+            h = bitwise_mlp.flatten(h)
+            h = self.mlp(h)
+            h = bitwise_mlp.unflatten(h, h_size[0], h_size[2])
+
         h = self.conv_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
         return h
 

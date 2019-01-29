@@ -11,7 +11,7 @@ import datasets.quantized_data as quantized_data
 import datasets.two_source_mixture as two_source_mixture
 import datasets.make_data as make_data
 import dnn.binary_layers as binary_layers
-import dnn.bitwise_autoencoder as bitwise_autoencoder
+import dnn.bitwise_adaptive_transform as adaptive_transform
 import dnn.bitwise_wavenet as bitwise_wavenet
 import loss_and_metrics.bss_eval as bss_eval
 import visdom
@@ -67,7 +67,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
         features = features.to(device=device)
         labels = labels.to(device=device)
         with torch.no_grad():
-            estimate = model(mix)
+            estimate = model(features)
             estimate_size = estimate.size()
             if classification:
                 estimate = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
@@ -144,12 +144,12 @@ def main():
             use_batchnorm=args.use_batchnorm)
         classification = True
     else:
-        model = bitwise_autoencoder.BitwiseAutoencoder(args.kernel, args.stride,
+        model = adaptive_transform.BitwiseAdaptiveTransform(args.kernel, args.stride,
             fc_sizes=[2048, 2048], in_channels=1, out_channels=1,
             dropout=args.dropout, sparsity=args.sparsity,
             autoencode=args.autoencode, in_bin=in_bin, weight_bin=weight_bin,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
-            activation=args.activation, weight_init='haar')
+            activation=args.activation, weight_init='fft')
 
     if args.load_file:
         model.load_partial_state_dict(torch.load('../models/' + args.load_file))

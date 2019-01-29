@@ -7,6 +7,16 @@ import torch.optim as optim
 import torch.nn.functional as F
 import dnn.binary_layers as binary_layers
 
+def flatten(x):
+    batch, channels, time = x.size()
+    x = x.permute(0, 2, 1).contiguous().view(-1, channels)
+    return x
+
+def unflatten(x, batch, time, permutation=(0, 2, 1)):
+    x = x.view(batch, time, -1)
+    x = x.permute(*permutation).contiguous()
+    return x
+
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
         sparsity=0, use_gate=False, activation=binary_layers.identity,

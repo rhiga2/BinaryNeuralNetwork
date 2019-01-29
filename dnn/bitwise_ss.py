@@ -26,9 +26,9 @@ def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu')
         bmag = 2*bmag - 1
         bmag = bmag.to(device=device)
         bmag_size = bmag.size()
-        bmag = flatten(bmag)
+        bmag = bitwise_mlp.flatten(bmag)
         estimate = model(bmag)
-        estimate = unflatten(estimate, bmag_size[0], bmag_size[2])
+        estimate = bitwise_mlp.unflatten(estimate, bmag_size[0], bmag_size[2])
         if weighted:
             spec = batch['spec'].to(device=device)
             spec = spec / torch.std(spec)
@@ -62,9 +62,9 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
         bmag = 2*bmag - 1
         bmag_size = bmag.size()
 
-        bmag = flatten(bmag)
+        bmag = bitwise_mlp.flatten(bmag)
         premask = model(bmag)
-        premask = unflatten(premask, bmag_size[0], bmag_size[2])
+        premask = bitwise_mlp.unflatten(premask, bmag_size[0], bmag_size[2])
         if weighted:
             spec =  bin_sample['spec']
             spec = torch.FloatTensor(spec).to(device)
@@ -79,16 +79,6 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
         metric = bss_eval.bss_eval_np(estimate, sources)
         bss_metrics.append(metric)
     return running_loss / len(dataset), bss_metrics
-
-def flatten(x):
-    batch, channels, time = x.size()
-    x = x.permute(0, 2, 1).contiguous().view(-1, channels)
-    return x
-
-def unflatten(x, batch, time, permutation=(0, 2, 1)):
-    x = x.view(batch, time, -1)
-    x = x.permute(*permutation).contiguous()
-    return x
 
 def mean_squared_error(estimate, target, weight=None):
     if weight is not None:
