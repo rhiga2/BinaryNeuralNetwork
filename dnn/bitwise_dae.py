@@ -171,7 +171,7 @@ def main():
     loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer
-    vis = visdom.Visdom(port=5800)
+    vis = visdom.Visdom(port=5801)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
