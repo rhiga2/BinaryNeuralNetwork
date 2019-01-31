@@ -35,7 +35,9 @@ class BitwiseMLP(nn.Module):
         isize = in_size
         self.filter_list = nn.ModuleList()
         self.bn_list = nn.ModuleList()
-        self.dropout_list = nn.ModuleList()
+        self.dropout = dropout
+        if dropout > 0:
+            self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
             if i == 0:
                 input_bin = binary_layers.identity
@@ -48,7 +50,7 @@ class BitwiseMLP(nn.Module):
             )
             if self.use_batchnorm:
                 self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
-            if i < self.num_layers - 1:
+            if i < self.num_layers - 1 and dropout > 0:
                 self.dropout_list.append(nn.Dropout(dropout))
             isize = osize
         self.sparsity = sparsity
@@ -66,7 +68,8 @@ class BitwiseMLP(nn.Module):
             x = self.filter_list[i](x)
             if i < self.num_layers - 1:
                 x = self.activation(x)
-                x = self.dropout_list[i](x)
+                if self.dropout > 0:
+                    x = self.dropout_list[i](x)
             if self.use_batchnorm:
                 x = self.bn_list[i](x)
         return x

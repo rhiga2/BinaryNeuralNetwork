@@ -14,6 +14,7 @@ import dnn.binary_layers as binary_layers
 import dnn.bitwise_adaptive_transform as adaptive_transform
 import dnn.bitwise_wavenet as bitwise_wavenet
 import loss_and_metrics.bss_eval as bss_eval
+import loss_and_metrics.sepcosts as sepcosts
 import visdom
 import argparse
 import pickle as pkl
@@ -24,7 +25,7 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
     running_loss = 0
     for batch in dl:
         optimizer.zero_grad()
-        mix, target = batch['mixture'], batch['interference']
+        mix, target = batch['mixture'], batch['target']
         if autoencode:
             mix = target
         if quantizer:
@@ -76,13 +77,15 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
 
             reconst_loss = loss(estimate, labels)
             running_loss += reconst_loss * mix.size(0)
-            estimate = estimate.view(estimate_size[0], estimate_size[2], 256).contiguous().permute(0, 2, 1)
+            
+            if classification:
+                estimate = estimate.view(estimate_size[0], estimate_size[2], 256).contiguous().permute(0, 2, 1)
 
             if quantizer:
                 estimate = torch.argmax(estimate, dim=1).to(dtype=dtype)
                 estimate = quantizer.inverse(estimate)
 
-        sources = torch.stack([target, inter], dim=1)
+        sources = torch.stack([target, inter], dim=1).to(device=device)
         metrics = bss_eval.bss_eval_batch(estimate, sources)
         bss_metrics.extend(metrics)
     return running_loss.item() / len(dl.dataset), bss_metrics
@@ -126,6 +129,7 @@ def main():
         device = torch.device('cpu')
     print('On device: ', device)
 
+    activation = binary_layers.pick_activation(args.activation)
     in_bin = binary_layers.pick_activation(args.in_bin)
     weight_bin = binary_layers.pick_activation(args.weight_bin)
 
@@ -149,7 +153,7 @@ def main():
             dropout=args.dropout, sparsity=args.sparsity,
             autoencode=args.autoencode, in_bin=in_bin, weight_bin=weight_bin,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
-            activation=args.activation, weight_init='fft')
+            activation=activation, weight_init='fft')
 
     if args.load_file:
         model.load_partial_state_dict(torch.load('../models/' + args.load_file))
@@ -167,7 +171,7 @@ def main():
     loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer
-    vis = visdom.Visdom(port=5801)
+    vis = visdom.Visdom(port=5800)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
@@ -175,6 +179,7 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
+        train_loss = 0
         train_loss = train(model, train_dl, optimizer, loss=loss, device=device,
             autoencode=args.autoencode, quantizer=quantizer,
             dtype=dtype, clip_weights=args.clip_weights,

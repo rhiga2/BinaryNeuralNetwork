@@ -38,7 +38,7 @@ class BitwiseAdaptiveTransform(nn.Module):
         in_bin=binary_layers.identity, weight_bin=binary_layers.identity,
         use_gate=False, adaptive_scaling=True, activation=nn.ReLU(inplace=True),
         weight_init=None, autoencode=False):
-        super(BitwiseAutoencoder, self).__init__()
+        super(BitwiseAdaptiveTransform, self).__init__()
 
         # Initialize adaptive front end
         self.kernel_size = kernel_size
@@ -83,15 +83,11 @@ class BitwiseAdaptiveTransform(nn.Module):
             real_fft = np.real(fft)
             im_fft = np.imag(fft)
             basis = torch.FloatTensor(np.concatenate([real_fft[:kernel_size//2], im_fft[:kernel_size//2]], axis=0))
-            conv.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=True)
+            self.conv.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=True)
             scale = stride / kernel_size
             invbasis = torch.t(scale * torch.pinverse(basis))
             invbasis = invbasis.contiguous().unsqueeze(1)
-            conv_transpose.weight = nn.Parameter(invbasis, requires_grad=True)
-
-        if use_gate:
-            self.conv.gate.data[self.conv.weight == 0] = -self.conv.gate.data[self.conv.weight == 0]
-            self.conv_transpose.gate.data[self.conv_transpose.weight == 0] = -self.conv_transpose.gate.data[self.conv_transpose.weight == 0]
+            self.conv_transpose.weight = nn.Parameter(invbasis, requires_grad=True)
 
         self.sparsity = sparsity
 
