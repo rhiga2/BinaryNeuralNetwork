@@ -4,8 +4,9 @@ sys.path.append('../')
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from datasets.make_data import *
-from datasets.binary_data import *
+import datasets.make_data as make_data
+import datasets.binary_data as binary_data
+import datasets.quantized_data as quantized_data
 import argparse
 
 def main():
@@ -14,10 +15,10 @@ def main():
     parser.add_argument('--toy', action='store_true')
     args = parser.parse_args()
 
-    quantizer = Quantizer(min=-1, delta=2/2**(args.num_bits),
+    quantizer = quantized_data.Quantizer(min=-1, delta=2/2**(args.num_bits),
         num_bits=args.num_bits, use_mu=True)
-    disperser = Disperser(args.num_bits)
-    trainset, valset, testset = make_mixture_set(toy=args.toy)
+    disperser = quantized_data.Disperser(args.num_bits, center=True)
+    trainset, valset, testset = make_data.make_mixture_set(toy=args.toy)
     print('Samples in Trainset: ', len(trainset))
     print('Samples in Valset: ', len(valset))
     print('Samples in Testset: ', len(testset))
@@ -40,11 +41,11 @@ def main():
             raw_fname = directory + 'raw_data%d.npz' % i
             sample = dataset[i]
             mix, target, inter = sample['mixture'], sample['target'], sample['interference']
-            mix_mag, mix_phase = stft(mix)
-            targ_mag, targ_phase = stft(target)
-            inter_mag, inter_phase = stft(inter)
-            ibm = make_binary_mask(targ_mag - inter_mag).astype(np.uint8)
-            bmag = quantize_and_disperse(mix_mag, quantizer, disperser).astype(np.uint8)
+            mix_mag, mix_phase = binary_data.stft(mix)
+            targ_mag, targ_phase = binary_data.stft(target)
+            inter_mag, inter_phase = binary_data.stft(inter)
+            ibm = binary_data.make_binary_mask(targ_mag - inter_mag).astype(np.uint8)
+            bmag = quantized_data.quantize_and_disperse(mix_mag, quantizer, disperser).astype(np.int8)
             np.savez(
                 binary_fname,
                 bmag=bmag,

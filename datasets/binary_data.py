@@ -11,24 +11,6 @@ import argparse
 def make_binary_mask(x):
     return x > 0
 
-def quantize_and_disperse(mix_mag, quantizer, disperser):
-    mix_mag = torch.FloatTensor(mix_mag / np.max(np.abs(mix_mag))).unsqueeze(0)
-    qmag = quantizer(mix_mag)
-    _, channels, frames = qmag.size()
-    bmag = disperser(qmag.view(1, -1))
-    bmag = bmag.squeeze(0).contiguous()
-    bmag = torch.cat(torch.chunk(bmag, channels, dim=1), dim=0)
-    bmag = bmag.numpy()
-    return bmag
-
-def accumulate(x, quantizer, disperser):
-    x = torch.FloatTensor(x)
-    channels, frames =  x.size()
-    x = torch.cat(torch.chunk(x, channels // disperser.num_bits, dim=0), dim=1).unsqueeze(0)
-    x = disperser.inverse(x).view(-1, frames)
-    x = quantizer.inverse(x)
-    return x.numpy()
-
 def stft(x, window='hann', nperseg=1024, noverlap=768):
     stft_x = signal.stft(x,
         window=window,
