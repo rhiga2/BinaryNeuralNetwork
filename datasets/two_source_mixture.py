@@ -9,10 +9,9 @@ import random
 import soundfile as sf
 
 class TwoSourceMixtureDataset(Dataset):
-    def __init__(self, speeches, interferences, fs=16000, snr=0,
-        random_start=True, transform=None, hop=None, max_length=None, random_shift=False):
+    def __init__(self, speeches, interferences, fs=16000,
+        random_start=True, transform=None, hop=None, max_length=None):
         self.fs = fs
-        self.snr = np.power(10, snr/20)
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
         self.hop = hop
@@ -38,13 +37,15 @@ class TwoSourceMixtureDataset(Dataset):
             if len(sig) > self.max_length:
                 start = np.random.randint(len(sig) - self.max_length)
                 sig = sig[start:self.max_length+start]
-                inter = inter[:self.max_length]
+            if len(inter) > self.max_length:
+                start = np.random.randint(len(inter) - self.max_length)
+                inter = inter[start:self.max_length+start]
 
         # normalize and mix signals
-        sig = sig / np.max(np.abs(sig))
-        inter = inter / np.max(np.abs(inter))
-        mix = sig + (1 / self.snr) * inter
-        mix = mix / np.max(np.abs(mix))
+        sig = sig / (np.std(sig) + 1e-5)
+        inter = inter / (np.std(inter) + 1e-5)
+        mix = sig + inter
+        mix = mix / np.max(np.abs(mix)) # for quantization purposes
         sample = {'mixture': mix, 'target': sig, 'interference': inter}
 
         if self.transform:

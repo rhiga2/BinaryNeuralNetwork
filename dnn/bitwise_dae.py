@@ -65,11 +65,13 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
             features = quantizer(features).to(device=device, dtype=dtype) / 255
             labels = quantizer(labels).to(device=device, dtype=torch.long).view(-1)
         features = features.unsqueeze(1)
-        features = features.to(device=device)
-        labels = labels.to(device=device)
+
         with torch.no_grad():
+            features = features.to(device=device)
+            labels = labels.to(device=device)
             estimate = model(features)
             estimate_size = estimate.size()
+            
             if classification:
                 estimate = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
             else:
@@ -77,7 +79,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
 
             reconst_loss = loss(estimate, labels)
             running_loss += reconst_loss * mix.size(0)
-            
+
             if classification:
                 estimate = estimate.view(estimate_size[0], estimate_size[2], 256).contiguous().permute(0, 2, 1)
 

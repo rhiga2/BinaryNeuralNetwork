@@ -23,9 +23,9 @@ def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu')
         optimizer.zero_grad()
         bmag = batch['bmag'].to(device=device)
         ibm = batch['ibm'].to(device=device)
-        bmag = 2*bmag - 1
         bmag = bmag.to(device=device)
         bmag_size = bmag.size()
+        bmag = 2*bmag - 1 
         bmag = bitwise_mlp.flatten(bmag)
         estimate = model(bmag)
         estimate = bitwise_mlp.unflatten(estimate, bmag_size[0], bmag_size[2])
@@ -57,26 +57,24 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
         target = raw_sample['target']
         interference = raw_sample['interference']
         mix_mag, mix_phase = binary_data.stft(mix)
-
-        bmag = torch.FloatTensor(bin_sample['bmag']).unsqueeze(0).to(device)
-        ibm = torch.FloatTensor(bin_sample['ibm']).unsqueeze(0).to(device)
-        bmag = 2*bmag - 1
-        bmag_size = bmag.size()
-
-        bmag = bitwise_mlp.flatten(bmag)
-        premask = model(bmag)
-        premask = bitwise_mlp.unflatten(premask, bmag_size[0], bmag_size[2])
-        if weighted:
-            spec =  bin_sample['spec']
-            spec = torch.FloatTensor(spec).to(device)
-            spec = spec / torch.std(spec)
-            cost = loss(premask, ibm, weight=spec)
-        else:
-            cost = loss(premask, ibm)
-        running_loss += cost
-        mask = binary_data.make_binary_mask(premask).squeeze(0)
-        mask = mask.to(device='cpu').numpy()
-        estimate = binary_data.istft(mix_mag, mix_phase)
+        with torch.no_grad():
+            bmag = torch.FloatTensor(bin_sample['bmag']).unsqueeze(0).to(device)
+            ibm = torch.FloatTensor(bin_sample['ibm']).unsqueeze(0).to(device)
+            bmag_size = bmag.size()
+            bmag = 2*bmag - 1
+            bmag = bitwise_mlp.flatten(bmag)
+            premask = model(bmag)
+            premask = bitwise_mlp.unflatten(premask, bmag_size[0], bmag_size[2])
+            if weighted:
+                spec =  bin_sample['spec']
+                spec = torch.FloatTensor(spec).to(device)
+                spec = spec / torch.std(spec)
+                cost = loss(premask, ibm, weight=spec)
+            else:
+                cost = loss(premask, ibm)
+            running_loss += cost
+        mask = binary_data.make_binary_mask(premask).squeeze(0).cpu()
+        estimate = binary_data.istft(mix_mag * mask.numpy(), mix_phase)
         sources = np.stack([target, interference], axis=0)
         metric = bss_eval.bss_eval_np(estimate, sources)
         bss_metrics.append(metric)
@@ -183,7 +181,8 @@ def main():
             print('SAR: ', sar)
             loss_metrics.update(train_loss, val_loss,
                 sdr, sir, sar, output_period=args.period)
-            bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['Loss', None])
+            bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['{} Loss'.format(args.exp), 
+                '{} BSS Eval'.format(args.exp)])
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
 
     with open('../results/' + args.exp + '.pkl', 'wb') as f:
