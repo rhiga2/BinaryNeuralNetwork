@@ -65,10 +65,12 @@ def main():
 
     # Make model and dataset
     flatten = lambda x : x.view(-1)
-    train_data = datasets.MNIST('/media/data/MNIST', train=True, transform=transforms.Compose([
-                           transforms.ToTensor(), flatten]), download=True)
-    val_data = datasets.MNIST('/media/data/MNIST', train=False, transform=transforms.Compose([
-                           transforms.ToTensor(), flatten]), download=True)
+    train_data = datasets.MNIST('/media/data/MNIST', train=True,
+        transform=transforms.Compose([transforms.ToTensor(), flatten]),
+        download=True)
+    val_data = datasets.MNIST('/media/data/MNIST', train=False,
+        transform=transforms.Compose([transforms.ToTensor(), flatten]),
+        download=True)
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
