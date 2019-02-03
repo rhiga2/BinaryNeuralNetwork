@@ -45,7 +45,9 @@ def main():
             mix_mag, mix_phase = binary_data.stft(mix)
             targ_mag, targ_phase = binary_data.stft(target)
             inter_mag, inter_phase = binary_data.stft(inter)
-            ibm = binary_data.make_binary_mask(targ_mag - inter_mag).astype(np.uint8)
+            ibm = binary_data.make_binary_mask(targ_mag - inter_mag + 1e-4).astype(np.uint8)
+            
+            # uint8 does not convert nicely to torch float tensor
             bmag = quantized_data.quantize_and_disperse(mix_mag, quantizer, disperser).astype(np.uint8)
             np.savez(
                 binary_fname,
