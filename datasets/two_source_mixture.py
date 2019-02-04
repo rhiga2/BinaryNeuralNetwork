@@ -73,7 +73,15 @@ def collate_and_trim(batch, axis=0, hop=1, dtype=torch.float):
     outbatch = {key: torch.as_tensor(np.stack(values, axis=0), dtype=dtype) for key, values in outbatch.items()}
     return outbatch
 
-def get_speech_files(speaker_path, speakers, num_train=8, num_val=2):
+def get_speech_files(speaker_path, speakers, train_percent=0.6, val_percent=0.2):
+    '''
+    Assumes that speech files are organized in speaker_path/speakers/*.wav
+    speaker path: directory of speakers
+    speakers: list of speaker directories
+    num_train: number of utterances to put in training set
+    num_val: number of utterances to put in validation set
+    '''
+    assert train_percent + val_percent <= 1
     if speaker_path[-1] != '/':
         speaker_path += '/'
     train_speeches = []
@@ -84,22 +92,24 @@ def get_speech_files(speaker_path, speakers, num_train=8, num_val=2):
         if speaker[-1] != '/':
             speaker += '/'
         files = glob.glob(speaker_path + speaker + '*.wav')
+        num_train = int(train_percent * len(files))
+        num_val = int(val_percent * len(files))
         train_speeches.extend(files[:num_train])
         end = num_train + num_val
-        if end > len(files):
-            end = len(files)
         val_speeches.extend(files[num_train:end])
         test_speeches.extend(files[end:])
     return train_speeches, val_speeches, test_speeches
 
-def get_noise_files(noise_path, noises, num_train=1, num_val=1):
-    assert num_train + num_val <= len(noises)
+def get_noise_files(noise_path, noises, train_percent=0.6, val_percent=0.2):
+    assert train_percent + val_percent <= 1
     if noise_path[-1] != '/':
         noise_path += '/'
     noises = [noise_path + noise for noise in noises]
     train_noises = noises
     val_noises = noises
-    if num_train:
+    if train_percent != 1:
+        num_train = len(train_percent * len(noises))
+        num_val + len(val_percent * len(noises))
         train_noises = noises[:num_train]
         val_noises = noises[num_train:num_train+num_val]
         test_noises = noises[num_train+num_val:]
