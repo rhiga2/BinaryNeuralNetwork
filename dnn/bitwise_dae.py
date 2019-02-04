@@ -133,10 +133,8 @@ def main():
     in_bin = binary_layers.pick_activation(args.in_bin)
     weight_bin = binary_layers.pick_activation(args.weight_bin)
 
-    # Make model and dataset
-    train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=args.stride,
-        toy=args.toy, max_length=2, transform=lambda x : signal.decimate(x, 2))
     classification = False
+    stride=1
     if args.model == 'wavenet':
         filter_activation = binary_layers.pick_activation(args.activation)
         gate_activation = binary_layers.pick_activation(args.activation,
@@ -147,18 +145,24 @@ def main():
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
             use_batchnorm=args.use_batchnorm)
     elif args.model == 'tasnet':
+        stride=10
         bitwise_tasnet.BitwiseTasnet(1, 256,
             256, 512, blocks=4, front_kernel_size=20, front_stride=10,
             kernel_size=3, layers=8, in_bin=in_bin, weight_bin=weight_bin,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
             use_batchnorm=args.use_batchnorm)
     else:
+        stride=16
         model = adaptive_transform.BitwiseAdaptiveTransform(1024, 16,
             fc_sizes=[2048, 2048], in_channels=1, out_channels=1,
             dropout=args.dropout, sparsity=args.sparsity,
             autoencode=args.autoencode, in_bin=in_bin, weight_bin=weight_bin,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
             activation=activation, weight_init='fft')
+
+    # Make model and dataset
+    train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=stride,
+        toy=args.toy, max_duration=2, transform=lambda x : signal.decimate(x, 2))
 
     if args.load_file:
         model.load_partial_state_dict(torch.load('../models/' + args.load_file))
