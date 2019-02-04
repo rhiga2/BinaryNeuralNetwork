@@ -15,7 +15,7 @@ class TwoSourceMixtureDataset(Dataset):
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
         self.hop = hop
-        self.max_length = None
+        self.max_length = 0
         if max_duration:
             self.max_length = max_duration * fs
 
@@ -31,17 +31,20 @@ class TwoSourceMixtureDataset(Dataset):
         if self.hop:
             sig = sig[:len(sig)//self.hop*self.hop]
 
-        inter, _ = sf.read(interf, frames=len(sig), fill_value=0)
+        if len(sig) > self.max_length:
+            start = np.random.randint(len(sig) - self.max_length)
+            sig = sig[start:self.max_length+start]
+
+        inter, _ = sf.read(interf, fill_value=0)
         if len(inter.shape) != 1:
             inter = np.mean(inter, axis=1)
 
-        if self.max_length:
-            if len(sig) > self.max_length:
-                start = np.random.randint(len(sig) - self.max_length)
-                sig = sig[start:self.max_length+start]
-            if len(inter) > self.max_length:
-                start = np.random.randint(len(inter) - self.max_length)
-                inter = inter[start:self.max_length+start]
+        sig_len = len(sig)
+        if len(inter) > sig_len:
+            start = np.random.randint(len(inter) - sig_len)
+            inter = inter[start:sig_len+start]
+        elif len(inter) < sig_len:
+            inter = np.pad(inter, (0, sig_len - len(inter)))
 
         # normalize and mix signals
         sig = sig / (np.std(sig) + 1e-5)
