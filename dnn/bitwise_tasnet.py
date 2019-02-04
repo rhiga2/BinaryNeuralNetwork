@@ -31,20 +31,21 @@ class BitwiseTasNetBlock(nn.Module):
 
             self.first_activation.append(nn.PReLU())
             self.first_normalization.append(nn.BatchNorm1d(dconv_size))
-            padding = dilation * (kernel_size - 1)
+            padding = dilation * (kernel_size - 1) // 2
             self.dconvs.append(
                 binary_layers.BitwiseConv1d(
                     dconv_size, dconv_size, kernel_size, groups=dconv_size,
                     use_gate=use_gate, padding=padding,
                     adaptive_scaling=adaptive_scaling,
-                    in_bin=in_bin, weight_bin=weight_bin
+                    in_bin=in_bin, weight_bin=weight_bin,
+                    dilation = dilation
                 )
             )
             self.second_activation.append(nn.PReLU())
             self.second_normalization.append(nn.BatchNorm1d(dconv_size))
             self.last1x1_list.append(
                 binary_layers.BitwiseConv1d(
-                    dconv_size, bottleneck_channels, kernel_size,
+                    dconv_size, bottleneck_channels, 1,
                     use_gate=use_gate, adaptive_scaling=adaptive_scaling,
                     in_bin=in_bin, weight_bin=weight_bin
                 )
@@ -62,6 +63,7 @@ class BitwiseTasNetBlock(nn.Module):
             x = self.second_normalization[i](x)
             x = self.last1x1_list[i](x)
         x = x + resid
+        return resid
 
 class BitwiseTasNet(nn.Module):
     def __init__(self, in_channels, encoder_channels, bottleneck_channels,
@@ -69,11 +71,14 @@ class BitwiseTasNet(nn.Module):
         kernel_size=3, layers=4, in_bin=None, weight_bin=None,
         adaptive_scaling=False, use_gate=False):
         super(BitwiseTasNet, self).__init__()
+        self.in_bin = in_bin
+        self.front_kernel_size = front_kernel_size
         self.encoder = binary_layers.BitwiseConv1d(in_channels, encoder_channels,
             front_kernel_size, stride=front_stride, padding=front_kernel_size,
             groups=1, dilation=1, use_gate=use_gate,
             adaptive_scaling=adaptive_scaling, in_bin=None,
             weight_bin=None)
+        self.activation = nn.ReLU(inplace=True)
         self.front_bottleneck = binary_layers.BitwiseConv1d(encoder_channels,
             bottleneck_channels, 1, stride=1, padding=0, groups=1, dilation=1,
             use_gate=use_gate, adaptive_scaling=adaptive_scaling, in_bin=None,
@@ -100,7 +105,9 @@ class BitwiseTasNet(nn.Module):
         )
 
     def forward(self, x):
+        time = x.size(2)
         x = self.encoder(x)
+        x = self.activation(x)
         h = self.front_bottleneck(x)
         for i in range(self.blocks):
             h = self.block_list[i](h)
@@ -110,7 +117,7 @@ class BitwiseTasNet(nn.Module):
         else:
             h = torch.sigmoid(h)
         x = x * h
-        return self.decoder(x)
+        return self.decoder(x)[:,:,self.front_kernel_size:time+self.front_kernel_size]
 
     def update_betas(self):
         return

@@ -31,7 +31,7 @@ class TwoSourceMixtureDataset(Dataset):
         if self.hop:
             sig = sig[:len(sig)//self.hop*self.hop]
 
-        if len(sig) > self.max_length:
+        if len(sig) > self.max_length and self.max_length != 0:
             start = np.random.randint(len(sig) - self.max_length)
             sig = sig[start:self.max_length+start]
 
@@ -44,7 +44,7 @@ class TwoSourceMixtureDataset(Dataset):
             start = np.random.randint(len(inter) - sig_len)
             inter = inter[start:sig_len+start]
         elif len(inter) < sig_len:
-            inter = np.pad(inter, (0, sig_len - len(inter)))
+            inter = np.pad(inter, (0, sig_len - len(inter)), mode='constant')
 
         # normalize and mix signals
         sig = sig / (np.std(sig) + 1e-5)

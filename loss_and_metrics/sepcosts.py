@@ -60,10 +60,10 @@ class SISNRLoss(nn.Module):
         self.epsilon = epsilon
 
     def forward(self, prediction, target, interference=None):
-        s_target = torch.mean(prediction * target) * s_target
+        s_target = torch.mean(prediction * target) * target
         s_target /= (torch.mean(target**2) + self.epsilon)
         e_noise = prediction - s_target
-        return 10 * torch.log10(torch.mean(s_target**2)/torch.mean(e_noise**2))
+        return -10 * torch.log10(torch.mean(s_target**2)/torch.mean(e_noise**2))
 
 class ShortTimeObjectiveIntelligibility(nn.Module):
     def __init__(self):
