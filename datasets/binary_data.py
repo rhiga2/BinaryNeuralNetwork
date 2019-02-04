@@ -4,8 +4,7 @@ sys.path.append('../')
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from datasets.make_data import *
-from datasets.quantized_data import *
+import datasets.two_source_mixture as two_source_mixture
 import argparse
 
 def make_binary_mask(x):
@@ -41,7 +40,7 @@ def make_binary_data(batchsize, toy=False):
             template='binary_data*.npz')
         rawset = DatasetFromDirectory('/media/data/binary_audio/val',
             template='raw_data*.npz')
-    collate = lambda x : collate_and_trim(x, axis=1)
+    collate = lambda x : two_source_mixture.collate_and_trim(x, axis=1)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)
     return train_dl, valset, rawset
