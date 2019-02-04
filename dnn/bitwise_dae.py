@@ -10,7 +10,7 @@ import numpy as np
 import scipy.signal as signal
 import datasets.quantized_data as quantized_data
 import datasets.two_source_mixture as two_source_mixture
-import datasets.make_data as make_data
+import datasets.utils as utils
 import dnn.binary_layers as binary_layers
 import dnn.bitwise_adaptive_transform as adaptive_transform
 import dnn.bitwise_tasnet as bitwise_tasnet
@@ -168,8 +168,9 @@ def main():
     if args.decimate:
         transform = lambda x : signal.decimate(x, 2)
 
-    train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=stride,
-        toy=args.toy, max_duration=2, transform=transform)
+    train_dl, val_dl, _ = utils.get_data_from_directory(args.batchsize,
+        '/media/data/wsj_mix/decimated2/', template='sample*.npz',
+        return_dls=True)
 
     if args.load_file:
         model.load_partial_state_dict(torch.load('../models/' + args.load_file))

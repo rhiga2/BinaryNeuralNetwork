@@ -40,7 +40,7 @@ class BitwiseMLP(nn.Module):
             self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
             if i == 0:
-                input_bin = binary_layers.identity
+                input_bin = None
             else:
                 input_bin = in_bin
             self.filter_list.append(

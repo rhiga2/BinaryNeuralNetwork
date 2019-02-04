@@ -35,13 +35,13 @@ def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu')
             cost = loss(estimate, ibm, weight=spec)
         else:
             cost = loss(estimate, ibm)
-        running_loss += cost * bmag_size[0]
+        running_loss += cost.item() * bmag_size[0]
         cost.backward()
         optimizer.step()
         if clip_weights:
             model.clip_weights()
-        optimizer.zero_grad()
-    return running_loss.item() / len(dl.dataset)
+    optimizer.zero_grad()
+    return running_loss / len(dl.dataset)
 
 def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
     device=torch.device('cpu'), weighted=False):
@@ -49,7 +49,7 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
     running_loss = 0
     for i in range(len(dataset)):
         if i >= max_samples:
-            return bss_metrics
+            return running_loss / max_samples, bss_metrics
 
         raw_sample = rawset[i]
         bin_sample = dataset[i]
@@ -72,13 +72,13 @@ def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
                 cost = loss(premask, ibm, weight=spec)
             else:
                 cost = loss(premask, ibm)
-            running_loss += cost
+            running_loss += cost.item()
         mask = binary_data.make_binary_mask(premask).squeeze(0).cpu()
         estimate = binary_data.istft(mix_mag * mask.numpy(), mix_phase)
         sources = np.stack([target, interference], axis=0)
         metric = bss_eval.bss_eval_np(estimate, sources)
         bss_metrics.append(metric)
-    return running_loss.item() / len(dataset), bss_metrics
+    return running_loss / len(dataset), bss_metrics
 
 def mean_squared_error(estimate, target, weight=None):
     if weight is not None:
