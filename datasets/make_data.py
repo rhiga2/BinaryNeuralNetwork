@@ -7,7 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 from datasets.two_source_mixture import *
 import argparse
 
-def make_mixture_set(hop=256, toy=False, max_length=None):
+def make_mixture_set(hop=256, toy=False, max_duration=None):
     speaker_path = '/media/data/timit-wav/train'
     targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
         'dr1/fdaw0', 'dr1/fjsp0','dr1/fsjk1', 'dr1/fvmh0',
@@ -37,11 +37,11 @@ def make_mixture_set(hop=256, toy=False, max_length=None):
             num_test=1
         )
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
-            max_length=max_length)
+            max_length=max_duration)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
-            max_length=max_length)
+            max_length=max_duration)
         testset = TwoSourceMixtureDataset(test_speeches, test_noises, hop=hop,
-            max_length=max_length)
+            max_length=max_duration)
     else:
         interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
             'dr1/mwad0', 'dr1/mwar0', 'dr1/mtrr0', 'dr1/mtjs0',
@@ -57,15 +57,15 @@ def make_mixture_set(hop=256, toy=False, max_length=None):
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
             max_length=max_length)
         testset = TwoSourceMixtureDataset(test_speeches, test_noises, hop=hop,
-            max_length=max_length)
+            max_length=max_duration)
 
     return trainset, valset, testset
 
-def make_data(batchsize, hop=256, toy=False, max_length=32000):
+def make_data(batchsize, hop=256, toy=False, max_duration=2):
     '''
     Make two mixture dataset
     '''
-    trainset, valset, testset = make_mixture_set(hop=hop, toy=toy, max_length=max_length)
+    trainset, valset, testset = make_mixture_set(hop=hop, toy=toy, max_duration=max_duration)
     collate = lambda x: collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)

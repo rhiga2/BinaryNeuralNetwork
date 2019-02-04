@@ -10,12 +10,14 @@ import soundfile as sf
 
 class TwoSourceMixtureDataset(Dataset):
     def __init__(self, speeches, interferences, fs=16000,
-        random_start=True, transform=None, hop=None, max_length=None):
+        random_start=True, transform=None, hop=None, max_duration=None):
         self.fs = fs
         self.mixes = list(itertools.product(speeches, interferences))
         self.transform = transform
         self.hop = hop
-        self.max_length = max_length
+        self.max_length = None
+        if max_duration:
+            self.max_length = max_duration * fs
 
     def __len__(self):
         return len(self.mixes)
