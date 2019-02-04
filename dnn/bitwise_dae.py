@@ -108,7 +108,8 @@ def main():
     parser.add_argument('--toy', '-toy', action='store_true')
     parser.add_argument('--autoencode', '-ae', action='store_true')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
-    parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
+    parser.add_argument('--lr_decay', '-lrd', type=float, default=0.9)
+    parser.add_argument('--decay_period', '-dp', type=int, default=10)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     parser.add_argument('--decimate', '-decimate', action='store_true')
@@ -222,6 +223,10 @@ def main():
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)
+
+        if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
+            lr *= args.lr_decay
+            optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
     with open('../results/' + args.exp + '.pkl', 'wb') as f:
         pkl.dump(loss_metrics, f)

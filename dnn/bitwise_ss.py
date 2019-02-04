@@ -25,7 +25,7 @@ def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu')
         ibm = batch['ibm'].to(device=device)
         bmag = bmag.to(device=device)
         bmag_size = bmag.size()
-        bmag = 2*bmag - 1 
+        bmag = 2*bmag - 1
         bmag = bitwise_mlp.flatten(bmag)
         estimate = model(bmag)
         estimate = bitwise_mlp.unflatten(estimate, bmag_size[0], bmag_size[2])
@@ -98,6 +98,8 @@ def main():
     parser.add_argument('--load_file', '-lf', type=str, default=None)
 
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
+    parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
+    parser.add_argument('--decay_period', '-dp', type=int, default=10)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--period', '-p', type=int, default=1)
@@ -181,9 +183,13 @@ def main():
             print('SAR: ', sar)
             loss_metrics.update(train_loss, val_loss,
                 sdr, sir, sar, output_period=args.period)
-            bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['{} Loss'.format(args.exp), 
+            bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['{} Loss'.format(args.exp),
                 '{} BSS Eval'.format(args.exp)])
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
+
+        if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
+            lr *= args.lr_decay
+            optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
     with open('../results/' + args.exp + '.pkl', 'wb') as f:
         pkl.dump(loss_metrics, f)
