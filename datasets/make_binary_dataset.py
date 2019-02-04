@@ -9,6 +9,7 @@ import scipy.signal as signal
 import datasets.make_data as make_data
 import datasets.binary_data as binary_data
 import datasets.quantized_data as quantized_data
+import scipy.signal as signal
 import argparse
 
 def main():

@@ -25,13 +25,13 @@ def make_mixture_set(hop=256, toy=False, max_duration=None, transform=None,
         inters = ['012', '013', '015', '020', '021', '022', '024', '025', '026', '029']
 
     train_speech, val_speech, test_speech = two_source_mixture.get_speech_files(directory, targets,
-                                                                                train_percent=0.7,
+                                                                                train_percent=0.6,
                                                                                 val_percent=0.2,
-                                                                                max_utterances=30)
+                                                                                max_utterances=20)
     train_inter, val_inter, test_inter = two_source_mixture.get_speech_files(directory, inters,
-                                                                             train_percent=0.7,
+                                                                             train_percent=0.6,
                                                                              val_percent=0.2,
-                                                                             max_utterances=30)
+                                                                             max_utterances=20)
 
     trainset = two_source_mixture.TwoSourceMixtureDataset(train_speech, train_inter, hop=hop,
         max_duration=max_duration, transform=transform)
