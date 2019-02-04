@@ -64,47 +64,37 @@ class BitwiseTasNetBlock(nn.Module):
         x = x + resid
 
 class BitwiseTasNet(nn.Module):
-    def __init__(self, in_channels, encoder_channels, bottleneck_channels,
+    def __init__(self, in_channels, encoder_channels,
         dconv_size, blocks=2, front_kernel_size=20, front_stride=10,
         kernel_size=3, layers=4, in_bin=None, weight_bin=None,
         adaptive_scaling=False, use_gate=False):
         super(BitwiseTasNet, self).__init__()
         self.encoder = binary_layers.BitwiseConv1d(in_channels, encoder_channels,
             front_kernel_size, stride=front_stride, padding=front_kernel_size,
-            groups=1, dilation=1, use_gate=use_gate,
-            adaptive_scaling=adaptive_scaling, in_bin=None,
-            weight_bin=None)
-        self.front_bottleneck = binary_layers.BitwiseConv1d(encoder_channels,
-            bottleneck_channels, 1, stride=1, padding=0, groups=1, dilation=1,
-            use_gate=use_gate, adaptive_scaling=adaptive_scaling, in_bin=None,
+            groups=1, dilation=1, use_gate=False,
+            adaptive_scaling=False, in_bin=None,
             weight_bin=None)
         self.block_list = nn.ModuleList()
         self.blocks = blocks
         for i in range(blocks):
             self.block_list.append(
                 BitwiseTasNetBlock(
-                    bottleneck_channels, dconv_size, kernel_size=kernel_size,
+                    encoder_channels, dconv_size, kernel_size=kernel_size,
                     layers=layers, in_bin=in_bin, weight_bin=weight_bin,
                     adaptive_scaling=adaptive_scaling, use_gate=use_gate
                 )
             )
-        self.end_bottleneck = binary_layers.BitwiseConv1d(bottleneck_channels,
-            encoder_channels, 1, stride=1, padding=0, groups=1, dilation=1,
-            use_gate=use_gate, adaptive_scaling=adaptive_scaling, in_bin=None,
-            weight_bin=None)
         self.decoder = binary_layers.BitwiseConvTranspose1d(encoder_channels, in_channels,
             front_kernel_size, stride=front_stride, padding=0, groups=1,
-            dilation=1, use_gate=use_gate,
-            adaptive_scaling=adaptive_scaling, in_bin=None,
+            dilation=1, use_gate=False,
+            adaptive_scaling=False, in_bin=None,
             weight_bin=None
         )
 
     def forward(self, x):
         x = self.encoder(x)
-        h = self.front_bottleneck(x)
         for i in range(self.blocks):
             h = self.block_list[i](h)
-        h = self.end_bottleneck(h)
         if self.in_bin is not None:
             h = self.in_bin(h)
         else:

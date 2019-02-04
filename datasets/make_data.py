@@ -4,6 +4,7 @@ sys.path.append('../')
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+import scipy.signal as signal
 import datasets.two_source_mixture as two_source_mixture
 import argparse
 
@@ -48,10 +49,30 @@ def make_data(batchsize, hop=256, toy=False, max_duration=2, transform=None):
     '''
     trainset, valset, testset = make_mixture_set(hop=hop, toy=toy,
         max_duration=max_duration, transform=transform)
-    collate = lambda x: collate_and_trim(x, axis=0)
+    collate = lambda x: utils.collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
     test_dl = DataLoader(testset, batch_size=batchsize,
         collate_fn=collate)
     return train_dl, val_dl, test_dl
+
+if __name__=='__main__':
+    decimate = lambda x : signal.decimate(x, 2)
+    trainset, valset, testset = make_mixture_set(hop=160, max_duration=2,
+        transform=decimate)
+    print('Training Size: ', len(trainset))
+    print('Validation Size: ', len(valset))
+    print('Testing Size: ', len(testset))
+    dataset_dir = '/media/data/wsj_mix/decimated2/'
+    dirs = ['train/', 'val/', 'test/']
+    datasets = [trainset, valset, testset]
+    for dir, dataset in zip(dirs, datasets):
+        for i, data in enumerate(dataset):
+            fname = dataset_dir + dir + 'sample{}.npz'.format(i)
+            np.savez(
+                fname,
+                mixture=data['mixture'],
+                target=target['target'],
+                interference=interference['interference']
+            )

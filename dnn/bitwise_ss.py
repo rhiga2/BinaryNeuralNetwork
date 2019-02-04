@@ -137,7 +137,7 @@ def main():
     in_bin = binary_layers.pick_activation(args.in_bin)
 
     # Make model and dataset
-    train_dl, valset, rawset = binary_data.make_binary_data(args.batchsize, toy=args.toy)
+    train_dl, valset, rawset = binary_data.get_binary_data(args.batchsize, toy=args.toy)
     model = bitwise_mlp.BitwiseMLP(
         in_size=2052,
         out_size=513,

@@ -150,8 +150,8 @@ def main():
             use_batchnorm=args.use_batchnorm)
     elif args.model == 'tasnet':
         stride=10
-        model = bitwise_tasnet.BitwiseTasNet(1, 256,
-            256, 512, blocks=4, front_kernel_size=20, front_stride=10,
+        model = bitwise_tasnet.BitwiseTasNet(1, 256, 512,
+            blocks=4, front_kernel_size=20, front_stride=10,
             kernel_size=3, layers=8, in_bin=in_bin, weight_bin=weight_bin,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate)
     else:
