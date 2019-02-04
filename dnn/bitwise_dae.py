@@ -12,6 +12,7 @@ import datasets.two_source_mixture as two_source_mixture
 import datasets.make_data as make_data
 import dnn.binary_layers as binary_layers
 import dnn.bitwise_adaptive_transform as adaptive_transform
+import dnn.bitwise_tasnet as bitwise_tasnet
 import dnn.bitwise_wavenet as bitwise_wavenet
 import loss_and_metrics.bss_eval as bss_eval
 import loss_and_metrics.sepcosts as sepcosts
@@ -71,7 +72,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
             labels = labels.to(device=device)
             estimate = model(features)
             estimate_size = estimate.size()
-            
+
             if classification:
                 estimate = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
             else:
@@ -95,7 +96,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--exp', '-exp', default='temp')
-    parser.add_argument('--wavenet', '-wavenet', action='store_true')
+    parser.add_argument('--model', '-model', default='adaptive_transform')
     parser.add_argument('--epochs', '-e', type=int, default=64,
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=64,
@@ -109,9 +110,6 @@ def main():
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--clip_weights', '-cw', action='store_true')
-
-    parser.add_argument('--kernel', '-k', type=int, default=256)
-    parser.add_argument('--stride', '-s', type=int, default=16)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--in_bin', '-ib', default='identity')
@@ -137,20 +135,25 @@ def main():
 
     # Make model and dataset
     train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=args.stride,
-        toy=args.toy, max_length=24000)
+        toy=args.toy, max_length=2, transform=lambda x : signal.decimate(x, 2))
     classification = False
-    if args.wavenet:
+    if args.model == 'wavenet':
         filter_activation = binary_layers.pick_activation(args.activation)
         gate_activation = binary_layers.pick_activation(args.activation,
             bipolar_shift=False)
         model = bitwise_wavenet.BitwiseWavenet(1, 256,
-            kernel_size=args.kernel, filter_activation=torch.tanh,
+            kernel_size=2, filter_activation=torch.tanh,
             gate_activation=torch.sigmoid, in_bin=in_bin, weight_bin=weight_bin,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
             use_batchnorm=args.use_batchnorm)
-        classification = True
+    elif args.model == 'tasnet':
+        bitwise_tasnet.BitwiseTasnet(1, 256,
+            256, 512, blocks=4, front_kernel_size=20, front_stride=10,
+            kernel_size=3, layers=8, in_bin=in_bin, weight_bin=weight_bin,
+            adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
+            use_batchnorm=args.use_batchnorm)
     else:
-        model = adaptive_transform.BitwiseAdaptiveTransform(args.kernel, args.stride,
+        model = adaptive_transform.BitwiseAdaptiveTransform(1024, 256,
             fc_sizes=[2048, 2048], in_channels=1, out_channels=1,
             dropout=args.dropout, sparsity=args.sparsity,
             autoencode=args.autoencode, in_bin=in_bin, weight_bin=weight_bin,
@@ -170,6 +173,9 @@ def main():
     elif args.loss == 'cel':
         quantizer = quantized_data.Quantizer()
         loss = nn.CrossEntropyLoss()
+        classification = True
+    elif args.loss = 'sisnr':
+        loss = nn.SISNRLoss()
     loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer

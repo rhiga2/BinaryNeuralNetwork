@@ -7,7 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 from datasets.two_source_mixture import *
 import argparse
 
-def make_mixture_set(hop=256, toy=False, max_duration=None):
+def make_mixture_set(hop=256, toy=False, max_duration=None, transform=None):
     speaker_path = '/media/data/timit-wav/train'
     targets = ['dr1/fcjf0', 'dr1/fetb0', 'dr1/fsah0', 'dr1/fvfb0',
         'dr1/fdaw0', 'dr1/fjsp0','dr1/fsjk1', 'dr1/fvmh0',
@@ -37,11 +37,11 @@ def make_mixture_set(hop=256, toy=False, max_duration=None):
             num_test=1
         )
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
-            max_length=max_duration)
+            max_duration=max_duration, transform=transform)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
-            max_length=max_duration)
+            max_duration=max_duration, transform=transform)
         testset = TwoSourceMixtureDataset(test_speeches, test_noises, hop=hop,
-            max_length=max_duration)
+            max_duration=max_duration, transform=transform)
     else:
         interferences = ['dr1/mdpk0', 'dr1/mjwt0', 'dr1/mrai0', 'dr1/mrws0',
             'dr1/mwad0', 'dr1/mwar0', 'dr1/mtrr0', 'dr1/mtjs0',
@@ -53,19 +53,20 @@ def make_mixture_set(hop=256, toy=False, max_duration=None):
             num_val=2
         )
         trainset = TwoSourceMixtureDataset(train_speeches, train_noises, hop=hop,
-            max_length=max_length)
+            max_duration=max_duration, transform=transform)
         valset = TwoSourceMixtureDataset(val_speeches, val_noises, hop=hop,
-            max_length=max_length)
+            max_duration=max_duration, transform=transform)
         testset = TwoSourceMixtureDataset(test_speeches, test_noises, hop=hop,
-            max_length=max_duration)
+            max_duration=max_duration, transform=transform)
 
     return trainset, valset, testset
 
-def make_data(batchsize, hop=256, toy=False, max_duration=2):
+def make_data(batchsize, hop=256, toy=False, max_duration=2, transform=None):
     '''
     Make two mixture dataset
     '''
-    trainset, valset, testset = make_mixture_set(hop=hop, toy=toy, max_duration=max_duration)
+    trainset, valset, testset = make_mixture_set(hop=hop, toy=toy,
+        max_duration=max_duration, transform=transform)
     collate = lambda x: collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)

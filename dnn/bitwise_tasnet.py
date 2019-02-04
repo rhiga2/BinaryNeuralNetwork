@@ -1,55 +1,15 @@
+import sys , os
+sys.path.append('../')
+
 import torch
 import torch.nn as nn
 import dnn.binary_layers as binary_layers
 
-def __init__(self, res_channels, dl_channels, layers=10, kernel_size=2,
-    filter_activation=torch.tanh, gate_activation=torch.sigmoid,
-    in_bin=binary_layers.identity, weight_bin=binary_layers.identity,
-    use_gate=True, adaptive_scaling=True, use_batchnorm=False):
-    super(BitwiseWavenetBlock, self).__init__()
-    dilation = 1
-    self.layers = layers
-    self.filter_activation = filter_activation
-    self.gate_activation = gate_activation
-    self.filter_list = nn.ModuleList()
-    self.gate_list = nn.ModuleList()
-    self.residual_list = nn.ModuleList()
-    self.skip_list = nn.ModuleList()
-    self.use_batchnorm = use_batchnorm
-
-    if use_batchnorm:
-        self.batchnorm_list = nn.ModuleList()
-
-    for i in range(layers):
-        padding = dilation * (kernel_size-1) // 2
-        if i == 0:
-            padding = 1
-
-        self.filter_list.append(binary_layers.BitwiseConv1d(res_channels,
-            dl_channels, kernel_size, dilation=dilation,
-            use_gate=use_gate, adaptive_scaling=adaptive_scaling,
-            in_bin=in_bin, weight_bin=weight_bin, padding=padding))
-        self.gate_list.append(binary_layers.BitwiseConv1d(res_channels,
-            dl_channels, kernel_size, dilation=dilation,
-            use_gate=use_gate, adaptive_scaling=adaptive_scaling,
-            in_bin=in_bin, weight_bin=weight_bin, padding=padding))
-
-        if use_batchnorm:
-            self.batchnorm_list.append(nn.BatchNorm1d(res_channels))
-
-        self.residual_list.append(binary_layers.BitwiseConv1d(dl_channels,
-            res_channels, 1, use_gate=use_gate,
-            adaptive_scaling=adaptive_scaling, in_bin=in_bin,
-            weight_bin=weight_bin))
-        self.skip_list.append(binary_layers.BitwiseConv1d(dl_channels,
-            res_channels, 1, use_gate=use_gate,
-            adaptive_scaling=adaptive_scaling, in_bin=in_bin,
-            weight_bin=weight_bin))
-        dilation = dilation * 2
-
 class BitwiseTasNetBlock(nn.Module):
     def __init__(self, bottleneck_channels, dconv_size, kernel_size=3,
-        layers=4):
+        layers=4, in_bin=None, weight_bin=None, adaptive_scaling=False,
+        use_gate=False):
+        super(BitwiseTasNetBlock, self).__init__()
         self.layers = layers
         self.first1x1_list = nn.ModuleList()
         self.first_activation = nn.ModuleList()
@@ -102,3 +62,52 @@ class BitwiseTasNetBlock(nn.Module):
             x = self.second_normalization[i](x)
             x = self.last1x1_list[i](x)
         x = x + resid
+
+class BitwiseTasNet(nn.Module):
+    def __init__(self, in_channels, encoder_channels, bottleneck_channels,
+        dconv_size, blocks=2, front_kernel_size=20, front_stride=10,
+        kernel_size=3, layers=4, in_bin=None, weight_bin=None,
+        adaptive_scaling=False, use_gate=False):
+        super(BitwiseTasNet, self).__init__():
+        self.encoder = binary_layers.BitwiseConv1d(in_channels, encoder_channels,
+            front_kernel_size, stride=front_stride, padding=front_kernel_size,
+            groups=1, dilation=1, use_gate=use_gate,
+            adaptive_scaling=adaptive_scaling, in_bin=None,
+            weight_bin=None)
+        self.front_bottleneck = binary_layers.BitwiseConv1d(encoder_channels,
+            bottleneck_channels, 1, stride=1, padding=0, groups=1, dilation=1,
+            use_gate=use_gate, adaptive_scaling=adaptive_scaling, in_bin=None,
+            weight_bin=None)
+        self.block_list = nn.ModuleList()
+        self.blocks = blocks
+        for i in range(blocks):
+            self.block_list.append(
+                BitwiseTasNetBlock(
+                    bottleneck_channels, dconv_size, kernel_size=kernel_size,
+                    layers=layers, in_bin=in_bin, weight_bin=weight_bin,
+                    adaptive_scaling=adaptive_scaling, use_gate=use_gate
+                )
+            )
+        self.end_bottleneck = binary_layers.BitwiseConv1d(bottleneck_channels,
+            encoder_channels, 1, stride=1, padding=0, groups=1, dilation=1,
+            use_gate=use_gate, adaptive_scaling=adaptive_scaling, in_bin=None,
+            weight_bin=None)
+        self.decoder = binary_layers.BitwiseConvTranspose1d(encoder_channels, in_channels,
+            front_kernel_size, stride=front_stride, padding=0, groups=1,
+            dilation=1, use_gate=use_gate,
+            adaptive_scaling=adaptive_scaling, in_bin=None,
+            weight_bin=None
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        h = self.front_bottleneck(x)
+        for i in range(self.blocks):
+            h = self.block_list[i](h)
+        h = self.end_bottleneck(h)
+        if self.in_bin is not None:
+            h = self.in_bin(h)
+        else:
+            h = torch.sigmoid(h)
+        x = x * h
+        return self.decoder(x)

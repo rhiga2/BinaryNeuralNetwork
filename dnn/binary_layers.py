@@ -61,14 +61,17 @@ class HardTanh(Function):
         x = ctx.saved_tensors[0]
         return torch.clamp(grad_output, -1, 1)
 
+def softsign(ctx, x, gamma):
+    ctx.save_for_backward(x)
+    return x / (torch.abs(x) + gamma)
+
 bitwise_activation = BitwiseActivation.apply
 clipped_ste = ClippedSTE.apply
 ste = STE.apply
 ste_tanh = STE_Tanh.apply
-identity = lambda x : x
 hard_tanh = HardTanh.apply
 
-def pick_activation(activation_name, bipolar_shift=True):
+def pick_activation(activation_name):
     if activation_name == 'ste':
         activation = ste
     elif activation_name == 'clipped_ste':
@@ -84,11 +87,8 @@ def pick_activation(activation_name, bipolar_shift=True):
     elif activation_name == 'hard_tanh':
         activation = hard_tanh
     elif activation_name == 'identity':
-        activation = identity
+        activation = None
 
-    if not bipolar_shift:
-        activation = lambda x : (activation(x) + 1)/2
-        
     return activation
 
 def add_logistic_noise(x, sigma=0.1):
@@ -117,13 +117,20 @@ def clip_weights(weight, gate, use_gate=False):
     if use_gate:
         gate.data.clamp_(-1, 1)
 
-def get_effective_weight(weight, gate, binactiv, beta=0, use_gate=False):
+def binarize_gate(gate, binactiv):
+    return (binactiv(gate) + 1) / 2
+
+def drop_weights(weight, gate, binactiv=None):
+    if binactiv is not None:
+        return weight * binarize_gate(gate, binactiv)
+    return weight
+
+def get_effective_weight(weight, binactiv=None, beta=0):
     w = weight
     if beta != 0:
         w = w * (torch.abs(w) >= beta).to(float)
-    w = binactiv(w)
-    if use_gate:
-        w = w * ((binactiv(gate)+1)/2)
+    if binactiv is not None:
+        return binactiv(w)
     return w
 
 class BitwiseLinear(nn.Module):
@@ -131,8 +138,8 @@ class BitwiseLinear(nn.Module):
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
     def __init__(self, input_size, output_size, use_gate=False,
-        adaptive_scaling=False, in_bin=identity,
-        weight_bin=identity):
+        adaptive_scaling=False, in_bin=None,
+        weight_bin=None):
         super(BitwiseLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
@@ -155,15 +162,17 @@ class BitwiseLinear(nn.Module):
         clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
-        x = self.in_bin(x)
-        w = get_effective_weight(self.weight, self.gate, self.weight_bin,
-            beta=self.beta, use_gate=self.use_gate)
-        weight_scale = 1
-        in_scale = 1
+        if self.in_bin is not None:
+            x = self.in_bin(x)
+        if self.use_gate:
+            weight = drop_weights(self.weight, self.gate, self.weight_bin)
+        w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
+        out = F.linear(x, w, self.bias)
         if self.adaptive_scaling:
             in_scale = torch.abs(x).mean(1, keepdim=True)
-            weight_scale = torch.abs(self.weight).mean(1)
-        return in_scale * weight_scale * F.linear(x, w, self.bias)
+            weight_scale = torch.abs(weight).mean(1)
+            return in_scale * weight_scale * out
+        return out
 
     def __repr__(self):
         return 'BitwiseLinear({}, {}, use_gate={})'.format(self.input_size,
@@ -172,7 +181,7 @@ class BitwiseLinear(nn.Module):
 class BitwiseConv1d(nn.Conv1d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        adaptive_scaling=False, in_bin=identity, weight_bin=identity):
+        adaptive_scaling=False, in_bin=None, weight_bin=None):
         super(BitwiseConv1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, dilation=dilation, groups=groups)
@@ -199,18 +208,20 @@ class BitwiseConv1d(nn.Conv1d):
         '''
         x (batch size, channels, length)
         '''
-        x = self.in_bin(x)
-        w = get_effective_weight(self.weight, self.gate, self.weight_bin,
-            beta=self.beta, use_gate=self.use_gate)
-        weight_scale = 1
-        in_scale = 1
-        if self.adaptive_scaling:
-            in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
-            weight_scale = torch.abs(self.weight).mean(1).mean(1)
-            weight_scale = weight_scale.unsqueeze(1)
-        return weight_scale * in_scale * F.conv1d(x, w, self.bias,
+        if self.in_bin is not None:
+            x = self.in_bin(x)
+        if self.use_gate:
+            weight = drop_weights(self.weight, self.gate, self.weight_bin)
+        w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
+        out = F.conv1d(x, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
+        if self.adaptive_scaling:
+            in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
+            weight_scale = torch.abs(weight).mean(1).mean(1)
+            weight_scale = weight_scale.unsqueeze(1)
+            return weight_scale * in_scale * out
+        return out
 
     def __repr__(self):
         return 'BitwiseConv1d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={})'.format(self.in_channels,
@@ -220,7 +231,7 @@ class BitwiseConv1d(nn.Conv1d):
 class BitwiseConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        in_bin=identity, weight_bin=identity, adaptive_scaling=False):
+        in_bin=None, weight_bin=None, adaptive_scaling=False):
         super(BitwiseConv2d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation
@@ -248,18 +259,20 @@ class BitwiseConv2d(nn.Conv2d):
         '''
         x (batch size, channels, height, width)
         '''
-        x = self.in_bin(x)
-        w = get_effective_weight(self.weight, self.gate, self.weight_bin,
-            beta=self.beta, use_gate=self.use_gate)
-        weight_scale = 1
-        in_scale = 1
-        if self.adaptive_scaling:
-            in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
-            weight_scale = torch.abs(self.weight).mean(1).mean(1).mean(1)
-            weight_scale = weight_scale.unsqueeze(1).unsqueeze(1)
-        return weight_scale * in_scale * F.conv2d(x, w, self.bias,
+        if self.in_bin is not None:
+            x = self.in_bin(x)
+        if self.use_gate:
+            weight = drop_weights(self.weight, self.gate, self.weight_bin)
+        w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
+        out = F.conv2d(x, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
+        if self.adaptive_scaling:
+            in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
+            weight_scale = torch.abs(weight).mean(1).mean(1).mean(1)
+            weight_scale = weight_scale.unsqueeze(1).unsqueeze(1)
+            return weight_scale * in_scale * out
+        return out
 
     def __repr__(self):
         return 'BitwiseConv2d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={})'.format(
@@ -270,8 +283,8 @@ class BitwiseConv2d(nn.Conv2d):
 class BitwiseConvTranspose1d(nn.ConvTranspose1d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, use_gate=False,
-        dilation=1, adaptive_scaling=False, in_bin=identity,
-        weight_bin=identity):
+        dilation=1, adaptive_scaling=False, in_bin=None,
+        weight_bin=None):
         super(BitwiseConvTranspose1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation
@@ -299,18 +312,20 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         '''
         x (batch size, channels, length)
         '''
-        x = self.in_bin(x)
-        w = get_effective_weight(self.weight, self.gate, self.weight_bin,
-            beta=self.beta, use_gate=self.use_gate)
-        in_scale = 1
-        weight_scale = 1
-        if self.adaptive_scaling:
-            in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
-            weight_scale = torch.abs(self.weight).mean(0).mean(1)
-            weight_scale = weight_scale.unsqueeze(1)
-        return in_scale * weight_scale * F.conv_transpose1d(x, w, self.bias,
+        if self.in_bin is not None:
+            x = self.in_bin(x)
+        if self.use_gate:
+            weight = drop_weights(self.weight, self.gate, self.weight_bin)
+        w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
+        out = F.conv_transpose1d(x, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
+        if self.adaptive_scaling:
+            in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
+            weight_scale = torch.abs(weight).mean(0).mean(1)
+            weight_scale = weight_scale.unsqueeze(1)
+            return in_scale * weight_scale * out
+        return out
 
     def __repr__(self):
         return 'BitwiseConvTranspose1d({}, {}, {}, stride={}, padding={}, groups={}, use_gate={}, dilation={})'.format(

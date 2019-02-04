@@ -35,7 +35,7 @@ class BitwiseAdaptiveTransform(nn.Module):
     '''
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
-        in_bin=binary_layers.identity, weight_bin=binary_layers.identity,
+        in_bin=None, weight_bin=None,
         use_gate=False, adaptive_scaling=True, activation=nn.ReLU(inplace=True),
         weight_init=None, autoencode=False):
         super(BitwiseAdaptiveTransform, self).__init__()
@@ -43,8 +43,8 @@ class BitwiseAdaptiveTransform(nn.Module):
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
-            stride=stride, padding=kernel_size, in_bin=binary_layers.identity,
-            weight_bin=binary_layers.identity, adaptive_scaling=False,
+            stride=stride, padding=kernel_size, in_bin=None,
+            weight_bin=None, adaptive_scaling=False,
             use_gate=False
         )
 
@@ -55,7 +55,7 @@ class BitwiseAdaptiveTransform(nn.Module):
         if not autoencode:
             self.mlp = bitwise_mlp.BitwiseMLP(kernel_size, kernel_size,
                 fc_sizes=[2048, 2048], dropout=dropout,
-                activation=binary_layers.identity,
+                activation=None,
                 in_bin=in_bin, weight_bin=weight_bin, use_batchnorm=True,
                 adaptive_scaling=adaptive_scaling, use_gate=use_gate
             )
@@ -63,8 +63,8 @@ class BitwiseAdaptiveTransform(nn.Module):
         # Initialize inverse of front end transform
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
             kernel_size, 1, kernel_size, stride=stride,
-            in_bin=binary_layers.identity,
-            weight_bin=binary_layers.identity,
+            in_bin=None,
+            weight_bin=None,
             adaptive_scaling=False,
             use_gate=False
         )
@@ -101,7 +101,10 @@ class BitwiseAdaptiveTransform(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        h = self.batchnorm(self.activation(self.conv(x)))
+        h = self.conv(x)
+        if self.activation is not None:
+            h = self.activation(h)
+        h = self.batchnorm(h)
 
         if not self.autoencode:
             h_size = h.size()
