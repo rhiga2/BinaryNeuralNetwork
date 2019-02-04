@@ -48,7 +48,7 @@ def make_data(batchsize, hop=256, toy=False, max_duration=2, transform=None):
     '''
     trainset, valset, testset = make_mixture_set(hop=hop, toy=toy,
         max_duration=max_duration, transform=transform)
-    collate = lambda x: collate_and_trim(x, axis=0)
+    collate = lambda x: two_source_mixture.collate_and_trim(x, axis=0)
     train_dl = DataLoader(trainset, batch_size=batchsize, shuffle=True,
         collate_fn=collate)
     val_dl = DataLoader(valset, batch_size=batchsize, collate_fn=collate)
