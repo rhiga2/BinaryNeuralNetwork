@@ -174,7 +174,7 @@ def main():
         quantizer = quantized_data.Quantizer()
         loss = nn.CrossEntropyLoss()
         classification = True
-    elif args.loss = 'sisnr':
+    elif args.loss == 'sisnr':
         loss = nn.SISNRLoss()
     loss_metrics = bss_eval.LossMetrics()
 

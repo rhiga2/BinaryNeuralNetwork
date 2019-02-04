@@ -68,7 +68,7 @@ class BitwiseTasNet(nn.Module):
         dconv_size, blocks=2, front_kernel_size=20, front_stride=10,
         kernel_size=3, layers=4, in_bin=None, weight_bin=None,
         adaptive_scaling=False, use_gate=False):
-        super(BitwiseTasNet, self).__init__():
+        super(BitwiseTasNet, self).__init__()
         self.encoder = binary_layers.BitwiseConv1d(in_channels, encoder_channels,
             front_kernel_size, stride=front_stride, padding=front_kernel_size,
             groups=1, dilation=1, use_gate=use_gate,
