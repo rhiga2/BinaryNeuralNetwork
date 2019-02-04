@@ -111,6 +111,8 @@ def main():
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--clip_weights', '-cw', action='store_true')
+    parser.add_argument('--decimate', '-decimate', action='store_true')
+
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--in_bin', '-ib', default='identity')
@@ -161,8 +163,12 @@ def main():
             activation=activation, weight_init='fft')
 
     # Make model and dataset
+    transform = None
+    if args.decimate:
+        transform = lambda x : signal.decimate(x, 2)
+
     train_dl, val_dl, _ = make_data.make_data(args.batchsize, hop=stride,
-        toy=args.toy, max_duration=2, transform=lambda x : signal.decimate(x, 2))
+        toy=args.toy, max_duration=2, transform=transform)
 
     if args.load_file:
         model.load_partial_state_dict(torch.load('../models/' + args.load_file))

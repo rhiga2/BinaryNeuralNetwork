@@ -101,10 +101,10 @@ class BitwiseAdaptiveTransform(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        h = self.conv(x)
+        spec = self.conv(x)
         if self.activation is not None:
-            h = self.activation(h)
-        h = self.batchnorm(h)
+            spec = self.activation(spec)
+        h = self.batchnorm(spec)
 
         if not self.autoencode:
             h_size = h.size()
@@ -112,8 +112,11 @@ class BitwiseAdaptiveTransform(nn.Module):
             h = self.mlp(h)
             h = bitwise_mlp.unflatten(h, h_size[0], h_size[2])
 
-        h = self.conv_transpose(h)[:, :, self.kernel_size:time+self.kernel_size]
-        return h
+        if self.activation is not None:
+            h = (self.activation(h) + 1)/2
+
+        h = h * spec
+        return self.conv_transpose(spec)[:, :, self.kernel_size:time+self.kernel_size]
 
     def clip_weights(self):
         self.conv.clip_weights()
