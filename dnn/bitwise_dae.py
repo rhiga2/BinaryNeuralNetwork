@@ -153,7 +153,7 @@ def main():
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
             use_batchnorm=args.use_batchnorm)
     else:
-        model = adaptive_transform.BitwiseAdaptiveTransform(1024, 256,
+        model = adaptive_transform.BitwiseAdaptiveTransform(1024, 16,
             fc_sizes=[2048, 2048], in_channels=1, out_channels=1,
             dropout=args.dropout, sparsity=args.sparsity,
             autoencode=args.autoencode, in_bin=in_bin, weight_bin=weight_bin,
