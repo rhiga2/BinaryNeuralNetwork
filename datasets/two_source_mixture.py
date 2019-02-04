@@ -76,13 +76,15 @@ def collate_and_trim(batch, axis=0, hop=1, dtype=torch.float):
     outbatch = {key: torch.as_tensor(np.stack(values, axis=0), dtype=dtype) for key, values in outbatch.items()}
     return outbatch
 
-def get_speech_files(speaker_path, speakers, train_percent=0.6, val_percent=0.2):
+def get_speech_files(speaker_path, speakers, train_percent=0.6, val_percent=0.2,
+    max_utterances=None):
     '''
     Assumes that speech files are organized in speaker_path/speakers/*.wav
     speaker path: directory of speakers
     speakers: list of speaker directories
-    num_train: number of utterances to put in training set
-    num_val: number of utterances to put in validation set
+    train_percent: percent of utterances to put in training set
+    val_percent: percent of utterances to put in validation set
+    max_utterances: number of utterances to put in every set per speaker
     '''
     assert train_percent + val_percent <= 1
     if speaker_path[-1] != '/':
@@ -95,12 +97,17 @@ def get_speech_files(speaker_path, speakers, train_percent=0.6, val_percent=0.2)
         if speaker[-1] != '/':
             speaker += '/'
         files = glob.glob(speaker_path + speaker + '*.wav')
-        num_train = int(train_percent * len(files))
-        num_val = int(val_percent * len(files))
+        max_sentences = len(files)
+
+        if max_utterances is not None:
+            if max_utterances < len(files):
+                max_sentences = max_utterances
+
+        num_train = int(train_percent * max_sentences)
+        num_val = int(val_percent * max_sentences)
         train_speeches.extend(files[:num_train])
-        end = num_train + num_val
-        val_speeches.extend(files[num_train:end])
-        test_speeches.extend(files[end:])
+        val_speeches.extend(files[num_train:num_train+num_val])
+        test_speeches.extend(files[num_train+num_val:max_sentences])
     return train_speeches, val_speeches, test_speeches
 
 def get_noise_files(noise_path, noises, train_percent=0.6, val_percent=0.2):
