@@ -7,6 +7,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import math
 import numpy as np
+import scipy.signal as signal
 import datasets.quantized_data as quantized_data
 import datasets.two_source_mixture as two_source_mixture
 import datasets.make_data as make_data
@@ -146,11 +147,10 @@ def main():
             use_batchnorm=args.use_batchnorm)
     elif args.model == 'tasnet':
         stride=10
-        bitwise_tasnet.BitwiseTasnet(1, 256,
+        model = bitwise_tasnet.BitwiseTasNet(1, 256,
             256, 512, blocks=4, front_kernel_size=20, front_stride=10,
             kernel_size=3, layers=8, in_bin=in_bin, weight_bin=weight_bin,
-            adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
-            use_batchnorm=args.use_batchnorm)
+            adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate)
     else:
         stride=16
         model = adaptive_transform.BitwiseAdaptiveTransform(1024, 16,
@@ -179,7 +179,7 @@ def main():
         loss = nn.CrossEntropyLoss()
         classification = True
     elif args.loss == 'sisnr':
-        loss = nn.SISNRLoss()
+        loss = sepcosts.SISNRLoss()
     loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer

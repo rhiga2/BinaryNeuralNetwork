@@ -53,7 +53,7 @@ class BitwiseTasNetBlock(nn.Module):
 
     def forward(self, x):
         resid = x
-        for i in range(layers):
+        for i in range(self.layers):
             x = self.first1x1_list[i](x)
             x = self.first_activation[i](x)
             x = self.first_normalization[i](x)
@@ -111,3 +111,6 @@ class BitwiseTasNet(nn.Module):
             h = torch.sigmoid(h)
         x = x * h
         return self.decoder(x)
+
+    def update_betas(self):
+        return

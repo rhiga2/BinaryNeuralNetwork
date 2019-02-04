@@ -54,9 +54,9 @@ class SignalArtifactRatio(nn.Module):
         sar = torch.mean(prediction**2) / (torch.mean(project**2) + self.epsilon)
         return sar
 
-class SISNR_Loss(nn.Module):
+class SISNRLoss(nn.Module):
     def __init__(self, epsilon=1e-5):
-        super(SISNR, self).__init__()
+        super(SISNRLoss, self).__init__()
         self.epsilon = epsilon
 
     def forward(self, prediction, target, interference=None):

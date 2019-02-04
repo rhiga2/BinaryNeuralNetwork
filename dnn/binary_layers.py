@@ -164,6 +164,7 @@ class BitwiseLinear(nn.Module):
     def forward(self, x):
         if self.in_bin is not None:
             x = self.in_bin(x)
+        weight = self.weight
         if self.use_gate:
             weight = drop_weights(self.weight, self.gate, self.weight_bin)
         w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
@@ -210,6 +211,7 @@ class BitwiseConv1d(nn.Conv1d):
         '''
         if self.in_bin is not None:
             x = self.in_bin(x)
+        weight = self.weight
         if self.use_gate:
             weight = drop_weights(self.weight, self.gate, self.weight_bin)
         w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
@@ -261,6 +263,7 @@ class BitwiseConv2d(nn.Conv2d):
         '''
         if self.in_bin is not None:
             x = self.in_bin(x)
+        weight = self.weight
         if self.use_gate:
             weight = drop_weights(self.weight, self.gate, self.weight_bin)
         w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
@@ -314,6 +317,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         '''
         if self.in_bin is not None:
             x = self.in_bin(x)
+        weight = self.weight
         if self.use_gate:
             weight = drop_weights(self.weight, self.gate, self.weight_bin)
         w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
