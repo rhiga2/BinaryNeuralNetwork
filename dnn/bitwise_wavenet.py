@@ -9,7 +9,7 @@ import dnn.binary_layers as binary_layers
 class BitwiseWavenetBlock(nn.Module):
     def __init__(self, res_channels, dl_channels, layers=10, kernel_size=2,
         filter_activation=torch.tanh, gate_activation=torch.sigmoid,
-        in_bin=binary_layers.identity, weight_bin=binary_layers.identity,
+        in_bin=None, weight_bin=None,
         use_gate=True, adaptive_scaling=True, use_batchnorm=False):
         super(BitwiseWavenetBlock, self).__init__()
         dilation = 1
@@ -84,8 +84,8 @@ class BitwiseWavenet(nn.Module):
     def __init__(self, in_channels, out_channels, blocks=2, layers=10,
         dl_channels=32, res_channels=32, skip_channels=256,
         kernel_size=2, filter_activation=torch.tanh,
-        gate_activation=torch.sigmoid, in_bin=binary_layers.identity,
-        weight_bin=binary_layers.identity, adaptive_scaling=True,
+        gate_activation=torch.sigmoid, in_bin=None,
+        weight_bin=None, adaptive_scaling=True,
         use_gate=True, use_batchnorm=False):
         super(BitwiseWavenet, self).__init__()
         self.use_batchnorm = use_batchnorm
