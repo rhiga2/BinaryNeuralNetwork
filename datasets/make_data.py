@@ -1,6 +1,7 @@
 import sys , os
 sys.path.append('../')
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -73,6 +74,6 @@ if __name__=='__main__':
             np.savez(
                 fname,
                 mixture=data['mixture'],
-                target=target['target'],
-                interference=interference['interference']
+                target=data['target'],
+                interference=data['interference']
             )

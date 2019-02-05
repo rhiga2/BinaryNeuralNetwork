@@ -101,7 +101,7 @@ class BitwiseAdaptiveTransform(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        spec = self.conv(x)
+        spec = F.relu(self.conv(x))
         h = self.batchnorm(spec)
 
         if not self.autoencode:
