@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import datasets.two_source_mixture as two_source_mixture
 import argparse
-import datatsets.utils as utils
+import datasets.utils as utils
 import scipy.signal as signal
 import numpy as np
 
