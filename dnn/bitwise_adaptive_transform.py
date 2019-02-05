@@ -54,8 +54,8 @@ class BitwiseAdaptiveTransform(nn.Module):
 
         if not autoencode:
             self.mlp = bitwise_mlp.BitwiseMLP(kernel_size, kernel_size,
-                fc_sizes=[2048, 2048], dropout=dropout,
-                activation=None,
+                fc_sizes=[2048, 2048, 2048], dropout=dropout,
+                activation=nn.ReLU(inplace=True),
                 in_bin=in_bin, weight_bin=weight_bin, use_batchnorm=True,
                 adaptive_scaling=adaptive_scaling, use_gate=use_gate
             )
@@ -109,7 +109,11 @@ class BitwiseAdaptiveTransform(nn.Module):
             h = bitwise_mlp.flatten(h)
             h = self.mlp(h)
             h = bitwise_mlp.unflatten(h, h_size[0], h_size[2])
-        h = (self.in_bin(h) + 1)/2
+
+        if self.in_bin:
+            h = (self.in_bin(h) + 1)/2
+        else:
+            h = torch.sigmoid(h)
 
         h = h * spec
         return self.conv_transpose(spec)[:, :, self.kernel_size:time+self.kernel_size]

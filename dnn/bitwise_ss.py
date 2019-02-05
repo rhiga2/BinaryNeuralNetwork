@@ -141,7 +141,7 @@ def main():
     model = bitwise_mlp.BitwiseMLP(
         in_size=2052,
         out_size=513,
-        fc_sizes=[1024, 1024, 1024],
+        fc_sizes=[2048, 2048, 2048],
         dropout=args.dropout,
         sparsity=args.sparsity,
         use_gate=args.use_gate,
