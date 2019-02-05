@@ -121,7 +121,6 @@ def main():
     parser.add_argument('--loss', '-l', default='mse')
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
-    parser.add_argument('--activation', '-a', default='tanh')
     parser.add_argument('--use_batchnorm', '-ub', action='store_true')
     args = parser.parse_args()
 
@@ -133,7 +132,6 @@ def main():
         device = torch.device('cpu')
     print('On device: ', device)
 
-    activation = binary_layers.pick_activation(args.activation)
     in_bin = binary_layers.pick_activation(args.in_bin)
     weight_bin = binary_layers.pick_activation(args.weight_bin)
 
@@ -161,7 +159,7 @@ def main():
             dropout=args.dropout, sparsity=args.sparsity,
             autoencode=args.autoencode, in_bin=in_bin, weight_bin=weight_bin,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
-            activation=activation, weight_init='fft')
+            weight_init='fft')
 
     # Make model and dataset
     transform = None
