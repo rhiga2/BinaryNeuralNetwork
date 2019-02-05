@@ -101,7 +101,7 @@ def main():
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--decay_period', '-dp', type=int, default=10)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
-    parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
+    parser.add_argument('--dropout', '-dropout', type=float, default=0)
     parser.add_argument('--period', '-p', type=int, default=1)
     parser.add_argument('--loss', '-l', type=str, default='bce')
     parser.add_argument('--weighted', '-w', action='store_true')
@@ -141,7 +141,7 @@ def main():
     model = bitwise_mlp.BitwiseMLP(
         in_size=2052,
         out_size=513,
-        fc_sizes=[2048, 2048],
+        fc_sizes=[1024, 1024, 1024],
         dropout=args.dropout,
         sparsity=args.sparsity,
         use_gate=args.use_gate,

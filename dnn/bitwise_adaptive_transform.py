@@ -36,12 +36,13 @@ class BitwiseAdaptiveTransform(nn.Module):
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
         in_bin=None, weight_bin=None,
-        use_gate=False, adaptive_scaling=True, activation=nn.ReLU(inplace=True),
+        use_gate=False, adaptive_scaling=True,
         weight_init=None, autoencode=False):
         super(BitwiseAdaptiveTransform, self).__init__()
 
         # Initialize adaptive front end
         self.kernel_size = kernel_size
+        self.in_bin = in_bin
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
             stride=stride, padding=kernel_size, in_bin=None,
             weight_bin=None, adaptive_scaling=False,
@@ -49,7 +50,6 @@ class BitwiseAdaptiveTransform(nn.Module):
         )
 
         self.batchnorm = nn.BatchNorm1d(kernel_size)
-        self.activation = activation
         self.autoencode = autoencode
 
         if not autoencode:
@@ -101,9 +101,7 @@ class BitwiseAdaptiveTransform(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        spec = self.conv(x)
-        if self.activation is not None:
-            spec = self.activation(spec)
+        spec = F.relu(self.conv(x))
         h = self.batchnorm(spec)
 
         if not self.autoencode:
@@ -111,9 +109,7 @@ class BitwiseAdaptiveTransform(nn.Module):
             h = bitwise_mlp.flatten(h)
             h = self.mlp(h)
             h = bitwise_mlp.unflatten(h, h_size[0], h_size[2])
-
-        if self.activation is not None:
-            h = (self.activation(h) + 1)/2
+        h = (self.in_bin(h) + 1)/2
 
         h = h * spec
         return self.conv_transpose(spec)[:, :, self.kernel_size:time+self.kernel_size]
