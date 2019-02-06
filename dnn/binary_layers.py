@@ -79,7 +79,7 @@ def pick_activation(activation_name):
     elif activation_name == 'bitwise_activation':
         activation = bitwise_activation
     elif activation_name == 'relu':
-        activation = nn.ReLU()
+        activation = F.relu
     elif activation_name == 'tanh':
         activation = torch.tanh
     elif activation_name == 'ste_tanh':

@@ -39,10 +39,6 @@ class BitwiseMLP(nn.Module):
         if dropout > 0:
             self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
-            if i == 0:
-                input_bin = None
-            else:
-                input_bin = in_bin
             self.filter_list.append(
                 binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
                 in_bin=input_bin, weight_bin=weight_bin,

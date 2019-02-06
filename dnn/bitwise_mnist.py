@@ -9,9 +9,9 @@ from torchvision import datasets, transforms
 from torch.utils.data import Dataset, DataLoader
 import math
 import numpy as np
-from dnn.bitwise_ss import BitwiseMLP
-from dnn.binary_layers import *
-from datasets.quantized_data import *
+import dnn.bitwise_mlp as bitwise_mlp
+import dnn.binary_layers import binary_layers
+import loss_and_metrics.image_classification as image_classification
 import visdom
 import argparse
 
@@ -65,6 +65,7 @@ def main():
     print('On device: ', device)
 
     # Make model and dataset
+    vis = visdom.visdom(port=5801)
     flatten = lambda x : x.view(-1)
     train_data = datasets.MNIST('/media/data/MNIST', train=True,
         transform=transforms.Compose([transforms.ToTensor(), flatten]),
@@ -77,8 +78,8 @@ def main():
 
     in_bin = binary_layers.pick_activation(args.in_bin)
     weight_bin = binary_layers.pick_activation(args.weight_bin)
-    model = BitwiseMLP(784, 10, fc_sizes=[2048, 2048, 2048],
-        activation=nn.ReLU(inplace=True), dropout=args.dropout,
+    model = bitwise_mlp.BitwiseMLP(784, 10, fc_sizes=[2048, 2048, 2048],
+        activation=F.relu, dropout=args.dropout,
         sparsity=args.sparsity, use_gate=args.use_gate,
         adaptive_scaling=args.adaptive_scaling, in_bin=in_bin,
         weight_bin=weight_bin, use_batchnorm=True, bn_momentum=True)
@@ -95,6 +96,7 @@ def main():
     # Initialize optimizer
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+    loss_metrics = image_classification.LossMetrics()
 
     for epoch in range(args.epochs):
         total_cost = 0
@@ -108,6 +110,11 @@ def main():
             model.eval()
             val_accuracy, val_loss = evaluate(model, val_dl, loss=loss, device=device)
             print('Val Cost: ', val_loss, val_accuracy)
+            loss_metrics.update(train_loss, train_accuracy, val_loss,
+                val_accuracy, period=period)
+            image_classifcation.train_plot(vis, loss_metrics, eid='Ryley',
+                win=['{} Loss'.format(args.exp), '{} Accuracy'.format(args.exp)])
+
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,

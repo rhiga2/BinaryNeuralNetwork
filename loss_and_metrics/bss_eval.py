@@ -150,9 +150,9 @@ class LossMetrics():
             self.sars = []
 
     def update(self, train_loss, val_loss, sdr=None, sir=None, sar=None,
-        output_period=1):
+        period=1):
         if self.time:
-            self.time.append(self.time[-1] + output_period)
+            self.time.append(self.time[-1] + period)
         else:
             self.time = [0]
         self.train_loss.append(train_loss)

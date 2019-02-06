@@ -13,7 +13,16 @@ class TestBinaryLayers(unittest.TestCase):
             [3, 1, 2],
             [0, -1, 2]
         ])
-        self.linear1.weight = nn.Parameter(linear1_weight)
+        self.linear1.weight = nn.Parameter(0.1 * linear1_weight)
+
+    def test_no_drop(self):
+        x = torch.FloatTensor([
+            [0.2, -0.3, 0.5],
+            [-0.4, 0.1, 0.3],
+            [0.5, -0.15, 0.12]
+        ])
+        y_hat = drop_weights(x, gate=None, binactiv=clipped_ste, beta=0)
+        self.assertTrue(torch.all(torch.eq(x, y_hat)))
 
     def test_drop_weights_with_beta(self):
         x = torch.FloatTensor([
@@ -57,7 +66,7 @@ class TestBinaryLayers(unittest.TestCase):
             [1, 2, 3],
             [4,- 5, 6]
         ])
-        y = torch.FloatTensor([
+        y = 0.1 * torch.FloatTensor([
             [4, 12, 0],
             [0, 10, 10]
         ])
