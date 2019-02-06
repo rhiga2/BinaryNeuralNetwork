@@ -159,14 +159,14 @@ class BitwiseLinear(nn.Module):
         layer_in = x
         if self.in_bin is not None:
             layer_in = self.in_bin(layer_in)
-        weight = drop_weights(self.weight, gate=self.gate,
+        w = drop_weights(self.weight, gate=self.gate,
             binactiv=self.weight_bin, beta=self.beta)
         if self.weight_bin:
-            w = self.weight_bin(weight)
+            w = self.weight_bin(w)
         layer_out = F.linear(layer_in, w, self.bias)
         if self.adaptive_scaling:
             in_scale = torch.abs(x).mean(1, keepdim=True)
-            weight_scale = torch.abs(weight).mean(1)
+            weight_scale = torch.abs(self.weight).mean(1)
             return in_scale * weight_scale * layer_out
         return layer_out
 
@@ -207,16 +207,16 @@ class BitwiseConv1d(nn.Conv1d):
         layer_in = x
         if self.in_bin is not None:
             layer_in = self.in_bin(layer_in)
-        weight = drop_weights(self.weight, gate=self.gate,
+        w = drop_weights(self.weight, gate=self.gate,
             binactiv=self.weight_bin, beta=self.beta)
         if self.weight_bin:
-            w = self.weight_bin(weight)
+            w = self.weight_bin(w)
         layer_out = F.conv1d(layer_in, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
         if self.adaptive_scaling:
             in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
-            weight_scale = torch.abs(weight).mean(1).mean(1)
+            weight_scale = torch.abs(self.weight).mean(1).mean(1)
             weight_scale = weight_scale.unsqueeze(1)
             return weight_scale * in_scale * layer_out
         return layer_out
@@ -260,16 +260,16 @@ class BitwiseConv2d(nn.Conv2d):
         layer_in = x
         if self.in_bin is not None:
             layer_in = self.in_bin(layer_in)
-        weight = drop_weights(self.weight, gate=self.gate,
+        w = drop_weights(self.weight, gate=self.gate,
             binactiv=self.weight_bin, beta=self.beta)
         if self.weight_bin:
-            w = self.weight_bin(weight)
+            w = self.weight_bin(w)
         layer_out = F.conv2d(layer_in, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
         if self.adaptive_scaling:
             in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
-            weight_scale = torch.abs(weight).mean(1).mean(1).mean(1)
+            weight_scale = torch.abs(self.weight).mean(1).mean(1).mean(1)
             weight_scale = weight_scale.unsqueeze(1).unsqueeze(1)
             return weight_scale * in_scale * layer_out
         return layer_out
@@ -315,16 +315,16 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         layer_in = x
         if self.in_bin is not None:
             layer_in = self.in_bin(layer_in)
-        weight = drop_weights(self.weight, gate=self.gate,
+        w = drop_weights(self.weight, gate=self.gate,
             binactiv=self.weight_bin, beta=self.beta)
         if self.weight_bin:
-            w = self.weight_bin(weight)
+            w = self.weight_bin(w)
         layer_out = F.conv_transpose1d(layer_in, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
         if self.adaptive_scaling:
             in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
-            weight_scale = torch.abs(weight).mean(0).mean(1)
+            weight_scale = torch.abs(self.weight).mean(0).mean(1)
             weight_scale = weight_scale.unsqueeze(1)
             return in_scale * weight_scale * layer_out
         return layer_out
