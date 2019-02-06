@@ -53,6 +53,7 @@ def main():
     parser.add_argument('--in_bin', '-ib', default='identity')
     parser.add_argument('--weight_bin', '-wb', default='identity')
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
+    parser.add_argument('--bn_momentum', '-bnm', default=0.1)
     args = parser.parse_args()
 
     # Initialize device
@@ -76,10 +77,11 @@ def main():
 
     in_bin = binary_layers.pick_activation(args.in_bin)
     weight_bin = binary_layers.pick_activation(args.weight_bin)
-    model = BitwiseMLP(in_size=784, out_size=10, fc_sizes=[2048, 2048, 2048],
+    model = BitwiseMLP(784, 10, fc_sizes=[2048, 2048, 2048],
         activation=nn.ReLU(inplace=True), dropout=args.dropout,
         sparsity=args.sparsity, use_gate=args.use_gate,
-        adaptive_scaling=args.adaptive_scaling)
+        adaptive_scaling=args.adaptive_scaling, in_bin=in_bin,
+        weight_bin=weight_bin, use_batchnorm=True, bn_momentum=True)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
 
@@ -98,7 +100,8 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
-        train_accuracy, train_loss = evaluate(model, train_dl, optimizer, loss=loss, device=device)
+        train_accuracy, train_loss = evaluate(model, train_dl, optimizer,
+            loss=loss, device=device)
 
         if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss, train_accuracy)

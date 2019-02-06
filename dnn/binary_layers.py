@@ -120,18 +120,12 @@ def clip_weights(weight, gate, use_gate=False):
 def binarize_gate(gate, binactiv):
     return (binactiv(gate) + 1) / 2
 
-def drop_weights(weight, gate, binactiv=None):
-    if binactiv is not None:
+def drop_weights(weight, gate=None, binactiv=None, beta=0):
+    if binactiv is not None and gate is not None:
         return weight * binarize_gate(gate, binactiv)
-    return weight
-
-def get_effective_weight(weight, binactiv=None, beta=0):
-    w = weight
     if beta != 0:
-        w = w * (torch.abs(w) >= beta).to(float)
-    if binactiv is not None:
-        return binactiv(w)
-    return w
+        weight = weight * (torch.abs(weight) >= beta).to(torch.float)
+    return weight
 
 class BitwiseLinear(nn.Module):
     '''
@@ -162,18 +156,19 @@ class BitwiseLinear(nn.Module):
         clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
+        layer_in = x
         if self.in_bin is not None:
-            x = self.in_bin(x)
-        weight = self.weight
-        if self.use_gate:
-            weight = drop_weights(self.weight, self.gate, self.weight_bin)
-        w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
-        out = F.linear(x, w, self.bias)
+            layer_in = self.in_bin(layer_in)
+        weight = drop_weights(self.weight, gate=self.gate,
+            binactiv=self.weight_bin, beta=self.beta)
+        if self.weight_bin:
+            w = self.weight_bin(weight)
+        layer_out = F.linear(layer_in, w, self.bias)
         if self.adaptive_scaling:
             in_scale = torch.abs(x).mean(1, keepdim=True)
             weight_scale = torch.abs(weight).mean(1)
-            return in_scale * weight_scale * out
-        return out
+            return in_scale * weight_scale * layer_out
+        return layer_out
 
     def __repr__(self):
         return 'BitwiseLinear({}, {}, use_gate={})'.format(self.input_size,
@@ -209,21 +204,22 @@ class BitwiseConv1d(nn.Conv1d):
         '''
         x (batch size, channels, length)
         '''
+        layer_in = x
         if self.in_bin is not None:
-            x = self.in_bin(x)
-        weight = self.weight
-        if self.use_gate:
-            weight = drop_weights(self.weight, self.gate, self.weight_bin)
-        w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
-        out = F.conv1d(x, w, self.bias,
+            layer_in = self.in_bin(layer_in)
+        weight = drop_weights(self.weight, gate=self.gate,
+            binactiv=self.weight_bin, beta=self.beta)
+        if self.weight_bin:
+            w = self.weight_bin(weight)
+        layer_out = F.conv1d(layer_in, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
         if self.adaptive_scaling:
             in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
             weight_scale = torch.abs(weight).mean(1).mean(1)
             weight_scale = weight_scale.unsqueeze(1)
-            return weight_scale * in_scale * out
-        return out
+            return weight_scale * in_scale * layer_out
+        return layer_out
 
     def __repr__(self):
         return 'BitwiseConv1d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={})'.format(self.in_channels,
@@ -261,21 +257,22 @@ class BitwiseConv2d(nn.Conv2d):
         '''
         x (batch size, channels, height, width)
         '''
+        layer_in = x
         if self.in_bin is not None:
-            x = self.in_bin(x)
-        weight = self.weight
-        if self.use_gate:
-            weight = drop_weights(self.weight, self.gate, self.weight_bin)
-        w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
-        out = F.conv2d(x, w, self.bias,
+            layer_in = self.in_bin(layer_in)
+        weight = drop_weights(self.weight, gate=self.gate,
+            binactiv=self.weight_bin, beta=self.beta)
+        if self.weight_bin:
+            w = self.weight_bin(weight)
+        layer_out = F.conv2d(layer_in, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
         if self.adaptive_scaling:
             in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
             weight_scale = torch.abs(weight).mean(1).mean(1).mean(1)
             weight_scale = weight_scale.unsqueeze(1).unsqueeze(1)
-            return weight_scale * in_scale * out
-        return out
+            return weight_scale * in_scale * layer_out
+        return layer_out
 
     def __repr__(self):
         return 'BitwiseConv2d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={})'.format(
@@ -315,21 +312,22 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         '''
         x (batch size, channels, length)
         '''
+        layer_in = x
         if self.in_bin is not None:
-            x = self.in_bin(x)
-        weight = self.weight
-        if self.use_gate:
-            weight = drop_weights(self.weight, self.gate, self.weight_bin)
-        w = get_effective_weight(weight, self.weight_bin, beta=self.beta)
-        out = F.conv_transpose1d(x, w, self.bias,
+            layer_in = self.in_bin(layer_in)
+        weight = drop_weights(self.weight, gate=self.gate,
+            binactiv=self.weight_bin, beta=self.beta)
+        if self.weight_bin:
+            w = self.weight_bin(weight)
+        layer_out = F.conv_transpose1d(layer_in, w, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
         if self.adaptive_scaling:
             in_scale = self.scale_conv(torch.abs(x).mean(1, keepdim=True))
             weight_scale = torch.abs(weight).mean(0).mean(1)
             weight_scale = weight_scale.unsqueeze(1)
-            return in_scale * weight_scale * out
-        return out
+            return in_scale * weight_scale * layer_out
+        return layer_out
 
     def __repr__(self):
         return 'BitwiseConvTranspose1d({}, {}, {}, stride={}, padding={}, groups={}, use_gate={}, dilation={})'.format(
