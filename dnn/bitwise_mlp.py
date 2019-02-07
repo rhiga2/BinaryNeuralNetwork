@@ -66,6 +66,7 @@ class BitwiseMLP(nn.Module):
             if i < self.num_layers - 1:
                 if self.activation is not None:
                     x = self.activation(x)
+                    print(i, torch.std(x, dim=0))
                 if self.use_batchnorm:
                     x = self.bn_list[i](x)
                 if self.dropout > 0:

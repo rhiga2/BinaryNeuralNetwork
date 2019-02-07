@@ -77,8 +77,7 @@ def main():
     train_data = datasets.MNIST('/media/data/MNIST', train=True,
         transform=trans, download=True)
     val_data = datasets.MNIST('/media/data/MNIST', train=False,
-        transform=trans),
-        download=True)
+        transform=trans, download=True)
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
@@ -116,6 +115,9 @@ def main():
             model.eval()
             val_accuracy, val_loss = evaluate(model, val_dl, loss=loss, device=device,
                 clip_weights=False)
+            print(model.bn_list[0].running_var)
+            print(model.bn_list[1].running_var)
+            print(model.bn_list[2].running_var)
             print('Val Cost: ', val_loss, val_accuracy)
             loss_metrics.update(train_loss, train_accuracy, val_loss,
                 val_accuracy, period=args.period)
