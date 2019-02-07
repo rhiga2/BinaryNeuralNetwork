@@ -68,11 +68,13 @@ def main():
     # Make model and dataset
     vis = visdom.visdom(port=5801)
     flatten = lambda x : x.view(-1)
+    trans = transforms.Compose([transforms.ToTensor(),
+            transforms.Normalize((0.5,), (1.0,)),
+            flatten])
     train_data = datasets.MNIST('/media/data/MNIST', train=True,
-        transform=transforms.Compose([transforms.ToTensor(), flatten]),
-        download=True)
+        transform=trans, download=True)
     val_data = datasets.MNIST('/media/data/MNIST', train=False,
-        transform=transforms.Compose([transforms.ToTensor(), flatten]),
+        transform=trans),
         download=True)
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
