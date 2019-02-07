@@ -182,7 +182,7 @@ def main():
             print('SIR: ', sir)
             print('SAR: ', sar)
             loss_metrics.update(train_loss, val_loss,
-                sdr, sir, sar, output_period=args.period)
+                sdr, sir, sar, period=args.period)
             bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['{} Loss'.format(args.exp),
                 '{} BSS Eval'.format(args.exp)])
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
