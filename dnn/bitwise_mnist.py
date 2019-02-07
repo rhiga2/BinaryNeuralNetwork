@@ -10,13 +10,13 @@ from torch.utils.data import Dataset, DataLoader
 import math
 import numpy as np
 import dnn.bitwise_mlp as bitwise_mlp
-import dnn.binary_layers import binary_layers
+import dnn.binary_layers as binary_layers
 import loss_and_metrics.image_classification as image_classification
 import visdom
 import argparse
 
 def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
-    dtype=torch.float, train=True):
+    dtype=torch.float, train=True, clip_weights=False):
     running_loss = 0
     running_accuracy = 0
     for batch_idx, (data, target) in enumerate(dl):
@@ -33,6 +33,8 @@ def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cp
         if optimizer:
             cost.backward()
             optimizer.step()
+            if clip_weights:
+                model.clip_weights()
     return running_accuracy / len(dl.dataset), running_loss / len(dl.dataset)
 
 def main():
@@ -54,6 +56,7 @@ def main():
     parser.add_argument('--weight_bin', '-wb', default='identity')
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', default=0.1)
+    parser.add_argument('--clip_weights', '-cw', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -65,7 +68,7 @@ def main():
     print('On device: ', device)
 
     # Make model and dataset
-    vis = visdom.visdom(port=5801)
+    vis = visdom.Visdom(port=5801)
     flatten = lambda x : x.view(-1)
     train_data = datasets.MNIST('/media/data/MNIST', train=True,
         transform=transforms.Compose([transforms.ToTensor(), flatten]),
@@ -82,7 +85,7 @@ def main():
         activation=F.relu, dropout=args.dropout,
         sparsity=args.sparsity, use_gate=args.use_gate,
         adaptive_scaling=args.adaptive_scaling, in_bin=in_bin,
-        weight_bin=weight_bin, use_batchnorm=True, bn_momentum=True)
+        weight_bin=weight_bin, use_batchnorm=True, bn_momentum=args.bn_momentum)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
 
@@ -103,16 +106,17 @@ def main():
         model.update_betas()
         model.train()
         train_accuracy, train_loss = evaluate(model, train_dl, optimizer,
-            loss=loss, device=device)
+            loss=loss, device=device, clip_weights=args.clip_weights)
 
         if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss, train_accuracy)
             model.eval()
-            val_accuracy, val_loss = evaluate(model, val_dl, loss=loss, device=device)
+            val_accuracy, val_loss = evaluate(model, val_dl, loss=loss, device=device,
+                clip_weights=False)
             print('Val Cost: ', val_loss, val_accuracy)
             loss_metrics.update(train_loss, train_accuracy, val_loss,
-                val_accuracy, period=period)
-            image_classifcation.train_plot(vis, loss_metrics, eid='Ryley',
+                val_accuracy, period=args.period)
+            image_classification.train_plot(vis, loss_metrics, eid='Ryley',
                 win=['{} Loss'.format(args.exp), '{} Accuracy'.format(args.exp)])
 
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
