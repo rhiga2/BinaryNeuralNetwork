@@ -48,6 +48,7 @@ def main():
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--period', '-p', type=int, default=1)
+    parser.add_argument('--decay_period', '-dp', type=int, default=10)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--exp', '-exp', default='temp')
@@ -118,11 +119,11 @@ def main():
                 val_accuracy, period=args.period)
             image_classification.train_plot(vis, loss_metrics, eid='Ryley',
                 win=['{} Loss'.format(args.exp), '{} Accuracy'.format(args.exp)])
-
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
+
+        if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
             lr *= args.lr_decay
-            optimizer = optim.Adam(model.parameters(), lr=lr,
-                weight_decay=args.weight_decay)
+            optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
 if __name__ == '__main__':
     main()
