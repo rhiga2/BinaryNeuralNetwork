@@ -127,18 +127,16 @@ def drop_weights(weight, gate=None, binactiv=None, beta=0):
         weight = weight * (torch.abs(weight) >= beta).to(torch.float)
     return weight
 
-class BitwiseLinear(nn.Module):
+class BitwiseLinear(nn.Linear):
     '''
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
     def __init__(self, input_size, output_size, use_gate=False,
         adaptive_scaling=False, in_bin=None,
         weight_bin=None):
-        super(BitwiseLinear, self).__init__()
+        super(BitwiseLinear, self).__init__(input_size, output_size, bias=True)
         self.input_size = input_size
         self.output_size = output_size
-        self.weight = init_weight((output_size, input_size))
-        self.bias = nn.Parameter(torch.zeros(output_size), requires_grad=True)
         self.in_bin = in_bin
         self.weight_bin = weight_bin
         self.use_gate = use_gate
@@ -161,7 +159,7 @@ class BitwiseLinear(nn.Module):
             layer_in = self.in_bin(layer_in)
         w = drop_weights(self.weight, gate=self.gate,
             binactiv=self.weight_bin, beta=self.beta)
-        if self.weight_bin:
+        if self.weight_bin is not None:
             w = self.weight_bin(w)
         layer_out = F.linear(layer_in, w, self.bias)
         if self.adaptive_scaling:
