@@ -53,8 +53,7 @@ def main():
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--exp', '-exp', default='temp')
     parser.add_argument('--use_gate', '-ug', action='store_true')
-    parser.add_argument('--in_bin', '-ib', default='identity')
-    parser.add_argument('--weight_bin', '-wb', default='identity')
+    parser.add_argument('--binactiv', '-ba', default='identity')
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.1)
     parser.add_argument('--clip_weights', '-cw', action='store_true')
@@ -81,13 +80,12 @@ def main():
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
-    in_bin = binary_layers.pick_activation(args.in_bin)
-    weight_bin = binary_layers.pick_activation(args.weight_bin)
+    binactiv = binary_layers.pick_activation(args.binactiv)
     model = bitwise_mlp.BitwiseMLP(784, 10, fc_sizes=[2048, 2048, 2048],
         activation=F.relu, dropout=args.dropout,
         sparsity=args.sparsity, use_gate=args.use_gate,
-        adaptive_scaling=args.adaptive_scaling, in_bin=in_bin,
-        weight_bin=weight_bin, use_batchnorm=True, bn_momentum=args.bn_momentum)
+        adaptive_scaling=args.adaptive_scaling, binactiv=binactiv,
+        bn_momentum=args.bn_momentum)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
 

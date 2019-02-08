@@ -108,10 +108,8 @@ def main():
 
     parser.add_argument('--sparsity', '-s', type=float, default=0)
     parser.add_argument('--use_gate', '-ug', action='store_true')
-    parser.add_argument('--use_batchnorm', '-ub', action='store_true')
     parser.add_argument('--activation', '-a', default='tanh')
-    parser.add_argument('--weight_bin', '-wb', default='tanh')
-    parser.add_argument('--in_bin', '-ib', default='tanh')
+    parser.add_argument('--binactiv', '-ba', default='identity')
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.1)
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
@@ -133,8 +131,7 @@ def main():
     loss_metrics = bss_eval.LossMetrics()
 
     activation = binary_layers.pick_activation(args.activation)
-    weight_bin = binary_layers.pick_activation(args.weight_bin)
-    in_bin = binary_layers.pick_activation(args.in_bin)
+    binactiv = binary_layers.pick_activation(args.binactiv)
 
     # Make model and dataset
     train_dl, valset, rawset = binary_data.get_binary_data(args.batchsize, toy=args.toy)
@@ -145,10 +142,8 @@ def main():
         dropout=args.dropout,
         sparsity=args.sparsity,
         use_gate=args.use_gate,
-        use_batchnorm=args.use_batchnorm,
         activation=activation,
-        weight_bin=weight_bin,
-        in_bin=in_bin,
+        binactiv=binactiv,
         bn_momentum=args.bn_momentum,
         adaptive_scaling=args.adaptive_scaling
     )

@@ -20,14 +20,12 @@ def unflatten(x, batch, time, permutation=(0, 2, 1)):
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
         sparsity=0, use_gate=False, activation=None,
-        in_bin=None, weight_bin=None,
-        use_batchnorm=True, bn_momentum=0.1, adaptive_scaling=False):
+        binactiv=None, bn_momentum=0.1, adaptive_scaling=False):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
         self.activation = activation
-        self.use_batchnorm = use_batchnorm
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
@@ -41,14 +39,13 @@ class BitwiseMLP(nn.Module):
         for i, osize in enumerate(fc_sizes):
             self.filter_list.append(
                 binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
-                in_bin=in_bin, weight_bin=weight_bin,
+                binactiv=binactiv,
                 adaptive_scaling=adaptive_scaling)
             )
             if i < self.num_layers - 1:
                 if dropout > 0:
                     self.dropout_list.append(nn.Dropout(dropout))
-                if self.use_batchnorm:
-                    self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
+                self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
             isize = osize
         self.sparsity = sparsity
 
@@ -68,8 +65,7 @@ class BitwiseMLP(nn.Module):
                     x = self.activation(x)
                 if self.dropout > 0:
                     x = self.dropout_list[i](x)
-                if self.use_batchnorm:
-                    x = self.bn_list[i](x)
+                x = self.bn_list[i](x)
         return x
 
     def clip_weights(self):

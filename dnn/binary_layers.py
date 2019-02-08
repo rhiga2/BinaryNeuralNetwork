@@ -91,11 +91,6 @@ def pick_activation(activation_name):
 
     return activation
 
-def add_logistic_noise(x, sigma=0.1):
-    u = torch.rand_like(x)
-    x = x + sigma * (torch.log(u) - torch.log(1 - u))
-    return x
-
 def init_weight(size, gain=1, one_sided=False):
     w = torch.empty(size)
     nn.init.xavier_uniform_(w, gain=gain)
@@ -121,24 +116,30 @@ def binarize_gate(gate, binactiv):
     return (binactiv(gate) + 1) / 2
 
 def drop_weights(weight, gate=None, binactiv=None, beta=0):
-    if binactiv is not None and gate is not None:
+    if gate is not None:
         return weight * binarize_gate(gate, binactiv)
     if beta != 0:
         weight = weight * (torch.abs(weight) >= beta).to(torch.float)
     return weight
+
+def binarize_weights_and_inputs(x, weight, gate=None, binactiv=None, beta=0):
+    if binactiv is not None:
+        x = binactiv(x)
+        weight = drop_weights(weight, gate=gate, binactiv=binactiv,
+            beta=beta)
+        weight = binactiv(weight)
+    return x, weight
 
 class BitwiseLinear(nn.Linear):
     '''
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
     def __init__(self, input_size, output_size, use_gate=False,
-        adaptive_scaling=False, in_bin=None,
-        weight_bin=None):
+        adaptive_scaling=False, binactiv=None):
         super(BitwiseLinear, self).__init__(input_size, output_size, bias=True)
         self.input_size = input_size
         self.output_size = output_size
-        self.in_bin = in_bin
-        self.weight_bin = weight_bin
+        self.binactiv = binactiv
         self.use_gate = use_gate
         self.gate = None
         if use_gate:
@@ -154,14 +155,9 @@ class BitwiseLinear(nn.Linear):
         clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
-        layer_in = x
-        if self.in_bin is not None:
-            layer_in = self.in_bin(layer_in)
-        w = drop_weights(self.weight, gate=self.gate,
-            binactiv=self.weight_bin, beta=self.beta)
-        if self.weight_bin is not None:
-            w = self.weight_bin(w)
-        layer_out = F.linear(layer_in, w, self.bias)
+        layer_in, weight = binarize_weights_and_inputs(x, self.weight, self.gate,
+            self.binactiv, beta=self.beta)
+        layer_out = F.linear(layer_in, weight, self.bias)
         if self.adaptive_scaling:
             in_scale = torch.abs(x).mean(1, keepdim=True)
             weight_scale = torch.abs(self.weight).mean(1)
@@ -175,13 +171,12 @@ class BitwiseLinear(nn.Linear):
 class BitwiseConv1d(nn.Conv1d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        adaptive_scaling=False, in_bin=None, weight_bin=None):
+        adaptive_scaling=False, binactiv=None):
         super(BitwiseConv1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, dilation=dilation, groups=groups)
         self.use_gate = use_gate
-        self.in_bin = in_bin
-        self.weight_bin = weight_bin
+        self.binactiv = binactiv
         self.gate = None
         if use_gate:
             self.gate = init_weight(self.weight.size(), one_sided=True)
@@ -202,14 +197,9 @@ class BitwiseConv1d(nn.Conv1d):
         '''
         x (batch size, channels, length)
         '''
-        layer_in = x
-        if self.in_bin is not None:
-            layer_in = self.in_bin(layer_in)
-        w = drop_weights(self.weight, gate=self.gate,
-            binactiv=self.weight_bin, beta=self.beta)
-        if self.weight_bin:
-            w = self.weight_bin(w)
-        layer_out = F.conv1d(layer_in, w, self.bias,
+        layer_in, weight = binarize_weights_and_inputs(x, self.weight, self.gate,
+            self.binactiv, beta=self.beta)
+        layer_out = F.conv1d(layer_in, weight, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
         if self.adaptive_scaling:
@@ -227,14 +217,12 @@ class BitwiseConv1d(nn.Conv1d):
 class BitwiseConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        in_bin=None, weight_bin=None, adaptive_scaling=False):
+        binactiv=None, adaptive_scaling=False):
         super(BitwiseConv2d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation
         )
         self.use_gate = use_gate
-        self.in_bin = in_bin
-        self.weight_bin = weight_bin
         self.gate = None
         if use_gate:
             self.gate = init_weight(self.weight.size(), one_sided=True)
@@ -255,14 +243,9 @@ class BitwiseConv2d(nn.Conv2d):
         '''
         x (batch size, channels, height, width)
         '''
-        layer_in = x
-        if self.in_bin is not None:
-            layer_in = self.in_bin(layer_in)
-        w = drop_weights(self.weight, gate=self.gate,
-            binactiv=self.weight_bin, beta=self.beta)
-        if self.weight_bin:
-            w = self.weight_bin(w)
-        layer_out = F.conv2d(layer_in, w, self.bias,
+        layer_in, weight = binarize_weights_and_inputs(x, self.weight, self.gate,
+            self.binactiv, beta=self.beta)
+        layer_out = F.conv2d(layer_in, weight, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
         if self.adaptive_scaling:
@@ -281,16 +264,14 @@ class BitwiseConv2d(nn.Conv2d):
 class BitwiseConvTranspose1d(nn.ConvTranspose1d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, use_gate=False,
-        dilation=1, adaptive_scaling=False, in_bin=None,
-        weight_bin=None):
+        dilation=1, adaptive_scaling=False, binactiv=None):
         super(BitwiseConvTranspose1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation
         )
         self.use_gate = use_gate
         self.gate = None
-        self.in_bin = in_bin
-        self.weight_bin = weight_bin
+        self.binactiv = binactiv
         if use_gate:
             self.gate = init_weight(self.weight.size(), one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
@@ -310,14 +291,9 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         '''
         x (batch size, channels, length)
         '''
-        layer_in = x
-        if self.in_bin is not None:
-            layer_in = self.in_bin(layer_in)
-        w = drop_weights(self.weight, gate=self.gate,
-            binactiv=self.weight_bin, beta=self.beta)
-        if self.weight_bin:
-            w = self.weight_bin(w)
-        layer_out = F.conv_transpose1d(layer_in, w, self.bias,
+        layer_in, weight = binarize_weights_and_inputs(x, self.weight, self.gate,
+            self.binactiv, beta=self.beta)
+        layer_out = F.conv_transpose1d(layer_in, weight, self.bias,
             stride=self.stride, padding=self.padding, groups=self.groups,
             dilation=self.dilation)
         if self.adaptive_scaling:

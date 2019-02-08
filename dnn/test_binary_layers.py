@@ -1,21 +1,24 @@
 import unittest
 import torch
+import torch.nn as nn
+import torch.optim as optim
 import numpy as np
 from binary_layers import *
 
 class TestBinaryLayers(unittest.TestCase):
     def setUp(self):
         # Create dataset
-        self.linear1 = BitwiseLinear(3, 3, use_gate=False, adaptive_scaling=True,
-            in_bin=clipped_ste, weight_bin=clipped_ste)
-        linear1_weight = torch.FloatTensor([
+        self.blinear = BitwiseLinear(3, 3, use_gate=False, adaptive_scaling=True,
+            binactiv=clipped_ste)
+        linear_weight = 0.1 * torch.FloatTensor([
             [1, 2, 0],
             [3, 1, 2],
             [0, -1, 2]
         ])
-        self.linear1.weight = nn.Parameter(0.1 * linear1_weight)
+        self.blinear.weight = nn.Parameter(linear_weight)
+        self.blinear.bias = nn.Parameter(torch.zeros_like(self.blinear.bias.data))
 
-    def test_no_drop(self):
+    def test_nodrop(self):
         x = torch.FloatTensor([
             [0.2, -0.3, 0.5],
             [-0.4, 0.1, 0.3],
@@ -64,15 +67,24 @@ class TestBinaryLayers(unittest.TestCase):
         '''
         x = torch.FloatTensor([
             [1, 2, 3],
-            [4,- 5, 6]
+            [4, -5, 6]
         ])
         y = 0.1 * torch.FloatTensor([
             [4, 12, 0],
             [0, 10, 10]
         ])
-        y_hat = self.linear1(x)
+        y_hat = self.blinear(x)
         self.assertTrue(torch.all(torch.eq(y, y_hat)))
 
+    def test_no_binactiv(self):
+        x = torch.FloatTensor([
+            [0.2, -0.3, 0.5],
+            [-0.4, 0.1, 0.3],
+            [0.5, -0.15, 0.12]
+        ])
+        x_hat, w_hat = binarize_weights_and_inputs(x, self.blinear.weight)
+        self.assertTrue(torch.all(torch.eq(x, x_hat)))
+        self.assertTrue(torch.all(torch.eq(self.blinear.weight, w_hat)))
 
 if __name__ == '__main__':
     unittest.main()
