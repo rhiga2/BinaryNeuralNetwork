@@ -101,6 +101,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
     loss_metrics = image_classification.LossMetrics()
 
+    max_accuracy = 0
     for epoch in range(args.epochs):
         total_cost = 0
         model.update_betas()
@@ -118,7 +119,9 @@ def main():
                 val_accuracy, period=args.period)
             image_classification.train_plot(vis, loss_metrics, eid='Ryley',
                 win=['{} Loss'.format(args.exp), '{} Accuracy'.format(args.exp)])
-            torch.save(model.state_dict(), '../models/' + args.exp + '.model')
+            if val_accuracy > max_accuracy:
+                max_accuracy = val_accuracy
+                torch.save(model.state_dict(), '../models/' + args.exp + '.model')
 
         if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
             lr *= args.lr_decay
