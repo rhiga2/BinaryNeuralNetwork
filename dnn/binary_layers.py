@@ -165,8 +165,8 @@ class BitwiseLinear(nn.Linear):
         return layer_out
 
     def __repr__(self):
-        return 'BitwiseLinear({}, {}, use_gate={})'.format(self.input_size,
-        self.output_size, self.use_gate)
+        return 'BitwiseLinear({}, {}, use_gate={}, adaptive_scaling={})'.format(self.input_size,
+        self.output_size, self.use_gate, self.adaptive_scaling)
 
 class BitwiseConv1d(nn.Conv1d):
     def __init__(self, in_channels, out_channels, kernel_size,
@@ -210,9 +210,10 @@ class BitwiseConv1d(nn.Conv1d):
         return layer_out
 
     def __repr__(self):
-        return 'BitwiseConv1d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={})'.format(self.in_channels,
+        return 'BitwiseConv1d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={}, adaptive_scaling={})'.format(
+        self.in_channels,
         self.out_channels, self.kernel_size, self.stride, self.padding,
-        self.groups, self.dilation, self.use_gate)
+        self.groups, self.dilation, self.use_gate, self.adaptive_scaling)
 
 class BitwiseConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,
@@ -256,10 +257,10 @@ class BitwiseConv2d(nn.Conv2d):
         return layer_out
 
     def __repr__(self):
-        return 'BitwiseConv2d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={})'.format(
+        return 'BitwiseConv2d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={}, adaptive_scaling={})'.format(
         self.in_channels, self.out_channels, self.kernel_size,
         self.stride, self.padding, self.groups, self.dilation,
-        self.use_gate)
+        self.use_gate, self.adaptive_scaling)
 
 class BitwiseConvTranspose1d(nn.ConvTranspose1d):
     def __init__(self, in_channels, out_channels, kernel_size,
@@ -304,6 +305,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         return layer_out
 
     def __repr__(self):
-        return 'BitwiseConvTranspose1d({}, {}, {}, stride={}, padding={}, groups={}, use_gate={}, dilation={})'.format(
+        return 'BitwiseConvTranspose1d({}, {}, {}, stride={}, padding={}, groups={}, use_gate={}, dilation={}, adaptive_scaling={})'.format(
         self.in_channels, self.out_channels, self.kernel_size, self.stride,
-        self.padding, self.groups, self.use_gate, self.dilation)
+        self.padding, self.groups, self.use_gate, self.dilation,
+        self.adaptive_scaling)
