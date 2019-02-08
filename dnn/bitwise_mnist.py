@@ -15,13 +15,13 @@ import loss_and_metrics.image_classification as image_classification
 import visdom
 import argparse
 
-def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
-    dtype=torch.float, train=True, clip_weights=False):
+def forward(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
+    dtype=torch.float, clip_weights=False):
     running_loss = 0
     running_accuracy = 0
+    if optimizer:
+        optimizer.zero_grad()
     for batch_idx, (data, target) in enumerate(dl):
-        if optimizer:
-            optimizer.zero_grad()
         data = data.to(device=device)
         target  = target.to(device=device)
         estimate = model(data)
@@ -33,6 +33,7 @@ def evaluate(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cp
         if optimizer:
             cost.backward()
             optimizer.step()
+            optimizer.zero_grad()
             if clip_weights:
                 model.clip_weights()
     return running_accuracy / len(dl.dataset), running_loss / len(dl.dataset)
@@ -105,15 +106,14 @@ def main():
     for epoch in range(args.epochs):
         total_cost = 0
         model.update_betas()
-        model.train()
-        train_accuracy, train_loss = evaluate(model, train_dl, optimizer,
+        model.forward()
+        train_accuracy, train_loss = forward(model, train_dl, optimizer,
             loss=loss, device=device, clip_weights=args.clip_weights)
 
         if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss, train_accuracy)
             model.eval()
-            val_accuracy, val_loss = evaluate(model, val_dl, loss=loss, device=device,
-                clip_weights=False)
+            val_accuracy, val_loss = forward(model, val_dl, loss=loss, device=device)
             print('Val Cost: ', val_loss, val_accuracy)
             loss_metrics.update(train_loss, train_accuracy, val_loss,
                 val_accuracy, period=args.period)
