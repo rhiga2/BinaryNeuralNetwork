@@ -72,7 +72,7 @@ def main():
     vis = visdom.Visdom(port=5801)
     flatten = lambda x : x.view(-1)
     trans = transforms.Compose([transforms.ToTensor(),
-            transforms.Normalize((0.5,), (1.0,)),
+            transforms.Normalize((0,), (1.0,)),
             flatten])
     train_data = datasets.MNIST('/media/data/MNIST', train=True,
         transform=trans, download=True)
@@ -115,9 +115,6 @@ def main():
             model.eval()
             val_accuracy, val_loss = evaluate(model, val_dl, loss=loss, device=device,
                 clip_weights=False)
-            print(model.bn_list[0].running_var)
-            print(model.bn_list[1].running_var)
-            print(model.bn_list[2].running_var)
             print('Val Cost: ', val_loss, val_accuracy)
             loss_metrics.update(train_loss, train_accuracy, val_loss,
                 val_accuracy, period=args.period)

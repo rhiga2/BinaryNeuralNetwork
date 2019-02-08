@@ -45,10 +45,10 @@ class BitwiseMLP(nn.Module):
                 adaptive_scaling=adaptive_scaling)
             )
             if i < self.num_layers - 1:
-                if self.use_batchnorm:
-                    self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
                 if dropout > 0:
                     self.dropout_list.append(nn.Dropout(dropout))
+                if self.use_batchnorm:
+                    self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
             isize = osize
         self.sparsity = sparsity
 
@@ -66,11 +66,10 @@ class BitwiseMLP(nn.Module):
             if i < self.num_layers - 1:
                 if self.activation is not None:
                     x = self.activation(x)
-                    print(i, torch.std(x, dim=0))
+                if self.dropout > 0:
+                    x = self.dropout_list[i](x)
                 if self.use_batchnorm:
                     x = self.bn_list[i](x)
-                if self.dropout > 0:
-                    x - self.dropout_list[i](x)
         return x
 
     def clip_weights(self):
