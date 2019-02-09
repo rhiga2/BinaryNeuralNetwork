@@ -38,16 +38,13 @@ class BitwiseMLP(nn.Module):
             self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
             self.filter_list.append(
-                nn.Linear(isize, osize)
-                # binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
-                # binactiv=binactiv,
-                # adaptive_scaling=adaptive_scaling)
+                binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
+                binactiv=binactiv, adaptive_scaling=adaptive_scaling)
             )
-            if i < self.num_layers - 1:
-                if dropout > 0:
-                    self.dropout_list.append(nn.Dropout(dropout))
-                self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
+            if i < self.num_layers - 1 and dropout > 0:
+                self.dropout_list.append(nn.Dropout(dropout))
             isize = osize
+            self.bn_list.append(nn.BatchNorm1d(isize, momentum=bn_momentum))
         self.sparsity = sparsity
 
     def forward(self, x):
@@ -59,15 +56,16 @@ class BitwiseMLP(nn.Module):
             - time is the sequence length
             - channels is the number of input channels = num bits in qad
         '''
+        h = x
         for i in range(self.num_layers):
-            x = self.filter_list[i](x)
+            h = self.filter_list[i](h)
             if i < self.num_layers - 1:
                 if self.activation is not None:
-                    x = self.activation(x)
+                    h = self.activation(h)
                 if self.dropout > 0:
-                    x = self.dropout_list[i](x)
-                x = self.bn_list[i](x)
-        return x
+                    h = self.dropout_list[i](h)
+            h = self.bn_list[i](h)
+        return h
 
     def clip_weights(self):
         for layer in self.filter_list:
