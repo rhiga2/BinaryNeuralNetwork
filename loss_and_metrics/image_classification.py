@@ -71,5 +71,5 @@ def train_plot(vis, loss_metrics, eid=None, win=[None, None]):
     )
     vis._send(dict(data=data2, layout=layout2, win=win, eid=eid))
 
-def plot_weights(vis, weights, numbins=30, win='temp'):
-    vis.histogram(X=np.random.rand(10000), opts=dict(numbins=numbins), win=win)
+def plot_weights(vis, weights, numbins=30, win='temp', title='temp'):
+    vis.histogram(X=weights, opts=dict(title=title, numbins=numbins), win=win)

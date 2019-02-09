@@ -45,7 +45,7 @@ def main():
     parser.add_argument('--batchsize', '-b', type=int, default=16,
                         help='Training batch size')
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
-    parser.add_argument('--lr_decay', '-lrd', type=float, default=0.9)
+    parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
     parser.add_argument('--dropout', '-dropout', type=float, default=0)
     parser.add_argument('--period', '-p', type=int, default=1)
@@ -73,7 +73,7 @@ def main():
     vis = visdom.Visdom(port=5801)
     flatten = lambda x : x.view(-1)
     trans = transforms.Compose([transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,),
+            transforms.Normalize((0.1307,), (0.3081,)),
             flatten])
     data = datasets.MNIST('/media/data/MNIST', train=True,
         transform=trans, download=True)
@@ -104,7 +104,6 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
     loss_metrics = image_classification.LossMetrics()
 
-    max_accuracy = 0
     for epoch in range(args.epochs):
         total_cost = 0
         model.update_betas()
@@ -119,15 +118,14 @@ def main():
             print('Val Cost: ', val_loss, val_accuracy)
             loss_metrics.update(train_loss, train_accuracy, val_loss,
                 val_accuracy, period=args.period)
-            image_classification.train_plot(vis, loss_metrics, eid='Ryley',
+            image_classification.train_plot(vis, loss_metrics, eid=None,
                 win=['{} Loss'.format(args.exp), '{} Accuracy'.format(args.exp)])
-            if val_accuracy > max_accuracy:
-                max_accuracy = val_accuracy
-                torch.save(model.state_dict(), '../models/' + args.exp + '.model')
+            torch.save(model.state_dict(), '../models/' + args.exp + '.model')
             for i in range(model.num_layers):
+                title = 'Weight {}'.format(i)
                 image_classification.plot_weights(vis,
-                model.filter_list[i].weight,
-                numbins=30, win='Weight {}'.plot_weights(i))
+                    model.filter_list[i].weight.data.view(-1),
+                    numbins=30, title=title, win=title)
 
         if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
             lr *= args.lr_decay
