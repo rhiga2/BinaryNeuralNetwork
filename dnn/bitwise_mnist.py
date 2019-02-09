@@ -73,7 +73,7 @@ def main():
     vis = visdom.Visdom(port=5801)
     flatten = lambda x : x.view(-1)
     trans = transforms.Compose([transforms.ToTensor(),
-            transforms.Normalize((0,), (1.0,)),
+            transforms.Normalize((0.1307,), (0.3081,),
             flatten])
     data = datasets.MNIST('/media/data/MNIST', train=True,
         transform=trans, download=True)
@@ -112,7 +112,7 @@ def main():
         train_accuracy, train_loss = forward(model, train_dl, optimizer,
             loss=loss, device=device, clip_weights=args.clip_weights)
 
-        if epoch % args.period == 0:
+        if (epoch+1) % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss, train_accuracy)
             model.eval()
             val_accuracy, val_loss = forward(model, val_dl, loss=loss, device=device)
@@ -124,11 +124,15 @@ def main():
             if val_accuracy > max_accuracy:
                 max_accuracy = val_accuracy
                 torch.save(model.state_dict(), '../models/' + args.exp + '.model')
+            for i in range(model.num_layers):
+                image_classification.plot_weights(vis,
+                model.filter_list[i].weight,
+                numbins=30, win='Weight {}'.plot_weights(i))
 
         if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
             lr *= args.lr_decay
-            print(lr)
-            optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+            optimizer = optim.Adam(model.parameters(), lr=lr,
+                weight_decay=args.weight_decay)
 
 if __name__ == '__main__':
     main()

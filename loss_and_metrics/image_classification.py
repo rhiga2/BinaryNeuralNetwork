@@ -69,4 +69,7 @@ def train_plot(vis, loss_metrics, eid=None, win=[None, None]):
         yaxis=dict(autorange=True, title='Accuracy'),
         title=win[1]
     )
-    vis._send(dict(data=data2, layout=layout2, win=win[1], eid=eid))
+    vis._send(dict(data=data2, layout=layout2, win=win, eid=eid))
+
+def plot_weights(vis, weights, numbins=30, win='temp'):
+    vis.histogram(X=np.random.rand(10000), opts=dict(numbins=numbins), win=win)
