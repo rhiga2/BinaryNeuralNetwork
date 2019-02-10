@@ -11,30 +11,31 @@ import math
 import numpy as np
 import dnn.binary_layers as binary_layers
 import datasets.quantized_data import quantized_data
+import loss_and_metrics.image_classification as image_classification
 import visdom
 import argparse
 
 class BitwiseBasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, use_gate=False,
-            downsample=None, in_bin=binary_layers.identity,
-            weight_bin=binary_layers.identity):
+            downsample=None, binactiv=None, adaptive_scaling=False):
         super(BitwiseBasicBlock, self).__init__()
         self.conv1 = binary_layers.BitwiseConv2d(in_channels, out_channels, 3,
-        stride=stride, padding=1, in_bin=in_bin, weight_bin=weight_bin,
-        use_gate=use_gate, adaptive_scaling=True)
+        stride=stride, padding=1, binactiv=binactiv,
+        use_gate=use_gate, adaptive_scaling=adaptive_scaling)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.conv2 = binary_layers.BitwiseConv2d(out_channels, out_channels, 3,
-        stride=stride, padding=1, in_bin=in_bin, weight_bin=weight_bin,
-        use_gate=use_gate, adaptive_scaling=True)
+        stride=stride, padding=1, binactiv=binactiv, weight_bin=weight_bin,
+        use_gate=use_gate, adaptive_scaling=adaptive_scaling)
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.downsample=downsample
-        self.relu = nn.ReLU(inplace=True)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.relu2 = nn.ReLU(inplace=True)
 
     def forward(self, x):
         super(BitwiseResnet18, self).__init__()
         identity = x
         out = self.conv1(x)
-        out = self.relu(out)
+        out = self.relu1(out)
         out = self.bn1(out)
         out = self.conv2(x)
 
@@ -42,16 +43,15 @@ class BitwiseBasicBlock(nn.Module):
             identity = self.downsample(x)
 
         out += identity
-        out = self.relu(x)
+        out = self.relu2(x)
         out = self.bn2(out)
         return out
 
 class BitwiseResnet18(nn.Module):
-    def __init__(self, in_bin=binary_layers.identity,
-        weight_bin=binary_layers.identity, use_gate=False):
+    def __init__(self, binactiv=None, use_gate=False, num_classes=10,
+        adaptive_scaling=False):
         super(BitwiseResnet18, self).__init__()
-        self.in_bin = in_bin
-        self.weight_bin = weight_bin
+        self.binactiv = binactiv
         self.use_gate = use_gate
         self.conv1 = binary_layers.BitwiseConv2d(3, 64, kernel_size=7, stride=2,
         padding=3, bias=False)
@@ -63,9 +63,9 @@ class BitwiseResnet18(nn.Module):
         self.layer3 = self._make_layer(128, 256, stride=2)
         self.layer4 = self.make_layer(256, 512, stride=2)
         self.avgpool = nn.AdaptiveAvgPool1d((1, 1)) # convert to binary
+        self.adaptive_scaling = adaptive_scaling
         self.fc = BitwiseLinear(512, num_classes, use_gate=self.use_gate,
-            adaptive_scaling=True, in_bin=binary_layers.clipped_ste,
-            weight_bin=binary_layers.clipped_ste)
+            adaptive_scaling=adaptive_scaling, binactiv=binactiv)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -85,32 +85,31 @@ class BitwiseResnet18(nn.Module):
         if stride != 1 or in_channels != out_channels:
             downsample = nn.Sequential(
                 binary_layers.BitwiseConv2d(in_channels, out_channels, 1,
-                    stride=stride, padding=1, in_bin=self.in_bin,
-                    weight_bin=self.weight_bin, use_gate=self.use_gate,
-                    adaptive_scaling=True),
+                    stride=stride, padding=1, binactiv=self.binactiv, use_gate=self.use_gate,
+                    adaptive_scaling=self.adaptive_scaling),
                 nn.BatchNorm2d(out_channels)
             )
         layers = []
         layers.append(BitwiseBasicBlock(in_channels, out_channels, stride=stride,
-            use_gate=self.use_gate, downsample=downsample, in_bin=self.in_bin,
-            weight_bin=self.weight_bin))
+            use_gate=self.use_gate, downsample=downsample, binactiv=self.binactiv,
+            adaptive_scaling=self.adaptive_scaling))
         layers.append(BitwiseBasicBlock(out_channels, out_channels, use_gate=self.use_gate,
-            in_bin=self.in_bin, weight_bin=self.weight_bin))
+            binactiv=self.binactiv, adaptive_scaling=self.adaptive_scaling))
         return nn.Sequential(*layers)
 
     def load_pretrained_state_dict(self, state_dict):
         state = self.state_dict()
         for name, param in state_dict.items():
             if state[name].size() == param.size():
-                state[name].copy_(param)
+                state[name].data.copy_(param)
 
-def evaluate(model, dl, optimizer=None, loss=F.mse_loss,
-    device=torch.device('cpu'), dtype=torch.float, train=True):
+def forward(model, dl, optimizer=None, loss=F.mse_loss,
+    device=torch.device('cpu'), dtype=torch.float, clip_weights=False):
     running_loss = 0
     running_accuracy = 0
+    if optimizer:
+        optimizer.zero_grad()
     for batch_idx, (data, target) in enumerate(dl):
-        if optimizer:
-            optimizer.zero_grad()
         data = data.to(device=device)
         target  = target.to(device=device)
         estimate = model(data)
@@ -121,7 +120,10 @@ def evaluate(model, dl, optimizer=None, loss=F.mse_loss,
         running_loss += cost.item() * data.size(0)
         if optimizer:
             cost.backward()
+            optimizer.zero_grad()
             optimizer.step()
+            if clip_weights:
+                model.clip_weights()
     return running_accuracy / len(dl.dataset), running_loss / len(dl.dataset)
 
 def main():
@@ -130,43 +132,44 @@ def main():
                         help='Number of epochs')
     parser.add_argument('--batchsize', '-b', type=int, default=16,
                         help='Training batch size')
+    parser.add_argument('--device', '-d', type=int, default=0)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
-    parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--period', '-p', type=int, default=1)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--pretrained', '-pt', action='store_true')
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
     parser.add_argument('--exp', '-exp', default='temp')
     parser.add_argument('--use_gate', '-ug', action='store_true')
-    parser.add_argument('--in_bin', '-ib', default='identity')
-    parser.add_argument('--weight_bin', '-wb', default='identity')
+    parser.add_argument('--binactiv', '-ba', default='identity')
+    parser.add_argument('--decay_period', '-dp', type=int, default=10)
+    parser.add_argument('--adaptive_scaling', '-as', action='store_true')
+    parser.add_argument('--clip_weights', '-cw', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
     dtype = torch.float32
     if torch.cuda.is_available():
-        device = torch.device('cuda:0')
+        device = torch.device('cuda:'+ str(args.device))
     else:
         device = torch.device('cpu')
     print('On device: ', device)
 
     # Make model and dataset
-    flatten = lambda x : x.view(-1)
+    trans = transforms.Compose([transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     train_data = datasets.CIFAR10('/media/data/CIFAR10', train=True,
-        transform=transforms.Compose([transforms.ToTensor(), flatten]),
-        download=True)
+        transform=trans, download=True)
     val_data = datasets.CIFAR10('/media/data/CIFAR10', train=False,
-        transform=transforms.Compose([transforms.ToTensor(), flatten]),
-        download=True)
+        transform=trans, download=True)
+    print(torch.max(train_data[0][0]), torch.min(train_data[0][0]))
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
-    in_bin = binary_layers.pick_activation(args.in_bin)
-    weight_bin = binary_layers.pick_activation(args.weight_bin)
-    model = BitwiseResnet18(in_bin=in_bin, weight_bin=weight_bin,
-        num_classes=10)
+    binactiv = binary_layers.pick_activation(args.binactiv)
+    model = BitwiseResnet18(binactiv=binactiv, num_classes=10,
+        adaptive_scaling=args.adaptive_scaling)
 
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
@@ -183,20 +186,30 @@ def main():
 
     # Initialize optimizer
     lr = args.learning_rate
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=lr,
+        weight_decay=args.weight_decay)
+    loss_metrics = image_classification.LossMetrics()
 
     for epoch in range(args.epochs):
         total_cost = 0
         model.update_betas()
         model.train()
-        train_accuracy, train_loss = evaluate(model, train_dl, optimizer, loss=loss, device=device)
+        train_accuracy, train_loss = forward(model, train_dl, optimizer, loss=loss,
+            device=device)
 
-        if epoch % args.period == 0:
+        if (epoch+1) % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss, train_accuracy)
             model.eval()
-            val_accuracy, val_loss = evaluate(model, val_dl, loss=loss, device=device)
+            val_accuracy, val_loss = forward(model, val_dl, loss=loss,
+                device=device, clip_weights=args.clip_weights)
             print('Val Cost: ', val_loss, val_accuracy)
+            loss_metrics.update(train_loss, train_accuracy, val_loss,
+                val_accuracy, period=args.period)
+            image_classification.train_plot(vis, loss_metrics, eid=None,
+                win=['{} Loss'.format(args.exp), '{} Accuracy'.format(args.exp)])
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
+
+        if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)
