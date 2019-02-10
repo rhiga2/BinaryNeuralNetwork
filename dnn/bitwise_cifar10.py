@@ -65,8 +65,9 @@ class BitwiseResnet18(nn.Module):
         self.layer4 = self._make_layer(256, 512, stride=2)
         self.avgpool = nn.AdaptiveAvgPool1d((1, 1)) # convert to binary
         self.adaptive_scaling = adaptive_scaling
-        self.fc = BitwiseLinear(512, num_classes, use_gate=self.use_gate,
-            adaptive_scaling=adaptive_scaling, binactiv=binactiv)
+        self.fc = binary_layers.BitwiseLinear(512, num_classes,
+            use_gate=self.use_gate, adaptive_scaling=adaptive_scaling,
+            binactiv=binactiv)
 
     def forward(self, x):
         x = self.conv1(x)
