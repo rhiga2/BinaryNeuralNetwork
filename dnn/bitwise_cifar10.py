@@ -10,7 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 import math
 import numpy as np
 import dnn.binary_layers as binary_layers
-import datasets.quantized_data import quantized_data
+import datasets.quantized_data as quantized_data
 import loss_and_metrics.image_classification as image_classification
 import visdom
 import argparse
@@ -24,7 +24,7 @@ class BitwiseBasicBlock(nn.Module):
         use_gate=use_gate, adaptive_scaling=adaptive_scaling)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.conv2 = binary_layers.BitwiseConv2d(out_channels, out_channels, 3,
-        stride=stride, padding=1, binactiv=binactiv, weight_bin=weight_bin,
+        stride=stride, padding=1, binactiv=binactiv,
         use_gate=use_gate, adaptive_scaling=adaptive_scaling)
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.downsample=downsample
@@ -51,6 +51,7 @@ class BitwiseResnet18(nn.Module):
     def __init__(self, binactiv=None, use_gate=False, num_classes=10,
         adaptive_scaling=False):
         super(BitwiseResnet18, self).__init__()
+        self.adaptive_scaling = adaptive_scaling
         self.binactiv = binactiv
         self.use_gate = use_gate
         self.conv1 = binary_layers.BitwiseConv2d(3, 64, kernel_size=7, stride=2,
@@ -61,7 +62,7 @@ class BitwiseResnet18(nn.Module):
         self.layer1 = self._make_layer(64, 64)
         self.layer2 = self._make_layer(64, 128, stride=2)
         self.layer3 = self._make_layer(128, 256, stride=2)
-        self.layer4 = self.make_layer(256, 512, stride=2)
+        self.layer4 = self._make_layer(256, 512, stride=2)
         self.avgpool = nn.AdaptiveAvgPool1d((1, 1)) # convert to binary
         self.adaptive_scaling = adaptive_scaling
         self.fc = BitwiseLinear(512, num_classes, use_gate=self.use_gate,
@@ -102,6 +103,7 @@ class BitwiseResnet18(nn.Module):
         for name, param in state_dict.items():
             if state[name].size() == param.size():
                 state[name].data.copy_(param)
+                print('Loaded {}'.format(name))
 
 def forward(model, dl, optimizer=None, loss=F.mse_loss,
     device=torch.device('cpu'), dtype=torch.float, clip_weights=False):
@@ -158,7 +160,7 @@ def main():
 
     # Make model and dataset
     trans = transforms.Compose([transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     train_data = datasets.CIFAR10('/media/data/CIFAR10', train=True,
         transform=trans, download=True)
     val_data = datasets.CIFAR10('/media/data/CIFAR10', train=False,
