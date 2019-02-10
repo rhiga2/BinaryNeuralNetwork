@@ -80,6 +80,7 @@ def main():
     val_size = int(0.1*len(data))
     train_size = len(data) - val_size
     train_data, val_data = torch.utils.data.random_split(data, (train_size, val_size))
+    print(torch.max(train_data[0][0]), torch.min(train_data[0][0]))
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
