@@ -135,8 +135,8 @@ class BitwiseLinear(nn.Linear):
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
     def __init__(self, input_size, output_size, use_gate=False,
-        adaptive_scaling=False, binactiv=None):
-        super(BitwiseLinear, self).__init__(input_size, output_size, bias=True)
+        adaptive_scaling=False, binactiv=None, bias=True):
+        super(BitwiseLinear, self).__init__(input_size, output_size, bias=bias)
         self.input_size = input_size
         self.output_size = output_size
         self.binactiv = binactiv
@@ -171,10 +171,10 @@ class BitwiseLinear(nn.Linear):
 class BitwiseConv1d(nn.Conv1d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        adaptive_scaling=False, binactiv=None):
+        adaptive_scaling=False, binactiv=None, bias=True):
         super(BitwiseConv1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
-            padding=padding, dilation=dilation, groups=groups)
+            padding=padding, dilation=dilation, groups=groups, bias=bias)
         self.use_gate = use_gate
         self.binactiv = binactiv
         self.gate = None
@@ -218,10 +218,10 @@ class BitwiseConv1d(nn.Conv1d):
 class BitwiseConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        binactiv=None, adaptive_scaling=False):
+        binactiv=None, adaptive_scaling=False, bias=True):
         super(BitwiseConv2d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
-            padding=padding, groups=groups, dilation=dilation
+            padding=padding, groups=groups, dilation=dilation, bias=bias
         )
         self.use_gate = use_gate
         self.gate = None
@@ -265,10 +265,10 @@ class BitwiseConv2d(nn.Conv2d):
 class BitwiseConvTranspose1d(nn.ConvTranspose1d):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, use_gate=False,
-        dilation=1, adaptive_scaling=False, binactiv=None):
+        dilation=1, adaptive_scaling=False, binactiv=None, bias=True):
         super(BitwiseConvTranspose1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
-            padding=padding, groups=groups, dilation=dilation
+            padding=padding, groups=groups, dilation=dilation, bias=True
         )
         self.use_gate = use_gate
         self.gate = None

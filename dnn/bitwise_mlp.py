@@ -20,7 +20,8 @@ def unflatten(x, batch, time, permutation=(0, 2, 1)):
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
         sparsity=0, use_gate=False, activation=None,
-        binactiv=None, bn_momentum=0.1, adaptive_scaling=False):
+        binactiv=None, bn_momentum=0.1, adaptive_scaling=False,
+        bias=True):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
@@ -39,7 +40,7 @@ class BitwiseMLP(nn.Module):
         for i, osize in enumerate(fc_sizes):
             self.filter_list.append(
                 binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
-                binactiv=binactiv, adaptive_scaling=adaptive_scaling)
+                binactiv=binactiv, adaptive_scaling=adaptive_scaling, bias=bias)
             )
             if i < self.num_layers - 1 and dropout > 0:
                 self.dropout_list.append(nn.Dropout(dropout))

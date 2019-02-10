@@ -145,7 +145,8 @@ def main():
         activation=activation,
         binactiv=binactiv,
         bn_momentum=args.bn_momentum,
-        adaptive_scaling=args.adaptive_scaling
+        adaptive_scaling=args.adaptive_scaling,
+        bias=False
     )
 
     if args.load_file:

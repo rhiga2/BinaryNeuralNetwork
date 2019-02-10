@@ -89,7 +89,7 @@ def main():
         activation=F.relu, dropout=args.dropout,
         sparsity=args.sparsity, use_gate=args.use_gate,
         adaptive_scaling=args.adaptive_scaling, binactiv=binactiv,
-        bn_momentum=args.bn_momentum)
+        bn_momentum=args.bn_momentum, bias=False)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
 
