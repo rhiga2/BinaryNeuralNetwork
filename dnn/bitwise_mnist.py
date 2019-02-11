@@ -86,7 +86,7 @@ def main():
 
     binactiv = binary_layers.pick_activation(args.binactiv)
     model = bitwise_mlp.BitwiseMLP(784, 10, fc_sizes=[2048, 2048, 2048],
-        activation=F.relu, dropout=args.dropout,
+        dropout=args.dropout,
         sparsity=args.sparsity, use_gate=args.use_gate,
         scale_weights=args.scale_weights, binactiv=binactiv,
         bn_momentum=args.bn_momentum, bias=False, num_binarizations=2)

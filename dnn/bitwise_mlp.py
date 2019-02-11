@@ -25,7 +25,6 @@ class BitwiseMLP(nn.Module):
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
-        self.activation = activation
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
@@ -52,7 +51,7 @@ class BitwiseMLP(nn.Module):
                     self.dropout_list.append(nn.Dropout(dropout, inplace=True))
                 self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
             isize = osize
-        self.scale = ScaleLayer(osize)
+        self.scale = binary_layers.ScaleLayer(osize)
         self.sparsity = sparsity
 
     def forward(self, x):

@@ -199,7 +199,7 @@ class BitwiseConv1d(nn.Conv1d):
         self.scale_conv = nn.Conv1d(1, 1, kernel_size, stride=stride,
             padding=padding, dilation=dilation)
         weight = self.scale_conv.weight
-        weight = 1 / (np.prod(weight)) * torch.ones_like(weight)
+        weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
         self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
         self.scale_weights = scale_weights
         self.num_binarizations = num_binarizations
@@ -248,7 +248,7 @@ class BitwiseConv2d(nn.Conv2d):
         self.scale_conv = nn.Conv2d(1, 1, kernel_size, stride=stride,
             padding=padding, dilation=dilation, bias=False)
         weight = self.scale_conv.weight
-        weight = 1 / (np.prod(weight)) * torch.ones_like(weight)
+        weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
         self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
         self.scale_weights = scale_weights
         self.num_binarizations = num_binarizations
@@ -263,7 +263,7 @@ class BitwiseConv2d(nn.Conv2d):
         '''
         x (batch size, channels, height, width)
         '''
-        inputs, weight = binarize_weights_and_inputs(x, weight, gate=self.gate,
+        inputs, weight = binarize_weights_and_inputs(x, self.weight, gate=self.gate,
             binactiv=self.binactiv, beta=self.beta, scale_conv=self.scale_conv,
             num_binarizations=self.num_binarizations,
             scale_weights=self.scale_weights)
@@ -299,7 +299,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
         self.scale_conv = nn.ConvTranspose1d(1, 1, kernel_size,
             stride=stride, padding=padding, dilation=dilation, bias=False)
         weight = self.scale_conv.weight
-        weight = 1 / (np.prod(weight)) * torch.ones_like(weight)
+        weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
         self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
         self.scale_weights = scale_weights
         self.num_binarizations = num_binarizations
@@ -320,7 +320,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d):
             scale_weights=self.scale_weights)
         layer_out = 0
         for layer_in in inputs:
-            layer_out += F.conv_transpose1d(layer_in, weight, self.bias,
+            layer_out += F.conv_transpose1d(layer_in, self.weight, self.bias,
                 stride=self.stride, padding=self.padding, groups=self.groups,
                 dilation=self.dilation)
         return layer_out

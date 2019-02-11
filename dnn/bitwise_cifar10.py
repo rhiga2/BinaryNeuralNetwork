@@ -63,19 +63,19 @@ class BitwiseResnet18(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.bn1 = nn.BatchNorm2d(64, momentum=bn_momentum)
         self.bn_momentum = bn_momentum
+        self.dropout = dropout
+        self.num_binarizations = num_binarizations
         self.layer1 = self._make_layer(64, 64)
+        self.scale_weights = scale_weights
         self.layer2 = self._make_layer(64, 128, stride=1)
         self.layer3 = self._make_layer(128, 256, stride=1)
         self.layer4 = self._make_layer(256, 512, stride=1)
-        self.dropout = dropout
         self.dropout_layer = nn.Dropout(p=dropout, inplace=True)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) # convert to binary
-        self.scale_weights = scale_weights
-        self.num_binarizations = num_binarizations
         self.fc = binary_layers.BitwiseLinear(512, num_classes,
             use_gate=self.use_gate, scale_weights=scale_weights,
             binactiv=binactiv, num_binarizations=num_binarizations)
-        self.scale = ScaleLayer(num_classes)
+        self.scale = binary_layers.ScaleLayer(num_classes)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -155,7 +155,7 @@ def main():
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--pretrained', '-pt', action='store_true')
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
-    parser.add_argument('--dropout', '-droput', type=float, default=0)
+    parser.add_argument('--dropout', '-do', type=float, default=0)
     parser.add_argument('--exp', '-exp', default='temp')
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--binactiv', '-ba', default='identity')
