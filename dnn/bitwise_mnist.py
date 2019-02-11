@@ -73,7 +73,7 @@ def main():
     vis = visdom.Visdom(port=5801)
     flatten = lambda x : x.view(-1)
     trans = transforms.Compose([transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,)),
+            transforms.Normalize((0.5,), (0.5,)),
             flatten])
     data = datasets.MNIST('/media/data/MNIST', train=True,
         transform=trans, download=True)

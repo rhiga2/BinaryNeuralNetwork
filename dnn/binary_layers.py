@@ -225,6 +225,7 @@ class BitwiseConv2d(nn.Conv2d):
         )
         self.use_gate = use_gate
         self.gate = None
+        self.binactiv = binactiv
         if use_gate:
             self.gate = init_weight(self.weight.size(), one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
