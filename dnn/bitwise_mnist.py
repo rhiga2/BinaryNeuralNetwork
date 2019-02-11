@@ -55,7 +55,7 @@ def main():
     parser.add_argument('--exp', '-exp', default='temp')
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--binactiv', '-ba', default='identity')
-    parser.add_argument('--adaptive_scaling', '-as', action='store_true')
+    parser.add_argument('--scale_weights', '-sw', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.1)
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     args = parser.parse_args()
@@ -88,8 +88,8 @@ def main():
     model = bitwise_mlp.BitwiseMLP(784, 10, fc_sizes=[2048, 2048, 2048],
         activation=F.relu, dropout=args.dropout,
         sparsity=args.sparsity, use_gate=args.use_gate,
-        adaptive_scaling=args.adaptive_scaling, binactiv=binactiv,
-        bn_momentum=args.bn_momentum, bias=False)
+        scale_weights=args.scale_weights, binactiv=binactiv,
+        bn_momentum=args.bn_momentum, bias=False, num_binarizations=2)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
 
