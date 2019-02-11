@@ -63,7 +63,6 @@ class BitwiseResnet18(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.bn1 = nn.BatchNorm2d(64, momentum=bn_momentum)
         self.bn_momentum = bn_momentum
-        self.dropout = dropout
         self.layer1 = self._make_layer(64, 64)
         self.layer2 = self._make_layer(64, 128, stride=1)
         self.layer3 = self._make_layer(128, 256, stride=1)
@@ -89,6 +88,7 @@ class BitwiseResnet18(nn.Module):
         x = self.layer4(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
+        x = self.dropout_layer(x)
         return self.scale(self.fc(x))
 
     def _make_layer(self, in_channels, out_channels, stride=1):
@@ -155,6 +155,7 @@ def main():
     parser.add_argument('--load_file', '-lf', type=str, default=None)
     parser.add_argument('--pretrained', '-pt', action='store_true')
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
+    parser.add_argument('--dropout', '-droput', type=float, default=0)
     parser.add_argument('--exp', '-exp', default='temp')
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--binactiv', '-ba', default='identity')
@@ -187,7 +188,8 @@ def main():
     vis = visdom.Visdom(port=5801)
     binactiv = binary_layers.pick_activation(args.binactiv)
     model = BitwiseResnet18(binactiv=binactiv, num_classes=10,
-        scale_weights=args.scale_weights, bn_momentum=args.bn_momentum)
+        scale_weights=args.scale_weights, bn_momentum=args.bn_momentum,
+        dropout=args.dropout)
     print(model)
 
     if args.load_file:
