@@ -57,16 +57,15 @@ class BitwiseResnet18(nn.Module):
         self.scale_weights = scale_weights
         self.binactiv = binactiv
         self.use_gate = use_gate
-        self.conv1 = binary_layers.BitwiseConv2d(3, 64, kernel_size=7, stride=2,
+        self.conv1 = binary_layers.BitwiseConv2d(3, 64, kernel_size=7, stride=1,
             padding=3, bias=False)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.relu = nn.ReLU(inplace=True)
         self.bn1 = nn.BatchNorm2d(64, momentum=bn_momentum)
         self.bn_momentum = bn_momentum
-        self.layer1 = self._make_layer(64, 64)
-        self.layer2 = self._make_layer(64, 128, stride=1)
-        self.layer3 = self._make_layer(128, 256, stride=1)
-        self.layer4 = self._make_layer(256, 512, stride=1)
+        self.layer1 = self._make_layer(64, 64, stride=1)
+        self.layer2 = self._make_layer(64, 128, stride=2)
+        self.layer3 = self._make_layer(128, 256, stride=2)
+        self.layer4 = self._make_layer(256, 512, stride=2)
         self.dropout = dropout
         self.dropout_layer = nn.Dropout(p=dropout, inplace=True)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) # convert to binary
@@ -79,7 +78,6 @@ class BitwiseResnet18(nn.Module):
 
     def forward(self, x):
         x = self.conv1(x)
-        x = self.maxpool(x)
         x = self.relu(x)
         x = self.bn1(x)
         x = self.layer1(x)
