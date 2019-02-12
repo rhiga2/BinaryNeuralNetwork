@@ -17,7 +17,7 @@ import argparse
 
 class BitwiseBasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, use_gate=False,
-            downsample=None, binactiv=None, scale_weights=False,
+            downsample=None, binactiv=None, scale_weights=None,
             bn_momentum=0.1, num_binarizations=1, dropout=0.2):
         super(BitwiseBasicBlock, self).__init__()
         self.conv1 = binary_layers.BitwiseConv2d(in_channels, out_channels, 3,
@@ -52,7 +52,7 @@ class BitwiseBasicBlock(nn.Module):
 
 class BitwiseResnet18(nn.Module):
     def __init__(self, binactiv=None, use_gate=False, num_classes=10,
-        scale_weights=False, bn_momentum=0.1, num_binarizations=1, dropout=0.2):
+        scale_weights=None, bn_momentum=0.1, num_binarizations=1, dropout=0.2):
         super(BitwiseResnet18, self).__init__()
         self.scale_weights = scale_weights
         self.binactiv = binactiv
@@ -158,7 +158,6 @@ def main():
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--binactiv', '-ba', default='identity')
     parser.add_argument('--decay_period', '-dp', type=int, default=10)
-    parser.add_argument('--scale_weights', '-sw', action='store_true')
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default='0.1')
     args = parser.parse_args()
@@ -172,10 +171,18 @@ def main():
     print('On device: ', device)
 
     # Make model and dataset
-    trans = transforms.Compose([transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    ])
+    test_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    ])
     data = datasets.CIFAR10('/media/data/CIFAR10', train=True,
-        transform=trans, download=True)
+        transform=transform_train, download=True)
     val_size = int(0.1*len(data))
     train_size = len(data) - val_size
     train_data, val_data = torch.utils.data.random_split(data, (train_size, val_size))

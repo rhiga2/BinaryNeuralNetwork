@@ -1,10 +1,12 @@
+import sys , os
+sys.path.append('../')
+
 import torch
 import torch.nn as nn
 from torch.autograd import Function
 import torch.nn.functional as F
 import numpy as np
-import math
-from abc import ABC, abstractmethod
+from abc import ABC
 
 class BitwiseActivation(Function):
     @staticmethod
@@ -39,16 +41,16 @@ class STE(Function):
         x = ctx.saved_tensors[0]
         return grad_output
 
-class STE_Tanh(Function):
+class TanhSTE(Function):
     @staticmethod
     def forward(ctx, x):
         ctx.save_for_backward(x)
-        return torch.tanh(x)
+        return torch.sign(x)
 
     @staticmethod
     def backward(ctx, grad_output):
         x = ctx.saved_tensors[0]
-        return grad_output
+        return grad_output * (1 - torch.tanh(x)**2)
 
 class HardTanh(Function):
     @staticmethod
@@ -61,15 +63,36 @@ class HardTanh(Function):
         x = ctx.saved_tensors[0]
         return torch.clamp(grad_output, -1, 1)
 
+class SignSwissSTE(Function):
+    @staticmethod
+    def forward(ctx, x, beta):
+        ctx.saved_for_backward(x)
+        ctx.saved_for_backward(beta)
+        return torch.sign(x)
+
+    @staticmethod
+    def _sign_swish_back_helper(x, beta):
+        numer = beta * (2 - beta*x*torch.tanh(beta*x/2))
+        denom = 1 + torch.cosh(beta * x)
+        return numer / denom
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_tensors[0]
+        beta = ctx.saved_tensors[1]
+        back_helper = _sign_swish_back_helper(x, beta)
+        back_helper = grad_output * back_helper
+        return beta * back_helper, torch.sum(x * back_helper)
+
 def softsign(ctx, x, gamma):
-    ctx.save_for_backward(x)
     return x / (torch.abs(x) + gamma)
 
 bitwise_activation = BitwiseActivation.apply
 clipped_ste = ClippedSTE.apply
 ste = STE.apply
-ste_tanh = STE_Tanh.apply
+tanh_ste = TanhSTE.apply
 hard_tanh = HardTanh.apply
+signswiss_ste = SignSwissSTE.apply
 
 def pick_activation(activation_name):
     if activation_name == 'ste':
@@ -82,8 +105,8 @@ def pick_activation(activation_name):
         activation = F.relu
     elif activation_name == 'tanh':
         activation = torch.tanh
-    elif activation_name == 'ste_tanh':
-        activation = ste_tanh
+    elif activation_name == 'tanh_ste':
+        activation = tanh_ste
     elif activation_name == 'hard_tanh':
         activation = hard_tanh
     elif activation_name == 'identity':
@@ -98,129 +121,120 @@ def init_weight(size, gain=1, one_sided=False):
     w = nn.Parameter(w, requires_grad=True)
     return w
 
-def update_beta(weight, sparsity):
-    if sparsity == 0:
-        return
-    w = weight.cpu().data.numpy()
-    beta = torch.tensor(np.percentile(np.abs(w), sparsity),
-        dtype=weight.dtype, device=weight.device)
-    return nn.Parameter(beta, requires_grad=False)
-
-def clip_weights(weight, gate, use_gate=False):
-    weight.data.clamp_(-1, 1)
-    if use_gate:
-        gate.data.clamp_(-1, 1)
-
-def binarize_gate(gate, binactiv):
-    return (binactiv(gate) + 1) / 2
-
-def drop_weights(weight, gate=None, binactiv=None, beta=0):
-    if gate is not None:
-        return weight * binarize_gate(gate, binactiv)
-    if beta != 0:
-        weight = weight * (torch.abs(weight) >= beta).to(torch.float)
-    return weight
-
-def binarize_weights_and_inputs(x, weight, gate=None, binactiv=None, beta=0,
-    scale_conv=None, num_binarizations=1, scale_weights=False):
-    activations = [x]
-    if binactiv is not None:
-        weight = drop_weights(weight, gate=gate, binactiv=binactiv,
-            beta=beta)
-        residual = x
-        activations = []
-        for _ in range(num_binarizations):
-            bin_x = binactiv(residual)
-            x_scale = torch.abs(x).mean(1, keepdim=True)
-            if scale_conv:
-                x_scale = scale_con(x_scale)
-            activations.append(x_scale * bin_x)
-            residual = x - x_scale * bin_x
-
-        if scale_weights:
-            weight_scale = torch.abs(weight)
-            for i in range(len(weight.size()) - 1):
-                weight_scale = weight_scale.mean(-1, keepdim=True)
-            weight = weight_scale * binactiv(weight)
-        else:
-            weight = binactiv(weight)
-
-    return activations, weight
-
-class BitwiseLinear(nn.Linear):
-    '''
-    Linear/affine operation using bitwise (Kim et al.) scheme
-    '''
-    def __init__(self, input_size, output_size, use_gate=False,
-        binactiv=None, bias=True, scale_weights=False, num_binarizations=1):
-        super(BitwiseLinear, self).__init__(input_size, output_size, bias=bias)
-        self.input_size = input_size
-        self.output_size = output_size
+class BitwiseAbstractClass(ABC):
+    def initialize(self, binactiv=None, use_gate=False, num_binarizations=1,
+        scale_weights=None):
+        '''
+        You must call parent module __init__ function before calling this
+        function.
+        '''
+        self.bitwise = True
         self.binactiv = binactiv
-        self.use_gate = use_gate
         self.gate = None
         if use_gate:
-            self.gate = init_weight((output_size, input_size), one_sided=True)
+            self.gate = init_weight(self.weight, one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
             requires_grad=False)
         self.num_binarizations = num_binarizations
+        self.scale_conv = None
         self.scale_weights = scale_weights
+        if self.scale_weights == 'learnable':
+            self.alpha = nn.Parameter(torch.ones(self.weight.size(0)))
+            for i in range(len(self.weight.size()) - 1):
+                self.alpha = self.alpha.unsqueeze(-1)
 
     def update_beta(self, sparsity):
-        self.beta = update_beta(self.weight, sparsity)
+        if sparsity == 0:
+            return
+        w = self.weight.cpu().data.numpy()
+        beta = torch.tensor(np.percentile(np.abs(w), sparsity),
+            dtype=weight.dtype, device=weight.device)
+        self.beta = nn.Parameter(beta, requires_grad=False)
 
     def clip_weights(self):
-        clip_weights(self.weight, self.gate, self.use_gate)
+        self.weight.data.clamp_(-1, 1)
+
+    def drop_weights(self):
+        weight = self.weight
+        if self.gate is not None:
+            weight = weight*self.binarize_gate()
+        if self.beta != 0:
+            weight = weight*(torch.abs(weight) >= self.beta).to(torch.float)
+        return weight
+
+    def binarize_gate(self):
+        return (self.binactiv(self.gate) + 1) / 2
+
+    def binarize_inputs(self, x):
+        activations = [x]
+        if self.binactiv is not None:
+            weight = self.drop_weights()
+            residual = x
+            activations = []
+            for _ in range(self.num_binarizations):
+                x_bin = self.binactiv(residual)
+                x_scale = torch.abs(residual).mean(1, keepdim=True)
+                if self.scale_conv:
+                    x_scale = self.scale_conv(x_scale)
+                estimate = x_scale * x_bin
+                activations.append(estimate)
+                residual = x - estimate
+        return activations
+
+    def binarize_weights(self):
+        weight = self.binactiv(self.weight)
+        if self.scale_weights == 'average':
+            weight_scale = torch.abs(self.weight)
+            for i in range(len(self.weight.size()) - 1):
+                weight_scale = weight_scale.mean(-1, keepdim=True)
+            weight = weight_scale * weight
+        elif self.scale_weights == 'learnable':
+            weight = self.alpha * weight
+        return weight
+
+class BitwiseLinear(nn.Linear, BitwiseAbstractClass):
+    '''
+    Linear/affine operation using bitwise (Kim et al.) scheme
+    '''
+    def __init__(self, input_size, output_size, bias=True, use_gate=False,
+        binactiv=None, scale_weights=None, num_binarizations=1):
+        super().__init__(input_size, output_size, bias=bias)
+        super().initialize(binactiv=binactiv, use_gate=use_gate,
+            scale_weights=scale_weights, num_binarizations=num_binarizations)
 
     def forward(self, x):
-        inputs, weight = binarize_weights_and_inputs(x, self.weight, gate=self.gate,
-            binactiv=self.binactiv, beta=self.beta, scale_conv=None,
-            num_binarizations=self.num_binarizations,
-            scale_weights=self.scale_weights)
+        inputs = self.binarize_inputs(x)
+        weight = self.binarize_weights()
         layer_out = 0
         for layer_in in inputs:
             layer_out += F.linear(layer_in, weight, self.bias)
         return layer_out
 
     def __repr__(self):
-        return 'BitwiseLinear({}, {}, use_gate={})'.format(self.input_size,
-        self.output_size, self.use_gate)
+        return super(BitwiseLinear, self).repr()
 
-class BitwiseConv1d(nn.Conv1d):
+class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        binactiv=None, bias=True, scale_weights=False, num_binarizations=1):
-        super(BitwiseConv1d, self).__init__(
+        binactiv=None, bias=True, scale_weights=None, num_binarizations=1):
+        super().__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, dilation=dilation, groups=groups, bias=bias)
-        self.use_gate = use_gate
-        self.binactiv = binactiv
-        self.gate = None
-        if use_gate:
-            self.gate = init_weight(self.weight.size(), one_sided=True)
-        self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
-            requires_grad=False)
+        super().initialize(binactiv=binactiv, use_gate=use_gate,
+            scale_weights=scale_weights, num_binarizations=num_binarizations)
+
         self.scale_conv = nn.Conv1d(1, 1, kernel_size, stride=stride,
             padding=padding, dilation=dilation)
         weight = self.scale_conv.weight
         weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
         self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
-        self.scale_weights = scale_weights
-        self.num_binarizations = num_binarizations
-
-    def update_beta(self, sparsity):
-        self.beta = update_beta(self.weight, sparsity)
-
-    def clip_weights(self):
-        clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
         '''
         x (batch size, channels, length)
         '''
-        inputs, weight = binarize_weights_and_inputs(x, weight, gate=self.gate,
-            binactiv=self.binactiv, beta=self.beta, scale_conv=self.scale_conv,
-            num_binarizations=self.num_binarizations, scale_weights=self.scale_weights)
+        inputs = self.binarize_inputs(x)
+        weight = self.binarize_weights()
         layer_out = 0
         for layer_in in inputs:
             layer_out += F.conv1d(layer_in, weight, self.bias,
@@ -228,49 +242,29 @@ class BitwiseConv1d(nn.Conv1d):
                 dilation=self.dilation)
         return layer_out
 
-    def __repr__(self):
-        return 'BitwiseConv1d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={})'.format(
-        self.in_channels,
-        self.out_channels, self.kernel_size, self.stride, self.padding,
-        self.groups, self.dilation, self.use_gate)
-
-class BitwiseConv2d(nn.Conv2d):
+class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        binactiv=None, bias=True, scale_weights=False, num_binarizations=1):
-        super(BitwiseConv2d, self).__init__(
+        binactiv=None, bias=True, scale_weights=None, num_binarizations=1):
+        super().__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation, bias=bias
         )
-        self.use_gate = use_gate
-        self.gate = None
-        self.binactiv = binactiv
-        if use_gate:
-            self.gate = init_weight(self.weight.size(), one_sided=True)
-        self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
-            requires_grad=False)
+        super().initialize(binactiv=binactiv, use_gate=use_gate,
+            scale_weights=scale_weights, num_binarizations=num_binarizations)
+
         self.scale_conv = nn.Conv2d(1, 1, kernel_size, stride=stride,
             padding=padding, dilation=dilation, bias=False)
         weight = self.scale_conv.weight
         weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
         self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
-        self.scale_weights = scale_weights
-        self.num_binarizations = num_binarizations
-
-    def update_beta(self, sparsity):
-        self.beta = update_beta(self.weight, sparsity)
-
-    def clip_weights(self):
-        clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
         '''
         x (batch size, channels, height, width)
         '''
-        inputs, weight = binarize_weights_and_inputs(x, self.weight, gate=self.gate,
-            binactiv=self.binactiv, beta=self.beta, scale_conv=self.scale_conv,
-            num_binarizations=self.num_binarizations,
-            scale_weights=self.scale_weights)
+        inputs = self.binarize_inputs(x)
+        weight = self.binarize_weights()
         layer_out = 0
         for layer_in in inputs:
             layer_out += F.conv2d(layer_in, weight, self.bias,
@@ -278,61 +272,36 @@ class BitwiseConv2d(nn.Conv2d):
                 dilation=self.dilation)
         return layer_out
 
-    def __repr__(self):
-        return 'BitwiseConv2d({}, {}, {}, stride={}, padding={}, groups={}, dilation={}, use_gate={})'.format(
-        self.in_channels, self.out_channels, self.kernel_size,
-        self.stride, self.padding, self.groups, self.dilation,
-        self.use_gate)
-
-class BitwiseConvTranspose1d(nn.ConvTranspose1d):
+class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, use_gate=False,
-        dilation=1, binactiv=None, bias=True, scale_weight=True,
+        dilation=1, binactiv=None, bias=True, scale_weight=None,
         num_binarizations=1):
         super(BitwiseConvTranspose1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation, bias=bias
         )
-        self.use_gate = use_gate
-        self.gate = None
-        self.binactiv = binactiv
-        if use_gate:
-            self.gate = init_weight(self.weight.size(), one_sided=True)
-        self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
-            requires_grad=False)
+        super().initialize(binactiv=binactiv, use_gate=use_gate,
+            scale_weights=scale_weights, num_binarizations=num_binarizations)
+
         self.scale_conv = nn.ConvTranspose1d(1, 1, kernel_size,
             stride=stride, padding=padding, dilation=dilation, bias=False)
         weight = self.scale_conv.weight
         weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
         self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
-        self.scale_weights = scale_weights
-        self.num_binarizations = num_binarizations
-
-    def update_beta(self, sparsity):
-        self.beta = update_beta(self.weight, sparsity)
-
-    def clip_weights(self):
-        clip_weights(self.weight, self.gate, self.use_gate)
 
     def forward(self, x):
         '''
         x (batch size, channels, length)
         '''
-        inputs, weight = binarize_weights_and_inputs(x, self.weight, self.gate,
-            self.binactiv, beta=self.beta, scale_conv=self.scale_conv,
-            num_binarizations=self.num_binarizations,
-            scale_weights=self.scale_weights)
+        inputs = self.binarize_inputs(x)
+        weight = self.binarize_weights()
         layer_out = 0
         for layer_in in inputs:
             layer_out += F.conv_transpose1d(layer_in, self.weight, self.bias,
                 stride=self.stride, padding=self.padding, groups=self.groups,
                 dilation=self.dilation)
         return layer_out
-
-    def __repr__(self):
-        return 'BitwiseConvTranspose1d({}, {}, {}, stride={}, padding={}, groups={}, use_gate={}, dilation={})'.format(
-        self.in_channels, self.out_channels, self.kernel_size, self.stride,
-        self.padding, self.groups, self.use_gate, self.dilation)
 
 class ScaleLayer(nn.Module):
     def __init__(self, num_channels, len_size=2):
