@@ -129,18 +129,22 @@ def binarize_weights_and_inputs(x, weight, gate=None, binactiv=None, beta=0,
             beta=beta)
         residual = x
         activations = []
-        for i in range(num_binarizations):
+        for _ in range(num_binarizations):
             bin_x = binactiv(residual)
             x_scale = torch.abs(x).mean(1, keepdim=True)
             if scale_conv:
                 x_scale = scale_con(x_scale)
             activations.append(x_scale * bin_x)
             residual = x - x_scale * bin_x
+
         if scale_weights:
             weight_scale = torch.abs(weight)
             for i in range(len(weight.size()) - 1):
                 weight_scale = weight_scale.mean(-1, keepdim=True)
             weight = weight_scale * binactiv(weight)
+        else:
+            weight = binactiv(weight)
+
     return activations, weight
 
 class BitwiseLinear(nn.Linear):
