@@ -162,6 +162,7 @@ class BitwiseAbstractClass(ABC):
                 x_scale = torch.abs(residual).mean(1, keepdim=True)
                 if self.scale_conv:
                     x_scale = self.scale_conv(x_scale)
+                print(x_scale.shape, x_bin.shape)
                 estimate += x_scale * x_bin
                 residual = residual - estimate
         return estimate

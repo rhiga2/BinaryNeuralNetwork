@@ -175,11 +175,11 @@ def main():
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     ])
     test_transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     ])
     train_data = datasets.CIFAR10('/media/data/CIFAR10', train=True,
         transform=train_transform, download=True)
@@ -192,7 +192,7 @@ def main():
     binactiv = binary_layers.pick_activation(args.binactiv)
     model = BitwiseResnet18(binactiv=binactiv, num_classes=10,
         scale_weights=None, bn_momentum=args.bn_momentum,
-        dropout=args.dropout)
+        dropout=args.dropout, num_binarizations=2)
     print(model)
 
     if args.load_file:
