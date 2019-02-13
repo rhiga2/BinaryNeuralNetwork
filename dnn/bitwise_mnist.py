@@ -33,8 +33,7 @@ def forward(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu
             if clip_weights:
                 model.clip_weights()
         correct = torch.argmax(estimate, dim=1) == target
-        accuracy = torch.mean(correct.float())
-        running_accuracy += accuracy.item() * data.size(0)
+        running_accuracy += torch.sum(correct.float())
         running_loss += cost.item() * data.size(0)
     return running_accuracy / len(dl.dataset), running_loss / len(dl.dataset)
 
@@ -85,9 +84,8 @@ def main():
 
     binactiv = binary_layers.pick_activation(args.binactiv)
     model = bitwise_mlp.BitwiseMLP(784, 10, fc_sizes=[2048, 2048, 2048],
-        dropout=args.dropout,
-        sparsity=args.sparsity, use_gate=args.use_gate,
-        scale_weights=None, binactiv=binactiv,
+        dropout=args.dropout, sparsity=args.sparsity,
+        use_gate=args.use_gate, scale_weights=None, binactiv=binactiv,
         bn_momentum=args.bn_momentum, bias=False, num_binarizations=2)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
