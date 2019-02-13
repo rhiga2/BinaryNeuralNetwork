@@ -19,9 +19,9 @@ def forward(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu
     dtype=torch.float, clip_weights=False):
     running_loss = 0
     running_accuracy = 0
-    if optimizer:
-        optimizer.zero_grad()
     for batch_idx, (data, target) in enumerate(dl):
+        if optimizer:
+            optimizer.zero_grad()
         data = data.to(device=device)
         target  = target.to(device=device)
         estimate = model(data)
@@ -29,12 +29,13 @@ def forward(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu
         if optimizer:
             cost.backward()
             optimizer.step()
-            optimizer.zero_grad()
             if clip_weights:
                 model.clip_weights()
         correct = torch.argmax(estimate, dim=1) == target
         running_accuracy += torch.sum(correct.float()).item()
         running_loss += cost.item() * data.size(0)
+    if optimizer:
+        optimizer.zero_grad()
     return running_accuracy / len(dl.dataset), running_loss / len(dl.dataset)
 
 def main():
@@ -73,12 +74,10 @@ def main():
     trans = transforms.Compose([transforms.ToTensor(),
             transforms.Normalize((0.5,), (0.5,)),
             flatten])
-    data = datasets.MNIST('/media/data/MNIST', train=True,
+    train_data = datasets.MNIST('/media/data/MNIST', train=True,
         transform=trans, download=True)
-    val_size = int(0.1*len(data))
-    train_size = len(data) - val_size
-    train_data, val_data = torch.utils.data.random_split(data, (train_size, val_size))
-    print(torch.max(train_data[0][0]), torch.min(train_data[0][0]))
+    val_data = datasets.MNIST('/media/data/MNIST', train=False,
+        transform=trans, download=True)
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
