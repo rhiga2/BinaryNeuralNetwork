@@ -167,14 +167,16 @@ class BitwiseAbstractClass(ABC):
         return estimate
 
     def binarize_weights(self):
-        weight = self.binactiv(self.weight)
-        if self.scale_weights == 'average':
-            weight_scale = torch.abs(self.weight)
-            for i in range(len(self.weight.size()) - 1):
-                weight_scale = weight_scale.mean(-1, keepdim=True)
-            weight = weight_scale * weight
-        elif self.scale_weights == 'learnable':
-            weight = self.alpha * weight
+        weight = self.weight
+        if self.binactiv is not None:
+            weight = self.binactiv(self.weight)
+            if self.scale_weights == 'average':
+                weight_scale = torch.abs(self.weight)
+                for i in range(len(self.weight.size()) - 1):
+                    weight_scale = weight_scale.mean(-1, keepdim=True)
+                weight = weight_scale * weight
+            elif self.scale_weights == 'learnable':
+                weight = self.alpha * weight
         return weight
 
 class BitwiseLinear(nn.Linear, BitwiseAbstractClass):
@@ -192,9 +194,6 @@ class BitwiseLinear(nn.Linear, BitwiseAbstractClass):
         weight = self.binarize_weights()
         return F.linear(layer_in, weight, self.bias)
 
-    def __repr__(self):
-        return super(BitwiseLinear, self).repr()
-
 class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
         stride=1, padding=0, groups=1, dilation=1, use_gate=False,
@@ -208,7 +207,7 @@ class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
         self.scale_conv = nn.Conv1d(1, 1, kernel_size, stride=stride,
             padding=padding, dilation=dilation)
         weight = self.scale_conv.weight
-        weight = 1 / (np.prod(weight)) * torch.ones_like(weight)
+        weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
         self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
 
     def forward(self, x):
@@ -236,7 +235,7 @@ class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
         self.scale_conv = nn.Conv2d(1, 1, kernel_size, stride=stride,
             padding=padding, dilation=dilation, bias=False)
         weight = self.scale_conv.weight
-        weight = 1 / (np.prod(weight)) * torch.ones_like(weight)
+        weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
         self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
 
     def forward(self, x):
@@ -264,7 +263,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
         self.scale_conv = nn.ConvTranspose1d(1, 1, kernel_size,
             stride=stride, padding=padding, dilation=dilation, bias=False)
         weight = self.scale_conv.weight
-        weight = 1 / (np.prod(weight)) * torch.ones_like(weight)
+        weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
         self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
 
     def forward(self, x):
@@ -273,7 +272,17 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
         '''
         layer_in = self.binarize_inputs(x)
         weight = self.binarize_weights()
+<<<<<<< HEAD
         return F.conv_transpose1d(layer_in, weight, self.bias,
+||||||| merged common ancestors
+        layer_out = 0
+        for layer_in in inputs:
+            layer_out += F.conv_transpose1d(layer_in, weight, self.bias,
+=======
+        layer_out = 0
+        for layer_in in inputs:
+            layer_out += F.conv_transpose1d(layer_in, self.weight, self.bias,
+>>>>>>> 34c783c73ada6b70129217cfbc910bb80e574af2
                 stride=self.stride, padding=self.padding, groups=self.groups,
                 dilation=self.dilation)
 

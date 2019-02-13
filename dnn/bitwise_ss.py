@@ -112,7 +112,6 @@ def main():
     parser.add_argument('--binactiv', '-ba', default='identity')
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.1)
-    parser.add_argument('--adaptive_scaling', '-as', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -142,11 +141,10 @@ def main():
         dropout=args.dropout,
         sparsity=args.sparsity,
         use_gate=args.use_gate,
-        activation=activation,
         binactiv=binactiv,
         bn_momentum=args.bn_momentum,
-        adaptive_scaling=args.adaptive_scaling,
-        bias=False
+        bias=False,
+        num_binarizations=2
     )
 
     if args.load_file:
