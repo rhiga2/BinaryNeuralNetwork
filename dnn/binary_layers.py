@@ -160,9 +160,6 @@ class BitwiseAbstractClass(ABC):
             for _ in range(self.num_binarizations):
                 x_bin = self.binactiv(residual)
                 x_scale = torch.abs(residual).mean(1, keepdim=True)
-                if self.scale_conv:
-                    x_scale = self.scale_conv(x_scale)
-                print(x_scale.shape, x_bin.shape)
                 estimate += x_scale * x_bin
                 residual = residual - estimate
         return estimate
