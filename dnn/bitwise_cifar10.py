@@ -193,7 +193,7 @@ def main():
     vis = visdom.Visdom(port=5801)
     binactiv = binary_layers.pick_activation(args.binactiv)
     model = BitwiseResnet18(binactiv=binactiv, num_classes=10,
-        scale_weights=args.scale_weights, bn_momentum=args.bn_momentum,
+        scale_weights=None, bn_momentum=args.bn_momentum,
         dropout=args.dropout)
     print(model)
 

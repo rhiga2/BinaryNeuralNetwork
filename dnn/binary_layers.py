@@ -182,14 +182,16 @@ class BitwiseAbstractClass(ABC):
         return activations
 
     def binarize_weights(self):
-        weight = self.binactiv(self.weight)
-        if self.scale_weights == 'average':
-            weight_scale = torch.abs(self.weight)
-            for i in range(len(self.weight.size()) - 1):
-                weight_scale = weight_scale.mean(-1, keepdim=True)
-            weight = weight_scale * weight
-        elif self.scale_weights == 'learnable':
-            weight = self.alpha * weight
+        weight = self.weight
+        if self.binactiv is not None:
+            weight = self.binactiv(self.weight)
+            if self.scale_weights == 'average':
+                weight_scale = torch.abs(self.weight)
+                for i in range(len(self.weight.size()) - 1):
+                    weight_scale = weight_scale.mean(-1, keepdim=True)
+                weight = weight_scale * weight
+            elif self.scale_weights == 'learnable':
+                weight = self.alpha * weight
         return weight
 
 class BitwiseLinear(nn.Linear, BitwiseAbstractClass):
@@ -209,9 +211,6 @@ class BitwiseLinear(nn.Linear, BitwiseAbstractClass):
         for layer_in in inputs:
             layer_out += F.linear(layer_in, weight, self.bias)
         return layer_out
-
-    def __repr__(self):
-        return super(BitwiseLinear, self).repr()
 
 class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
