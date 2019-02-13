@@ -33,7 +33,7 @@ def forward(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu
             if clip_weights:
                 model.clip_weights()
         correct = torch.argmax(estimate, dim=1) == target
-        running_accuracy += torch.sum(correct.float())
+        running_accuracy += torch.sum(correct.float()).item()
         running_loss += cost.item() * data.size(0)
     return running_accuracy / len(dl.dataset), running_loss / len(dl.dataset)
 

@@ -128,7 +128,7 @@ def forward(model, dl, optimizer=None, loss=F.mse_loss,
         estimate = model(data)
         cost = loss(estimate, target)
         correct = torch.argmax(estimate, dim=1) == target
-        running_accuracy += torch.sum(correct.float())
+        running_accuracy += torch.sum(correct.float()).item()
         running_loss += cost.item() * data.size(0)
         if optimizer:
             cost.backward()

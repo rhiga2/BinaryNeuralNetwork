@@ -272,17 +272,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
         '''
         layer_in = self.binarize_inputs(x)
         weight = self.binarize_weights()
-<<<<<<< HEAD
-        return F.conv_transpose1d(layer_in, weight, self.bias,
-||||||| merged common ancestors
-        layer_out = 0
-        for layer_in in inputs:
-            layer_out += F.conv_transpose1d(layer_in, weight, self.bias,
-=======
-        layer_out = 0
-        for layer_in in inputs:
-            layer_out += F.conv_transpose1d(layer_in, self.weight, self.bias,
->>>>>>> 34c783c73ada6b70129217cfbc910bb80e574af2
+        return F.conv_transpose1d(layer_in, self.weight, self.bias,
                 stride=self.stride, padding=self.padding, groups=self.groups,
                 dilation=self.dilation)
 
