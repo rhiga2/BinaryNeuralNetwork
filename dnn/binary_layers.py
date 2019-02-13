@@ -152,20 +152,19 @@ class BitwiseAbstractClass(ABC):
         return (self.binactiv(self.gate) + 1) / 2
 
     def binarize_inputs(self, x):
-        activations = [x]
+        estimate = x
         if self.binactiv is not None:
             weight = self.drop_weights()
             residual = x
-            activations = []
+            estimate = torch.zeros_like(x)
             for _ in range(self.num_binarizations):
                 x_bin = self.binactiv(residual)
                 x_scale = torch.abs(residual).mean(1, keepdim=True)
                 if self.scale_conv:
                     x_scale = self.scale_conv(x_scale)
-                estimate = x_scale * x_bin
-                activations.append(estimate)
-                residual = x - estimate
-        return activations
+                estimate += x_scale * x_bin
+                residual = residual - estimate
+        return estimate
 
     def binarize_weights(self):
         weight = self.binactiv(self.weight)
@@ -189,12 +188,9 @@ class BitwiseLinear(nn.Linear, BitwiseAbstractClass):
             scale_weights=scale_weights, num_binarizations=num_binarizations)
 
     def forward(self, x):
-        inputs = self.binarize_inputs(x)
+        layer_in = self.binarize_inputs(x)
         weight = self.binarize_weights()
-        layer_out = 0
-        for layer_in in inputs:
-            layer_out += F.linear(layer_in, weight, self.bias)
-        return layer_out
+        return F.linear(layer_in, weight, self.bias)
 
     def __repr__(self):
         return super(BitwiseLinear, self).repr()
@@ -219,13 +215,11 @@ class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
         '''
         x (batch size, channels, length)
         '''
-        inputs = self.binarize_inputs(x)
+        layer_in = self.binarize_inputs(x)
         weight = self.binarize_weights()
-        layer_out = 0
-        for layer_in in inputs:
-            layer_out += F.conv1d(layer_in, weight, self.bias,
-                stride=self.stride, padding=self.padding, groups=self.groups,
-                dilation=self.dilation)
+        layer_out = F.conv1d(layer_in, weight, self.bias,
+            stride=self.stride, padding=self.padding, groups=self.groups,
+            dilation=self.dilation)
         return layer_out
 
 class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
@@ -249,14 +243,11 @@ class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
         '''
         x (batch size, channels, height, width)
         '''
-        inputs = self.binarize_inputs(x)
+        layer_in = self.binarize_inputs(x)
         weight = self.binarize_weights()
-        layer_out = 0
-        for layer_in in inputs:
-            layer_out += F.conv2d(layer_in, weight, self.bias,
-                stride=self.stride, padding=self.padding, groups=self.groups,
-                dilation=self.dilation)
-        return layer_out
+        return F.conv2d(layer_in, weight, self.bias,
+            stride=self.stride, padding=self.padding, groups=self.groups,
+            dilation=self.dilation)
 
 class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
@@ -280,14 +271,11 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
         '''
         x (batch size, channels, length)
         '''
-        inputs = self.binarize_inputs(x)
+        layer_in = self.binarize_inputs(x)
         weight = self.binarize_weights()
-        layer_out = 0
-        for layer_in in inputs:
-            layer_out += F.conv_transpose1d(layer_in, weight, self.bias,
+        return F.conv_transpose1d(layer_in, weight, self.bias,
                 stride=self.stride, padding=self.padding, groups=self.groups,
                 dilation=self.dilation)
-        return layer_out
 
 class ScaleLayer(nn.Module):
     def __init__(self, num_channels, len_size=2):
