@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import numpy as np
 from abc import ABC
 
-class BitwiseActivation(Function):
+class TanhSTE(Function):
     @staticmethod
     def forward(ctx, x):
         ctx.save_for_backward(x)
@@ -17,7 +17,7 @@ class BitwiseActivation(Function):
     @staticmethod
     def backward(ctx, grad_output):
         x = ctx.saved_tensors[0]
-        return grad_output * (1 - torch.tanh(x)**2), None
+        return grad_output * (1 - torch.tanh(x)**2)
 
 class ClippedSTE(Function):
     @staticmethod
@@ -40,17 +40,6 @@ class STE(Function):
     def backward(ctx, grad_output):
         x = ctx.saved_tensors[0]
         return grad_output
-
-class TanhSTE(Function):
-    @staticmethod
-    def forward(ctx, x):
-        ctx.save_for_backward(x)
-        return torch.sign(x)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        x = ctx.saved_tensors[0]
-        return grad_output * (1 - torch.tanh(x)**2)
 
 class HardTanh(Function):
     @staticmethod
@@ -87,7 +76,6 @@ class SignSwissSTE(Function):
 def softsign(ctx, x, gamma):
     return x / (torch.abs(x) + gamma)
 
-bitwise_activation = BitwiseActivation.apply
 clipped_ste = ClippedSTE.apply
 ste = STE.apply
 tanh_ste = TanhSTE.apply
@@ -99,8 +87,6 @@ def pick_activation(activation_name):
         activation = ste
     elif activation_name == 'clipped_ste':
         activation = clipped_ste
-    elif activation_name == 'bitwise_activation':
-        activation = bitwise_activation
     elif activation_name == 'relu':
         activation = F.relu
     elif activation_name == 'tanh':

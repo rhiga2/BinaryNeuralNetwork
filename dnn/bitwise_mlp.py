@@ -25,7 +25,6 @@ class BitwiseMLP(nn.Module):
         self.in_size = in_size
         self.out_size = out_size
         self.use_gate = use_gate
-        self.activation = activation
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
