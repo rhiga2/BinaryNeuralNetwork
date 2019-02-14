@@ -108,22 +108,25 @@ def init_weight(size, gain=1, one_sided=False):
     return w
 
 class BitwiseAbstractClass(ABC):
-    def initialize(self, binactiv=None, use_gate=False, num_binarizations=1,
-        scale_weights=None):
+    def initialize(self, use_gate=False, in_binactiv=None,
+        w_binactiv=None, bn_momentum=0.1, scale_weights=None,
+        num_binarizations=1):
         '''
-        You must call parent module __init__ function before calling this
+        You MUST call parent module __init__ function before calling this
         function.
         '''
         self.bitwise = True
-        self.binactiv = binactiv
+        self.in_binactiv = binactiv
+        self.w_binactiv = w_binactiv
+        self.use_gate = use_gate
+        self.num_binarizations = num_binarizations
+        self.scale_weights = scale_weights
+
         self.gate = None
-        if use_gate:
+        if self.use_gate:
             self.gate = init_weight(self.weight, one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
             requires_grad=False)
-        self.num_binarizations = num_binarizations
-        self.scale_conv = None
-        self.scale_weights = scale_weights
         if self.scale_weights == 'learnable':
             self.alpha = nn.Parameter(torch.ones(self.weight.size(0)))
             for i in range(len(self.weight.size()) - 1):
@@ -153,12 +156,12 @@ class BitwiseAbstractClass(ABC):
 
     def binarize_inputs(self, x):
         estimate = x
-        if self.binactiv is not None:
+        if self.in_binactiv is not None:
             weight = self.drop_weights()
             residual = x
             estimate = torch.zeros_like(x)
             for _ in range(self.num_binarizations):
-                x_bin = self.binactiv(residual)
+                x_bin = self.in_binactiv(residual)
                 x_scale = torch.abs(residual).mean(1, keepdim=True)
                 estimate += x_scale * x_bin
                 residual = residual - estimate
@@ -166,8 +169,8 @@ class BitwiseAbstractClass(ABC):
 
     def binarize_weights(self):
         weight = self.weight
-        if self.binactiv is not None:
-            weight = self.binactiv(self.weight)
+        if self.w_binactiv is not None:
+            weight = self.w_binactiv(self.weight)
             if self.scale_weights == 'average':
                 weight_scale = torch.abs(self.weight)
                 for i in range(len(self.weight.size()) - 1):
@@ -181,11 +184,13 @@ class BitwiseLinear(nn.Linear, BitwiseAbstractClass):
     '''
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
-    def __init__(self, input_size, output_size, bias=True, use_gate=False,
-        binactiv=None, scale_weights=None, num_binarizations=1):
+    def __init__(self, input_size, output_size, bias=False, use_gate=False,
+    in_binactiv=None, w_binactiv=None, bn_momentum=0.1, scale_weights=None,
+    num_binarizations=1):
         super().__init__(input_size, output_size, bias=bias)
-        super().initialize(binactiv=binactiv, use_gate=use_gate,
-            scale_weights=scale_weights, num_binarizations=num_binarizations)
+        super().initialize(use_gate=use_gate, in_binactiv=in_binactiv,
+        w_binactiv=w_binactiv, bn_momentum=bn_momentum,
+        scale_weights=scale_weights, num_binarizations=num_binarizations)
 
     def forward(self, x):
         layer_in = self.binarize_inputs(x)
@@ -194,13 +199,13 @@ class BitwiseLinear(nn.Linear, BitwiseAbstractClass):
 
 class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
-        stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        binactiv=None, bias=True, scale_weights=None, num_binarizations=1):
+        stride=1, padding=0, groups=1, dilation=1, bias=True, **kwargs):
         super().__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, dilation=dilation, groups=groups, bias=bias)
-        super().initialize(binactiv=binactiv, use_gate=use_gate,
-            scale_weights=scale_weights, num_binarizations=num_binarizations)
+        super().initialize(use_gate=False, in_binactiv=None,
+            w_binactiv=None, bn_momentum=0.1, scale_weights=None,
+            num_binarizations=1)
 
         self.scale_conv = nn.Conv1d(1, 1, kernel_size, stride=stride,
             padding=padding, dilation=dilation)
@@ -221,13 +226,16 @@ class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
 
 class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
-        stride=1, padding=0, groups=1, dilation=1, use_gate=False,
-        binactiv=None, bias=True, scale_weights=None, num_binarizations=1):
+        stride=1, padding=0, groups=1, dilation=1, bias=True, use_gate=use_gate,
+        in_binactiv=in_binactiv, w_binactiv=w_binactiv,
+        bn_momentum=bn_momentum, scale_weights=scale_weights,
+        num_binarizations=num_binarizations):
         super().__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation, bias=bias
         )
-        super().initialize(binactiv=binactiv, use_gate=use_gate,
+        super().initialize(use_gate=use_gate, in_binactiv=in_binactiv,
+            w_binactiv=w_binactiv, bn_momentum=bn_momentum,
             scale_weights=scale_weights, num_binarizations=num_binarizations)
 
         self.scale_conv = nn.Conv2d(1, 1, kernel_size, stride=stride,
@@ -248,15 +256,17 @@ class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
 
 class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
-        stride=1, padding=0, groups=1, use_gate=False,
-        dilation=1, binactiv=None, bias=True, scale_weight=None,
-        num_binarizations=1):
+        stride=1, padding=0, groups=1, bias=True, use_gate=use_gate,
+        in_binactiv=in_binactiv, w_binactiv=w_binactiv,
+        bn_momentum=bn_momentum, scale_weights=scale_weights,
+        num_binarizations=num_binarizations):
         super(BitwiseConvTranspose1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation, bias=bias
         )
-        super().initialize(binactiv=binactiv, use_gate=use_gate,
-            scale_weights=scale_weights, num_binarizations=num_binarizations)
+        super().initialize(use_gate=use_gate, in_binactiv=in_binactiv,
+        w_binactiv=w_binactiv, bn_momentum=bn_momentum,
+        scale_weights=scale_weights, num_binarizations=num_binarizations)
 
         self.scale_conv = nn.ConvTranspose1d(1, 1, kernel_size,
             stride=stride, padding=padding, dilation=dilation, bias=False)
