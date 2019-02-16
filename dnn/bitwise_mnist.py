@@ -82,13 +82,13 @@ def main():
     train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
-    in_binactiv = binary_layers.pick_activation(self.in_binactiv)
+    in_binactiv = binary_layers.pick_activation(args.in_binactiv)
     w_binactiv = binary_layers.pick_activation(args.w_binactiv)
     model = bitwise_mlp.BitwiseMLP(784, 10, fc_sizes=[2048, 2048, 2048],
         dropout=args.dropout, sparsity=args.sparsity,
         use_gate=args.use_gate, scale_weights=None, in_binactiv=in_binactiv,
         w_binactiv=w_binactiv, bn_momentum=args.bn_momentum,
-        bias=False, num_binarizations=2)
+        bias=False, num_binarizations=1)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
 

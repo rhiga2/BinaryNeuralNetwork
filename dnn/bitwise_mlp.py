@@ -41,7 +41,7 @@ class BitwiseMLP(nn.Module):
                 in_binfunc, w_binfunc = None, None
             self.filter_list.append(
                 binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
-                in_binactiv=in_binfunc, w_binfunc=w_binfunc, 
+                in_binactiv=in_binfunc, w_binactiv=w_binfunc, 
                 scale_weights=scale_weights, bias=bias,
                 num_binarizations=num_binarizations)
             )

@@ -116,7 +116,7 @@ class BitwiseAbstractClass(ABC):
         function.
         '''
         self.bitwise = True
-        self.in_binactiv = binactiv
+        self.in_binactiv = in_binactiv
         self.w_binactiv = w_binactiv
         self.use_gate = use_gate
         self.num_binarizations = num_binarizations
@@ -152,7 +152,7 @@ class BitwiseAbstractClass(ABC):
         return weight
 
     def binarize_gate(self):
-        return (self.binactiv(self.gate) + 1) / 2
+        return (self.w_binactiv(self.gate) + 1) / 2
 
     def binarize_inputs(self, x):
         estimate = x
@@ -226,10 +226,10 @@ class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
 
 class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
-        stride=1, padding=0, groups=1, dilation=1, bias=True, use_gate=use_gate,
-        in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-        bn_momentum=bn_momentum, scale_weights=scale_weights,
-        num_binarizations=num_binarizations):
+        stride=1, padding=0, groups=1, dilation=1, bias=True, use_gate=False,
+        in_binactiv=None, w_binactiv=None,
+        bn_momentum=0.1, scale_weights=None,
+        num_binarizations=1):
         super().__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation, bias=bias
@@ -256,10 +256,10 @@ class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
 
 class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
-        stride=1, padding=0, groups=1, bias=True, use_gate=use_gate,
-        in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-        bn_momentum=bn_momentum, scale_weights=scale_weights,
-        num_binarizations=num_binarizations):
+        stride=1, padding=0, groups=1, bias=True, use_gate=False,
+        in_binactiv=None, w_binactiv=None,
+        bn_momentum=0.1, scale_weights=None,
+        num_binarizations=1):
         super(BitwiseConvTranspose1d, self).__init__(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, dilation=dilation, bias=bias
