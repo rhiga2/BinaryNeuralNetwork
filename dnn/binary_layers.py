@@ -184,7 +184,7 @@ class BitwiseLinear(nn.Linear, BitwiseAbstractClass):
     '''
     Linear/affine operation using bitwise (Kim et al.) scheme
     '''
-    def __init__(self, input_size, output_size, bias=False, use_gate=False,
+    def __init__(self, input_size, output_size, bias=True, use_gate=False,
     in_binactiv=None, w_binactiv=None, bn_momentum=0.1, scale_weights=None,
     num_binarizations=1):
         super().__init__(input_size, output_size, bias=bias)

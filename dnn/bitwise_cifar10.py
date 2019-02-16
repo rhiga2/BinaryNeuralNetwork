@@ -70,12 +70,12 @@ class BitwiseResnet18(nn.Module):
         self.avgpool = nn.AvgPool2d(4) # convert to binary
         self.fc = binary_layers.BitwiseLinear(512, num_classes,
             use_gate=self.use_gate, scale_weights=scale_weights,
-            binactiv=binactiv, num_binarizations=num_binarizations)
+            binactiv=binactiv, num_binarizations=num_binarizations,
+            bias=True)
         self.scale = binary_layers.ScaleLayer(num_classes)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
+        x = self.bn1(self.conv1(x))
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
