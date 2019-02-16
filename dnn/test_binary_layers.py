@@ -9,14 +9,13 @@ class TestBitwiseLinear(unittest.TestCase):
     def setUp(self):
         # Create dataset
         self.blinear = BitwiseLinear(3, 3, use_gate=False, scale_weights='average',
-            binactiv=clipped_ste)
+            in_binactiv=clipped_ste, w_binactiv=clipped_ste)
         linear_weight = 0.1 * torch.FloatTensor([
             [1, 2, 0],
             [3, 1, 2],
             [0, -1, 2]
         ])
         self.blinear.weight = nn.Parameter(linear_weight)
-        self.blinear.bias = nn.Parameter(torch.zeros_like(self.blinear.bias.data))
         self.scale = ScaleLayer(3)
         gamma = torch.FloatTensor([10, 2, 100])
         self.scale.gamma = nn.Parameter(gamma)
@@ -90,7 +89,7 @@ class TestBitwiseLinear(unittest.TestCase):
             [0.77/3, -0.77/3, 0.77/3]
         ])
         y_hat = self.blinear.binarize_inputs(x)
-        self.assertTrue(torch.allclose(y, y_hat[0], rtol=0))
+        self.assertTrue(torch.allclose(y, y_hat, rtol=0))
 
     def test_binarize_weights(self):
         w = torch.FloatTensor([

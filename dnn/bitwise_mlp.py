@@ -19,12 +19,12 @@ def unflatten(x, batch, time, permutation=(0, 2, 1)):
 
 class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
-        sparsity=0, use_gate=False, binactiv=None, bn_momentum=0.1,
-        scale_weights=None, bias=True, num_binarizations=1):
+        sparsity=0, bias=True, use_gate=False, in_binactiv=None,
+        w_binactiv=None, bn_momentum=0.1, scale_weights=None,
+        num_binarizations=1):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
-        self.use_gate = use_gate
 
         # Initialize linear layers
         self.num_layers = len(fc_sizes) + 1
@@ -32,21 +32,20 @@ class BitwiseMLP(nn.Module):
         isize = in_size
         self.filter_list = nn.ModuleList()
         self.bn_list = nn.ModuleList()
-        self.activation_list = nn.ModuleList()
         self.dropout = dropout
         if dropout > 0:
             self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
-            binfunc = binactiv
+            in_binfunc, w_binfunc = in_binactiv, w_binactiv
             if i == 0:
-                binfunc = None
+                in_binfunc, w_binfunc = None, None
             self.filter_list.append(
                 binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
-                binactiv=binfunc, scale_weights=scale_weights, bias=bias,
+                in_binactiv=in_binfunc, w_binactiv=w_binfunc, 
+                scale_weights=scale_weights, bias=bias,
                 num_binarizations=num_binarizations)
             )
             if i < self.num_layers - 1:
-                self.activation_list.append(nn.PReLU())
                 if dropout > 0:
                     self.dropout_list.append(nn.Dropout(dropout, inplace=True))
                 self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
@@ -67,7 +66,6 @@ class BitwiseMLP(nn.Module):
         for i in range(self.num_layers):
             h = self.filter_list[i](h)
             if i < self.num_layers - 1:
-                h = self.activation_list[i](h)
                 if self.dropout > 0:
                     h = self.dropout_list[i](h)
                 h = self.bn_list[i](h)
