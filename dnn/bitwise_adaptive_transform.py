@@ -35,17 +35,17 @@ class BitwiseAdaptiveTransform(nn.Module):
     '''
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
-        in_bin=None, weight_bin=None,
+        in_binactiv=None, w_binactiv=None,
         use_gate=False, adaptive_scaling=True,
         weight_init=None, autoencode=False):
         super(BitwiseAdaptiveTransform, self).__init__()
 
         # Initialize adaptive front end
         self.kernel_size = kernel_size
-        self.in_bin = in_bin
+        self.in_binactiv = in_binactiv
         self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
-            stride=stride, padding=kernel_size, in_bin=None,
-            weight_bin=None, adaptive_scaling=False,
+            stride=stride, padding=kernel_size, in_binactiv=None,
+            w_binactiv=None, adaptive_scaling=False,
             use_gate=False
         )
 
@@ -54,17 +54,17 @@ class BitwiseAdaptiveTransform(nn.Module):
 
         if not autoencode:
             self.mlp = bitwise_mlp.BitwiseMLP(kernel_size, kernel_size,
-                fc_sizes=[2048, 2048, 2048], dropout=dropout,
-                activation=nn.ReLU(inplace=True),
-                in_bin=in_bin, weight_bin=weight_bin, use_batchnorm=True,
-                adaptive_scaling=adaptive_scaling, use_gate=use_gate
+                fc_sizes=fc_sizes, dropout=dropout,
+                in_binactiv=in_binactiv, w_binactiv=w_binactiv,
+                use_batchnorm=True, adaptive_scaling=adaptive_scaling,
+                use_gate=use_gate
             )
 
         # Initialize inverse of front end transform
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
             kernel_size, 1, kernel_size, stride=stride,
-            in_bin=None,
-            weight_bin=None,
+            in_binactiv=None,
+            w_binactiv=None,
             adaptive_scaling=False,
             use_gate=False
         )
@@ -101,8 +101,7 @@ class BitwiseAdaptiveTransform(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        spec = F.relu(self.conv(x))
-        h = self.batchnorm(spec)
+        spec = torch.tanh(self.batchnorm(self.conv(x)))
 
         if not self.autoencode:
             h_size = h.size()
@@ -110,8 +109,8 @@ class BitwiseAdaptiveTransform(nn.Module):
             h = self.mlp(h)
             h = bitwise_mlp.unflatten(h, h_size[0], h_size[2])
 
-        if self.in_bin:
-            h = (self.in_bin(h) + 1)/2
+        if self.in_binactiv:
+            h = (self.in_binactiv(h) + 1)/2
         else:
             h = torch.sigmoid(h)
 
@@ -119,8 +118,8 @@ class BitwiseAdaptiveTransform(nn.Module):
         return self.conv_transpose(spec)[:, :, self.kernel_size:time+self.kernel_size]
 
     def clip_weights(self):
-        self.conv.clip_weights()
-        self.conv_transpose.clip_weights()
+        if not self.autoencode:
+            self.mlp.clip_weights()
 
     def update_betas(self):
         '''
@@ -129,8 +128,7 @@ class BitwiseAdaptiveTransform(nn.Module):
         if self.sparsity == 0:
             return
 
-        self.conv.update_betas(sparsity=args.sparsity)
-        self.conv_transpose.update_betas(sparsity=args.sparsity)
+        self.mlp.update_betas(sparsity=args.sparsity)
 
     def load_partial_state_dict(self, state_dict):
         own_state_dict = self.state_dict()

@@ -116,8 +116,8 @@ def main():
 
     parser.add_argument('--dropout', '-dropout', type=float, default=0.2)
     parser.add_argument('--sparsity', '-sparsity', type=float, default=0)
-    parser.add_argument('--in_bin', '-ib', default='identity')
-    parser.add_argument('--weight_bin', '-wb', default='identity')
+    parser.add_argument('--in_binactiv', '-ib', default='identity')
+    parser.add_argument('--w_binactiv', '-wb', default='identity')
     parser.add_argument('--loss', '-l', default='mse')
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
@@ -132,8 +132,8 @@ def main():
         device = torch.device('cpu')
     print('On device: ', device)
 
-    in_bin = binary_layers.pick_activation(args.in_bin)
-    weight_bin = binary_layers.pick_activation(args.weight_bin)
+    in_binactiv = binary_layers.pick_activation(args.in_binactiv)
+    w_binactiv = binary_layers.pick_activation(args.w_binactiv)
 
     classification = False
     stride=1
@@ -143,21 +143,21 @@ def main():
             bipolar_shift=False)
         model = bitwise_wavenet.BitwiseWavenet(1, 256,
             kernel_size=2, filter_activation=torch.tanh,
-            gate_activation=torch.sigmoid, in_bin=in_bin, weight_bin=weight_bin,
+            gate_activation=torch.sigmoid, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
             use_batchnorm=args.use_batchnorm)
     elif args.model == 'tasnet':
         stride=10
         model = bitwise_tasnet.BitwiseTasNet(1, 256, 512,
             blocks=4, front_kernel_size=20, front_stride=10,
-            kernel_size=3, layers=8, in_bin=in_bin, weight_bin=weight_bin,
+            kernel_size=3, layers=8, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate)
     else:
         stride=16
         model = adaptive_transform.BitwiseAdaptiveTransform(1024, 16,
             fc_sizes=[2048, 2048], in_channels=1, out_channels=1,
             dropout=args.dropout, sparsity=args.sparsity,
-            autoencode=args.autoencode, in_bin=in_bin, weight_bin=weight_bin,
+            autoencode=args.autoencode, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
             weight_init='fft')
 
