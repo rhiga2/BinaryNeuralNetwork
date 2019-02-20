@@ -41,40 +41,13 @@ class STE(Function):
         x = ctx.saved_tensors[0]
         return grad_output
 
-class HardTanh(Function):
-    @staticmethod
-    def forward(ctx, x):
-        ctx.save_for_backward(x)
-        return torch.clamp(x, -1, 1)
+class SignSwiss(nn.Module):
+    def __init__(self, beta=1):
+        self.beta = nn.Parameter(torch.FloatTensor([beta]), requires_grad=True)
 
-    @staticmethod
-    def backward(ctx, grad_output):
-        x = ctx.saved_tensors[0]
-        return torch.clamp(grad_output, -1, 1)
-
-class SignSwissSTE(Function):
-    @staticmethod
-    def forward(ctx, x, beta):
-        ctx.saved_for_backward(x)
-        ctx.saved_for_backward(beta)
-        return torch.sign(x)
-
-    @staticmethod
-    def _sign_swish_back_helper(x, beta):
-        numer = beta * (2 - beta*x*torch.tanh(beta*x/2))
-        denom = 1 + torch.cosh(beta * x)
-        return numer / denom
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        x = ctx.saved_tensors[0]
-        beta = ctx.saved_tensors[1]
-        back_helper = _sign_swish_back_helper(x, beta)
-        back_helper = grad_output * back_helper
-        return beta * back_helper, torch.sum(x * back_helper)
-
-def softsign(ctx, x, gamma):
-    return x / (torch.abs(x) + gamma)
+    def forward(self, x):
+        sig_x = torch.sigmoid(self.beta*x)
+        return 2*sig_x*(1 + self.beta*x*(1 - sig_x)) - 1
 
 clipped_ste = ClippedSTE.apply
 ste = STE.apply
@@ -82,19 +55,23 @@ tanh_ste = TanhSTE.apply
 hard_tanh = HardTanh.apply
 signswiss_ste = SignSwissSTE.apply
 
-def pick_activation(activation_name):
+def pick_activation(activation_name, **kwargs):
     if activation_name == 'ste':
-        activation = ste
+        activation = lambda : ste
     elif activation_name == 'clipped_ste':
-        activation = clipped_ste
+        activation = lambda : clipped_ste
     elif activation_name == 'relu':
-        activation = F.relu
+        activation = lambda : nn.ReLU(**kwargs)
+    elif activation_name == 'prelu':
+        activation = lambda : nn.PReLU(**kwargs)
     elif activation_name == 'tanh':
-        activation = torch.tanh
+        activation = lambda : torch.tanh
     elif activation_name == 'tanh_ste':
-        activation = tanh_ste
+        activation = lambda : tanh_ste
     elif activation_name == 'hard_tanh':
-        activation = hard_tanh
+        activation = lambda : nn.Hardtanh(**kwargs)
+    elif activation_name == 'sign_swiss':
+        activation = lambda : SignSwiss(**kwargs)
     elif activation_name == 'identity':
         activation = None
     return activation
@@ -116,8 +93,12 @@ class BitwiseAbstractClass(ABC):
         function.
         '''
         self.bitwise = True
-        self.in_binactiv = in_binactiv
-        self.w_binactiv = w_binactiv
+        self.in_binactiv = None
+        if in_binactiv is not None:
+            self.in_binactiv = in_binactiv()
+        self.w_binactiv = None
+        if w_binactiv is not None:
+            self.w_binactiv = w_binactiv()
         self.use_gate = use_gate
         self.num_binarizations = num_binarizations
         self.scale_weights = scale_weights

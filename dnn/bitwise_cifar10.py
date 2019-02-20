@@ -55,6 +55,9 @@ class BitwiseResnet18(nn.Module):
         self.scale_weights = scale_weights
         self.scale_activations = scale_activations
         self.in_binactiv = in_binactiv
+        self.in_binfunc = None
+        if in_binactiv is not None:
+            self.in_binfunc = in_binactiv()
         self.w_binactiv = w_binactiv
         self.use_gate = use_gate
         self.conv1 = binary_layers.BitwiseConv2d(3, 64, kernel_size=7, stride=1,
@@ -81,8 +84,8 @@ class BitwiseResnet18(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-        if self.in_binactiv is not None:
-            x = self.in_binactiv(x)
+        if self.in_binfunc is not None:
+            x = self.in_binfunc()(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.dropout_layer(x)

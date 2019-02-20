@@ -8,7 +8,7 @@ from binary_layers import *
 class TestBitwiseLinear(unittest.TestCase):
     def setUp(self):
         # Create dataset
-        self.blinear = BitwiseLinear(3, 3, use_gate=False, scale_weights='average',
+        self.blinear = BitwiseLinear(3, 3, use_gate=False,
             in_binactiv=clipped_ste, w_binactiv=clipped_ste)
         linear_weight = 0.1 * torch.FloatTensor([
             [1, 2, 0],
@@ -23,7 +23,7 @@ class TestBitwiseLinear(unittest.TestCase):
     def test_initalization(self):
         self.assertTrue(self.blinear.bitwise)
         self.assertTrue(self.blinear.gate is None)
-        self.assertTrue(self.blinear.scale_weights)
+        self.assertTrue(self.blinear.scale_weights is None)
 
     def test_drop_with_gate(self):
         w = torch.FloatTensor([
@@ -62,22 +62,8 @@ class TestBitwiseLinear(unittest.TestCase):
         w_hat = self.blinear.drop_weights()
         self.assertTrue(torch.allclose(self.blinear.weight, w_hat, rtol=0))
 
-    def test_linear_scale_weights(self):
-        '''
-        Compare my pytorch implementation of bss eval with Shrikant's numpy implementation
-        '''
-        x = torch.FloatTensor([
-            [1, 2, 3],
-            [4, -5, 6]
-        ])
-        y = 0.1 * torch.FloatTensor([
-            [4, 12, 0],
-            [0, 10, 10]
-        ])
-        y_hat = self.blinear(x)
-        self.assertTrue(torch.all(torch.eq(y, y_hat)))
-
     def test_binarize_inputs(self):
+        self.blinear.scale_activations = 'average'
         x = torch.FloatTensor([
             [0.2, -0.3, 0.5],
             [-0.4, 0.1, 0.3],
@@ -89,6 +75,7 @@ class TestBitwiseLinear(unittest.TestCase):
             [0.77/3, -0.77/3, 0.77/3]
         ])
         y_hat = self.blinear.binarize_inputs(x)
+        self.blinear.scale_activations = None
         self.assertTrue(torch.allclose(y, y_hat, rtol=0))
 
     def test_binarize_weights(self):
