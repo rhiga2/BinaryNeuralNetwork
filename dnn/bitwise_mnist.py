@@ -22,7 +22,7 @@ def forward(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu
     for batch_idx, (data, target) in enumerate(dl):
         if optimizer:
             optimizer.zero_grad()
-        data = data.to(device=device)
+        data = data.to(device=device).view(data.size(0), -1)
         target  = target.to(device=device)
         estimate = model(data)
         cost = loss(estimate, target)
@@ -71,10 +71,8 @@ def main():
 
     # Make model and dataset
     vis = visdom.Visdom(port=5801)
-    flatten = lambda x : x.view(-1)
     trans = transforms.Compose([transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,)),
-            flatten])
+            transforms.Normalize((0.1307,), (0.3081,))])
     train_data = datasets.MNIST('/media/data/MNIST', train=True,
         transform=trans, download=True)
     val_data = datasets.MNIST('/media/data/MNIST', train=False,

@@ -26,25 +26,23 @@ class BitwiseBasicBlock(nn.Module):
             scale_weights=scale_weights, bias=False,
             num_binarizations=num_binarizations)
         self.bn1 = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
-        self.dropout1 = nn.Dropout(p=dropout, inplace=True)
+        self.dropout1 = nn.Dropout(p=dropout)
         self.conv2 = binary_layers.BitwiseConv2d(out_channels, out_channels, 3,
-            padding=1, binactiv=binactiv, use_gate=use_gate,
+            padding=1, in_binactiv=in_binactiv, w_binactiv=w_binactiv, use_gate=use_gate,
             scale_weights=scale_weights, bias=False,
             num_binarizations=num_binarizations)
-        self.dropout2 = nn.Dropout(p=dropout, inplace=True)
+        self.dropout2 = nn.Dropout(p=dropout)
         self.bn2 = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
         self.downsample=downsample
 
     def forward(self, x):
         identity = x
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.conv2(out)
+        out = self.bn1(self.dropout1(self.conv1(x)))
+        out = self.bn2(self.dropout2(self.conv2(out)))
 
         if self.downsample is not None:
             identity = self.downsample(x)
-        out += identity
-        out = self.bn2(out)
+        out = out + identity
         return out
 
 class BitwiseResnet18(nn.Module):
@@ -53,7 +51,8 @@ class BitwiseResnet18(nn.Module):
         num_binarizations=1, dropout=0.2):
         super(BitwiseResnet18, self).__init__()
         self.scale_weights = scale_weights
-        self.binactiv = binactiv
+        self.in_binactiv = in_binactiv
+        self.w_binactiv = w_binactiv
         self.use_gate = use_gate
         self.conv1 = binary_layers.BitwiseConv2d(3, 64, kernel_size=7, stride=1,
             padding=3, bias=False)
@@ -66,7 +65,7 @@ class BitwiseResnet18(nn.Module):
         self.layer2 = self._make_layer(64, 128, stride=2)
         self.layer3 = self._make_layer(128, 256, stride=2)
         self.layer4 = self._make_layer(256, 512, stride=2)
-        self.dropout_layer = nn.Dropout(p=dropout, inplace=True)
+        self.dropout_layer = nn.Dropout(p=dropout)
         self.avgpool = nn.AvgPool2d(4) # convert to binary
         self.fc = binary_layers.BitwiseLinear(512, num_classes,
             use_gate=self.use_gate, scale_weights=scale_weights,
@@ -78,6 +77,8 @@ class BitwiseResnet18(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
+        if self.in_binactiv is not None:
+            x = self.in_binactiv(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.dropout_layer(x)
@@ -187,11 +188,11 @@ def main():
     val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
 
     vis = visdom.Visdom(port=5801)
-    in_binactiv = binary_layers.pick_activation(self.in_binactiv)
+    in_binactiv = binary_layers.pick_activation(args.in_binactiv)
     w_binactiv = binary_layers.pick_activation(args.w_binactiv)
     model = BitwiseResnet18(in_binactiv=in_binactiv, w_binactiv=w_binactiv,
         num_classes=10, scale_weights=None, bn_momentum=args.bn_momentum,
-        dropout=args.dropout, num_binarizations=2)
+        dropout=args.dropout, num_binarizations=1)
     print(model)
 
     if args.load_file:

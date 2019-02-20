@@ -159,12 +159,14 @@ class BitwiseAbstractClass(ABC):
         if self.in_binactiv is not None:
             weight = self.drop_weights()
             residual = x
-            estimate = torch.zeros_like(x)
-            for _ in range(self.num_binarizations):
-                x_bin = self.in_binactiv(residual)
-                x_scale = torch.abs(residual).mean(1, keepdim=True)
-                estimate += x_scale * x_bin
-                residual = residual - estimate
+            estimate = self.in_binactiv(residual)
+            if self.num_binarizations > 0:
+                estimate = torch.zeros_like(x)
+                for _ in range(self.num_binarizations):
+                    x_bin = self.in_binactiv(residual)
+                    x_scale = torch.abs(residual).mean(1, keepdim=True)
+                    estimate += x_scale * x_bin
+                    residual = residual - estimate
         return estimate
 
     def binarize_weights(self):
