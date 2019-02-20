@@ -17,19 +17,21 @@ import argparse
 
 class BitwiseBasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, use_gate=False,
-            downsample=None, in_binactiv=None, w_binactiv=None, scale_weights=None,
+            downsample=None, in_binactiv=None, w_binactiv=None,
+            scale_weights=None, scale_activations=None,
             bn_momentum=0.1, num_binarizations=1, dropout=0.2):
         super(BitwiseBasicBlock, self).__init__()
         self.conv1 = binary_layers.BitwiseConv2d(in_channels, out_channels, 3,
             stride=stride, padding=1, in_binactiv=in_binactiv,
             w_binactiv=w_binactiv, use_gate=use_gate,
-            scale_weights=scale_weights, bias=False,
-            num_binarizations=num_binarizations)
+            scale_weights=scale_weights, scale_activations=scale_activations,
+            bias=False, num_binarizations=num_binarizations)
         self.bn1 = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
         self.dropout1 = nn.Dropout(p=dropout)
         self.conv2 = binary_layers.BitwiseConv2d(out_channels, out_channels, 3,
-            padding=1, in_binactiv=in_binactiv, w_binactiv=w_binactiv, use_gate=use_gate,
-            scale_weights=scale_weights, bias=False,
+            padding=1, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
+            use_gate=use_gate, scale_weights=scale_weights,
+            scale_activations=scale_activations, bias=False,
             num_binarizations=num_binarizations)
         self.dropout2 = nn.Dropout(p=dropout)
         self.bn2 = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
@@ -47,10 +49,11 @@ class BitwiseBasicBlock(nn.Module):
 
 class BitwiseResnet18(nn.Module):
     def __init__(self, in_binactiv=None, w_binactiv=None, use_gate=False,
-        num_classes=10, scale_weights=None, bn_momentum=0.1,
-        num_binarizations=1, dropout=0.2):
+        num_classes=10, scale_weights=None, scale_activations=None,
+        bn_momentum=0.1, num_binarizations=1, dropout=0.2):
         super(BitwiseResnet18, self).__init__()
         self.scale_weights = scale_weights
+        self.scale_activations = scale_activations
         self.in_binactiv = in_binactiv
         self.w_binactiv = w_binactiv
         self.use_gate = use_gate
@@ -69,6 +72,7 @@ class BitwiseResnet18(nn.Module):
         self.avgpool = nn.AvgPool2d(4) # convert to binary
         self.fc = binary_layers.BitwiseLinear(512, num_classes,
             use_gate=self.use_gate, scale_weights=scale_weights,
+            scale_activations=scale_activations,
             num_binarizations=num_binarizations, bias=True)
 
     def forward(self, x):
@@ -91,7 +95,8 @@ class BitwiseResnet18(nn.Module):
                 binary_layers.BitwiseConv2d(in_channels, out_channels, 1,
                     stride=stride, in_binactiv=self.in_binactiv,
                     w_binactiv=self.w_binactiv, use_gate=self.use_gate,
-                    scale_weights=self.scale_weights, bias=False,
+                    scale_weights=self.scale_weights,
+                    scale_activations=self.scale_activations, bias=False,
                     num_binarizations=self.num_binarizations),
                 nn.BatchNorm2d(out_channels, momentum=self.bn_momentum)
             )
@@ -99,11 +104,14 @@ class BitwiseResnet18(nn.Module):
         layers.append(BitwiseBasicBlock(in_channels, out_channels, stride=stride,
             use_gate=self.use_gate, downsample=downsample,
             in_binactiv=self.in_binactiv, w_binactiv=self.w_binactiv,
-            scale_weights=self.scale_weights, bn_momentum=self.bn_momentum,
+            scale_weights=self.scale_weights,
+            scale_activations=self.scale_activations,
+            bn_momentum=self.bn_momentum,
             dropout=self.dropout))
         layers.append(BitwiseBasicBlock(out_channels, out_channels,
             use_gate=self.use_gate, in_binactiv=self.in_binactiv,
             w_binactiv=self.w_binactiv, scale_weights=self.scale_weights,
+            scale_activations=self.scale_activations,
             bn_momentum=self.bn_momentum, dropout=self.dropout))
         return nn.Sequential(*layers)
 
@@ -191,8 +199,9 @@ def main():
     in_binactiv = binary_layers.pick_activation(args.in_binactiv)
     w_binactiv = binary_layers.pick_activation(args.w_binactiv)
     model = BitwiseResnet18(in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-        num_classes=10, scale_weights=None, bn_momentum=args.bn_momentum,
-        dropout=args.dropout, num_binarizations=1)
+        num_classes=10, scale_weights=None, scale_activations=None,
+        bn_momentum=args.bn_momentum, dropout=args.dropout,
+        num_binarizations=1)
     print(model)
 
     if args.load_file:
