@@ -8,8 +8,10 @@ from binary_layers import *
 class TestBitwiseLinear(unittest.TestCase):
     def setUp(self):
         # Create dataset
+        in_binactiv = pick_activation('clipped_ste')
+        w_binactiv = pick_activation('clipped_ste')
         self.blinear = BitwiseLinear(3, 3, use_gate=False,
-            in_binactiv=clipped_ste, w_binactiv=clipped_ste)
+            in_binactiv=in_binactiv, w_binactiv=w_binactiv)
         linear_weight = 0.1 * torch.FloatTensor([
             [1, 2, 0],
             [3, 1, 2],

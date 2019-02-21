@@ -135,7 +135,15 @@ class BitwiseResnet18(nn.Module):
 
     def clip_weights(self):
         self.conv1.clip_weights()
-        
+        self.layer1[0].clip_weights()
+        self.layer1[1].clip_weights()
+        self.layer2[0].clip_weights()
+        self.layer2[1].clip_weights()
+        self.layer3[0].clip_weights()
+        self.layer3[1].clip_weights()
+        self.layer4[0].clip_weights()
+        self.layer4[1].clip_weights()
+        self.fc.clip_weights()
 
 def forward(model, dl, optimizer=None, loss=F.mse_loss,
     device=torch.device('cpu'), dtype=torch.float, clip_weights=False):
@@ -240,11 +248,12 @@ def main():
     for epoch in range(args.epochs):
         total_cost = 0
         model.train()
-        train_accuracy, train_loss = forward(model, train_dl, optimizer, loss=loss,
-            device=device)
+        train_accuracy, train_loss = forward(model, train_dl, optimizer,
+            loss=loss, device=device)
 
         if (epoch+1) % args.period == 0:
-            print('Epoch %d Training Cost: ' % epoch, train_loss, train_accuracy)
+            print('Epoch %d Training Cost: ' % epoch, train_loss,
+                train_accuracy)
             model.eval()
             val_accuracy, val_loss = forward(model, val_dl, loss=loss,
                 device=device, clip_weights=args.clip_weights)
