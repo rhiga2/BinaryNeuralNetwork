@@ -77,6 +77,7 @@ class BitwiseResnet18(nn.Module):
             use_gate=self.use_gate, scale_weights=scale_weights,
             scale_activations=scale_activations,
             num_binarizations=num_binarizations, bias=True)
+        self.scale = binary_layers.ScaleLayer(num_channels=num_classes)
 
     def forward(self, x):
         x = self.bn1(self.conv1(x))
@@ -85,11 +86,11 @@ class BitwiseResnet18(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
         if self.in_binfunc is not None:
-            x = self.in_binfunc()(x)
+            x = self.in_binfunc(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.dropout_layer(x)
-        return self.fc(x)
+        return self.scale(self.fc(x))
 
     def _make_layer(self, in_channels, out_channels, stride=1):
         downsample=None

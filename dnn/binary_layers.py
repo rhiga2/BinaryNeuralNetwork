@@ -52,8 +52,6 @@ class SignSwiss(nn.Module):
 clipped_ste = ClippedSTE.apply
 ste = STE.apply
 tanh_ste = TanhSTE.apply
-hard_tanh = HardTanh.apply
-signswiss_ste = SignSwissSTE.apply
 
 def pick_activation(activation_name, **kwargs):
     if activation_name == 'ste':
