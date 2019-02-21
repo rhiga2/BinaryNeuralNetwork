@@ -17,10 +17,11 @@ import argparse
 
 class BitwiseBasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, use_gate=False,
-            downsample=None, in_binactiv=None, w_binactiv=None,
+            in_binactiv=None, w_binactiv=None,
             scale_weights=None, scale_activations=None,
             bn_momentum=0.1, num_binarizations=1, dropout=0.2):
         super(BitwiseBasicBlock, self).__init__()
+
         self.conv1 = binary_layers.BitwiseConv2d(in_channels, out_channels, 3,
             stride=stride, padding=1, in_binactiv=in_binactiv,
             w_binactiv=w_binactiv, use_gate=use_gate,
@@ -28,6 +29,19 @@ class BitwiseBasicBlock(nn.Module):
             bias=False, num_binarizations=num_binarizations)
         self.bn1 = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
         self.dropout1 = nn.Dropout(p=dropout)
+
+        self.downsample = None
+        if stride != 1 or in_channels != out_channels:
+            self.downsample = nn.Sequential(
+                binary_layers.BitwiseConv2d(in_channels, out_channels, 1,
+                    stride=stride, in_binactiv=self.in_binactiv,
+                    w_binactiv=self.w_binactiv, use_gate=self.use_gate,
+                    scale_weights=self.scale_weights,
+                    scale_activations=self.scale_activations, bias=False,
+                    num_binarizations=self.num_binarizations),
+                nn.BatchNorm2d(out_channels, momentum=self.bn_momentum)
+            )
+
         self.conv2 = binary_layers.BitwiseConv2d(out_channels, out_channels, 3,
             padding=1, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
             use_gate=use_gate, scale_weights=scale_weights,
@@ -35,7 +49,6 @@ class BitwiseBasicBlock(nn.Module):
             num_binarizations=num_binarizations)
         self.dropout2 = nn.Dropout(p=dropout)
         self.bn2 = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
-        self.downsample=downsample
 
     def forward(self, x):
         identity = x
@@ -46,6 +59,11 @@ class BitwiseBasicBlock(nn.Module):
             identity = self.downsample(x)
         out = out + identity
         return out
+
+    def clip_weights(self):
+        self.downsample[0].clip_weights()
+        self.conv1.clip_weights()
+        self.conv2.clip_weights()
 
 class BitwiseResnet18(nn.Module):
     def __init__(self, in_binactiv=None, w_binactiv=None, use_gate=False,
@@ -92,20 +110,9 @@ class BitwiseResnet18(nn.Module):
         return self.fc(x)
 
     def _make_layer(self, in_channels, out_channels, stride=1):
-        downsample=None
-        if stride != 1 or in_channels != out_channels:
-            downsample = nn.Sequential(
-                binary_layers.BitwiseConv2d(in_channels, out_channels, 1,
-                    stride=stride, in_binactiv=self.in_binactiv,
-                    w_binactiv=self.w_binactiv, use_gate=self.use_gate,
-                    scale_weights=self.scale_weights,
-                    scale_activations=self.scale_activations, bias=False,
-                    num_binarizations=self.num_binarizations),
-                nn.BatchNorm2d(out_channels, momentum=self.bn_momentum)
-            )
         layers = []
-        layers.append(BitwiseBasicBlock(in_channels, out_channels, stride=stride,
-            use_gate=self.use_gate, downsample=downsample,
+        layers.append(BitwiseBasicBlock(in_channels, out_channels,
+            stride=stride, use_gate=self.use_gate,
             in_binactiv=self.in_binactiv, w_binactiv=self.w_binactiv,
             scale_weights=self.scale_weights,
             scale_activations=self.scale_activations,
@@ -124,6 +131,10 @@ class BitwiseResnet18(nn.Module):
             if state[name].size() == param.size():
                 state[name].data.copy_(param)
                 print('Loaded {}'.format(name))
+
+    def clip_weights(self):
+        self.conv1.clip_weights()
+        
 
 def forward(model, dl, optimizer=None, loss=F.mse_loss,
     device=torch.device('cpu'), dtype=torch.float, clip_weights=False):

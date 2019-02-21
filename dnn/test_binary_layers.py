@@ -63,6 +63,20 @@ class TestBitwiseLinear(unittest.TestCase):
         self.assertTrue(torch.allclose(self.blinear.weight, w_hat, rtol=0))
 
     def test_binarize_inputs(self):
+        x = torch.FloatTensor([
+            [0.2, -0.3, 0.5],
+            [-0.4, 0.1, 0.3],
+            [0.5, -0.15, 0.12]
+        ])
+        y = torch.FloatTensor([
+            [1, -1, 1],
+            [-1, 1, 1],
+            [1, -1, 1]
+        ])
+        y_hat = self.blinear.binarize_inputs(x)
+        self.assertTrue(torch.allclose(y, y_hat, rtol=0))
+
+    def test_binarize_average_inputs(self):
         self.blinear.scale_activations = 'average'
         x = torch.FloatTensor([
             [0.2, -0.3, 0.5],
