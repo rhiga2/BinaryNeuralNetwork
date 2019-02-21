@@ -34,12 +34,12 @@ class BitwiseBasicBlock(nn.Module):
         if stride != 1 or in_channels != out_channels:
             self.downsample = nn.Sequential(
                 binary_layers.BitwiseConv2d(in_channels, out_channels, 1,
-                    stride=stride, in_binactiv=self.in_binactiv,
-                    w_binactiv=self.w_binactiv, use_gate=self.use_gate,
-                    scale_weights=self.scale_weights,
-                    scale_activations=self.scale_activations, bias=False,
-                    num_binarizations=self.num_binarizations),
-                nn.BatchNorm2d(out_channels, momentum=self.bn_momentum)
+                    stride=stride, in_binactiv=in_binactiv,
+                    w_binactiv=w_binactiv, use_gate=use_gate,
+                    scale_weights=scale_weights,
+                    scale_activations=scale_activations, bias=False,
+                    num_binarizations=num_binarizations),
+                nn.BatchNorm2d(out_channels, momentum=bn_momentum)
             )
 
         self.conv2 = binary_layers.BitwiseConv2d(out_channels, out_channels, 3,

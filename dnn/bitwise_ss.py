@@ -109,7 +109,8 @@ def main():
     parser.add_argument('--sparsity', '-s', type=float, default=0)
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--activation', '-a', default='tanh')
-    parser.add_argument('--binactiv', '-ba', default='identity')
+    parser.add_argument('--in_binactiv', '-ib', default='identity')
+    parser.add_argument('--w_binactiv', '-wb', default='identity')
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.1)
     args = parser.parse_args()
@@ -129,8 +130,8 @@ def main():
         loss = F.binary_cross_entropy_with_logits
     loss_metrics = bss_eval.LossMetrics()
 
-    activation = binary_layers.pick_activation(args.activation)
-    binactiv = binary_layers.pick_activation(args.binactiv)
+    in_binactiv = binary_layers.pick_activation(args.in_binactiv)
+    w_binactiv = binary_layers.pick_activation(args.w_binactiv)
 
     # Make model and dataset
     train_dl, valset, rawset = binary_data.get_binary_data(args.batchsize, toy=args.toy)
@@ -141,10 +142,13 @@ def main():
         dropout=args.dropout,
         sparsity=args.sparsity,
         use_gate=args.use_gate,
-        binactiv=binactiv,
+        in_binactiv=in_binactiv,
+        w_binactiv=w_binactiv,
         bn_momentum=args.bn_momentum,
         bias=False,
-        num_binarizations=2
+        num_binarizations=1,
+        scale_weights=None,
+        scale_activations=None
     )
 
     if args.load_file:
