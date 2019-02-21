@@ -10,7 +10,7 @@ class BitwiseWavenetBlock(nn.Module):
     def __init__(self, res_channels, dl_channels, layers=10, kernel_size=2,
         filter_activation=torch.tanh, gate_activation=torch.sigmoid,
         in_bin=None, weight_bin=None,
-        use_gate=True, adaptive_scaling=True, use_batchnorm=False):
+        use_gate=True, adaptive_scaling=True):
         super(BitwiseWavenetBlock, self).__init__()
         dilation = 1
         self.layers = layers
@@ -20,10 +20,7 @@ class BitwiseWavenetBlock(nn.Module):
         self.gate_list = nn.ModuleList()
         self.residual_list = nn.ModuleList()
         self.skip_list = nn.ModuleList()
-        self.use_batchnorm = use_batchnorm
-
-        if use_batchnorm:
-            self.batchnorm_list = nn.ModuleList()
+        self.batchnorm_list = nn.ModuleList()
 
         for i in range(layers):
             padding = dilation * (kernel_size-1) // 2
@@ -39,8 +36,7 @@ class BitwiseWavenetBlock(nn.Module):
                 use_gate=use_gate, adaptive_scaling=adaptive_scaling,
                 in_bin=in_bin, weight_bin=weight_bin, padding=padding))
 
-            if use_batchnorm:
-                self.batchnorm_list.append(nn.BatchNorm1d(res_channels))
+            self.batchnorm_list.append(nn.BatchNorm1d(res_channels))
 
             self.residual_list.append(binary_layers.BitwiseConv1d(dl_channels,
                 res_channels, 1, use_gate=use_gate,
@@ -66,8 +62,7 @@ class BitwiseWavenetBlock(nn.Module):
                 gated = gated[:, :, :-1]
 
             layer_out = filtered * gated
-            if self.use_batchnorm:
-                layer_out = self.batchnorm_list[i](layer_out)
+            layer_out = self.batchnorm_list[i](layer_out)
 
             skip = skip + self.skip_list[i](layer_out)
             resid = resid + self.residual_list[i](layer_out)
@@ -86,9 +81,8 @@ class BitwiseWavenet(nn.Module):
         kernel_size=2, filter_activation=torch.tanh,
         gate_activation=torch.sigmoid, in_bin=None,
         weight_bin=None, adaptive_scaling=True,
-        use_gate=True, use_batchnorm=False):
+        use_gate=True):
         super(BitwiseWavenet, self).__init__()
-        self.use_batchnorm = use_batchnorm
         self.start_conv = binary_layers.BitwiseConv1d(in_channels, res_channels,
             1, in_bin=in_bin, weight_bin=weight_bin,
             use_gate=use_gate, adaptive_scaling=adaptive_scaling)
@@ -99,7 +93,7 @@ class BitwiseWavenet(nn.Module):
                 kernel_size=kernel_size, layers=layers,
                 filter_activation=filter_activation,
                 gate_activation=gate_activation, use_gate=use_gate,
-                adaptive_scaling=adaptive_scaling, use_batchnorm=False))
+                adaptive_scaling=adaptive_scaling))
         self.end_conv1 = binary_layers.BitwiseConv1d(res_channels, out_channels,
             1, in_bin=in_bin, weight_bin=weight_bin, use_gate=use_gate,
             adaptive_scaling=adaptive_scaling)
@@ -107,25 +101,21 @@ class BitwiseWavenet(nn.Module):
             1, in_bin=in_bin, weight_bin=weight_bin,
             use_gate=use_gate, adaptive_scaling=adaptive_scaling)
 
-        if use_batchnorm:
-            self.start_bn = nn.BatchNorm1d(res_channels, eps=5e-4)
-            self.end_bn1 = nn.BatchNorm1d(res_channels, eps=5e-4)
-            self.end_bn2 = nn.BatchNorm1d(out_channels, eps=5e-4)
+        self.start_bn = nn.BatchNorm1d(res_channels, eps=5e-4)
+        self.end_bn1 = nn.BatchNorm1d(res_channels, eps=5e-4)
+        self.end_bn2 = nn.BatchNorm1d(out_channels, eps=5e-4)
 
     def forward(self, x):
         resid = self.start_conv(x)
-        if self.use_batchnorm:
-            resid = self.start_bn(resid)
+        resid = self.start_bn(resid)
         skip = torch.zeros_like(resid)
         for i in range(self.blocks):
             resid, new_skip = self.block_list[i](resid)
             skip = skip + new_skip
         out = F.relu(skip)
-        if self.use_batchnorm:
-            out = self.end_bn1(out)
+        out = self.end_bn1(out)
         out = F.relu(self.end_conv1(out))
-        if self.use_batchnorm:
-            out = self.end_bn2(out)
+        out = self.end_bn2(out)
         return self.end_conv2(out)
 
     def clip_weights(self):

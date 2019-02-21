@@ -134,7 +134,6 @@ class BitwiseResnet18(nn.Module):
                 print('Loaded {}'.format(name))
 
     def clip_weights(self):
-        self.conv1.clip_weights()
         self.layer1[0].clip_weights()
         self.layer1[1].clip_weights()
         self.layer2[0].clip_weights()
@@ -143,7 +142,6 @@ class BitwiseResnet18(nn.Module):
         self.layer3[1].clip_weights()
         self.layer4[0].clip_weights()
         self.layer4[1].clip_weights()
-        self.fc.clip_weights()
 
 def forward(model, dl, optimizer=None, loss=F.mse_loss,
     device=torch.device('cpu'), dtype=torch.float, clip_weights=False):

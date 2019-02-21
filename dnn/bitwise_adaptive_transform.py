@@ -43,30 +43,33 @@ class BitwiseAdaptiveTransform(nn.Module):
         # Initialize adaptive front end
         self.kernel_size = kernel_size
         self.in_binactiv = in_binactiv
-        self.conv = binary_layers.BitwiseConv1d(1, kernel_size, kernel_size,
+        if in_binactiv is not None:
+            self.in_binfunc = in_binactiv()
+        self.conv = binary_layers.BitwiseConv1d(
+            1, kernel_size, kernel_size,
             stride=stride, padding=kernel_size, in_binactiv=None,
             w_binactiv=None, adaptive_scaling=False,
-            use_gate=False
+            use_gate=False, scale_weights=None, scale_activations=None
         )
 
         self.batchnorm = nn.BatchNorm1d(kernel_size)
         self.autoencode = autoencode
 
         if not autoencode:
-            self.mlp = bitwise_mlp.BitwiseMLP(kernel_size, kernel_size,
+            self.mlp = bitwise_mlp.BitwiseMLP(
+                kernel_size, kernel_size,
                 fc_sizes=fc_sizes, dropout=dropout,
                 in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-                use_batchnorm=True, adaptive_scaling=adaptive_scaling,
-                use_gate=use_gate
+                adaptive_scaling=adaptive_scaling,
+                use_gate=use_gate, scale_weights=None, scale_activations=None
             )
 
         # Initialize inverse of front end transform
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
             kernel_size, 1, kernel_size, stride=stride,
-            in_binactiv=None,
-            w_binactiv=None,
-            adaptive_scaling=False,
-            use_gate=False
+            in_binactiv=None, w_binactiv=None,
+            adaptive_scaling=False, use_gate=False,
+            scale_weights=None, scale_activations=None
         )
 
         # Initialize weights
@@ -101,7 +104,8 @@ class BitwiseAdaptiveTransform(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        spec = torch.tanh(self.batchnorm(self.conv(x)))
+        if self.in_binfunc is not None:
+            spec = self.in_binfunc(self.batchnorm(self.conv(x)))
 
         if not self.autoencode:
             h_size = h.size()
@@ -110,7 +114,7 @@ class BitwiseAdaptiveTransform(nn.Module):
             h = bitwise_mlp.unflatten(h, h_size[0], h_size[2])
 
         if self.in_binactiv:
-            h = (self.in_binactiv(h) + 1)/2
+            h = (self.in_binfunc(h) + 1)/2
         else:
             h = torch.sigmoid(h)
 

@@ -121,7 +121,6 @@ def main():
     parser.add_argument('--loss', '-l', default='mse')
     parser.add_argument('--use_gate', '-ug', action='store_true')
     parser.add_argument('--adaptive_scaling', '-as', action='store_true')
-    parser.add_argument('--use_batchnorm', '-ub', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -141,25 +140,30 @@ def main():
         filter_activation = binary_layers.pick_activation(args.activation)
         gate_activation = binary_layers.pick_activation(args.activation,
             bipolar_shift=False)
-        model = bitwise_wavenet.BitwiseWavenet(1, 256,
-            kernel_size=2, filter_activation=torch.tanh,
-            gate_activation=torch.sigmoid, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
+        model = bitwise_wavenet.BitwiseWavenet(
+            1, 256, kernel_size=2, filter_activation=torch.tanh,
+            gate_activation=torch.sigmoid, in_binactiv=in_binactiv,
+            w_binactiv=w_binactiv,
             adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
-            use_batchnorm=args.use_batchnorm)
+        )
     elif args.model == 'tasnet':
         stride=10
-        model = bitwise_tasnet.BitwiseTasNet(1, 256, 512,
+        model = bitwise_tasnet.BitwiseTasNet(
+            1, 256, 512,
             blocks=4, front_kernel_size=20, front_stride=10,
             kernel_size=3, layers=8, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-            adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate)
+            adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate
+        )
     else:
         stride=16
-        model = adaptive_transform.BitwiseAdaptiveTransform(1024, 16,
-            fc_sizes=[2048, 2048], in_channels=1, out_channels=1,
+        model = adaptive_transform.BitwiseAdaptiveTransform(
+            1024, stride, fc_sizes=[2048, 2048, 2048],
+            in_channels=1, out_channels=1,
             dropout=args.dropout, sparsity=args.sparsity,
-            autoencode=args.autoencode, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-            adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
-            weight_init='fft')
+            autoencode=args.autoencode, in_binactiv=in_binactiv,
+            w_binactiv=w_binactiv, adaptive_scaling=args.adaptive_scaling,
+            use_gate=args.use_gate, weight_init='fft'
+        )
 
     # Make model and dataset
     transform = None
