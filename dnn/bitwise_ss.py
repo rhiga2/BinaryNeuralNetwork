@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import math
 import numpy as np
 import datasets.binary_data as binary_data
+import datasets.stft as stft
 import loss_and_metrics.bss_eval as bss_eval
 import dnn.binary_layers as binary_layers
 import dnn.bitwise_mlp as bitwise_mlp
@@ -15,70 +16,6 @@ import soundfile as sf
 import visdom
 import pickle as pkl
 import argparse
-
-def train(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
-    dtype=torch.float, weighted=False, clip_weights=False):
-    running_loss = 0
-    for batch in dl:
-        optimizer.zero_grad()
-        bmag = batch['bmag'].to(device=device)
-        ibm = batch['ibm'].to(device=device)
-        bmag = bmag.to(device=device)
-        bmag_size = bmag.size()
-        bmag = 2*bmag - 1
-        bmag = bitwise_mlp.flatten(bmag)
-        estimate = model(bmag)
-        estimate = bitwise_mlp.unflatten(estimate, bmag_size[0], bmag_size[2])
-        if weighted:
-            spec = batch['spec'].to(device=device)
-            spec = spec / torch.std(spec)
-            cost = loss(estimate, ibm, weight=spec)
-        else:
-            cost = loss(estimate, ibm)
-        running_loss += cost.item() * bmag_size[0]
-        cost.backward()
-        optimizer.step()
-        if clip_weights:
-            model.clip_weights()
-    optimizer.zero_grad()
-    return running_loss / len(dl.dataset)
-
-def evaluate(model, dataset, rawset, loss=F.mse_loss, max_samples=400,
-    device=torch.device('cpu'), weighted=False):
-    bss_metrics = bss_eval.BSSMetricsList()
-    running_loss = 0
-    for i in range(len(dataset)):
-        if i >= max_samples:
-            return running_loss / max_samples, bss_metrics
-
-        raw_sample = rawset[i]
-        bin_sample = dataset[i]
-        mix = raw_sample['mix']
-        target = raw_sample['target']
-        interference = raw_sample['interference']
-        mix_mag, mix_phase = binary_data.stft(mix)
-        with torch.no_grad():
-            bmag = torch.FloatTensor(bin_sample['bmag']).unsqueeze(0).to(device)
-            ibm = torch.FloatTensor(bin_sample['ibm']).unsqueeze(0).to(device)
-            bmag_size = bmag.size()
-            bmag = 2*bmag - 1
-            bmag = bitwise_mlp.flatten(bmag)
-            premask = model(bmag)
-            premask = bitwise_mlp.unflatten(premask, bmag_size[0], bmag_size[2])
-            if weighted:
-                spec =  bin_sample['spec']
-                spec = torch.FloatTensor(spec).to(device)
-                spec = spec / torch.std(spec)
-                cost = loss(premask, ibm, weight=spec)
-            else:
-                cost = loss(premask, ibm)
-            running_loss += cost.item()
-        mask = binary_data.make_binary_mask(premask).squeeze(0).cpu()
-        estimate = binary_data.istft(mix_mag * mask.numpy(), mix_phase)
-        sources = np.stack([target, interference], axis=0)
-        metric = bss_eval.bss_eval_np(estimate, sources)
-        bss_metrics.append(metric)
-    return running_loss / len(dataset), bss_metrics
 
 def mean_squared_error(estimate, target, weight=None):
     if weight is not None:
@@ -116,7 +53,6 @@ def main():
     args = parser.parse_args()
 
     # Initialize device
-    dtype = torch.float32
     if torch.cuda.is_available():
         device = torch.device('cuda:'+ str(args.device))
     else:
@@ -133,8 +69,54 @@ def main():
     in_binactiv = binary_layers.pick_activation(args.in_binactiv)
     w_binactiv = binary_layers.pick_activation(args.w_binactiv)
 
+    my_stft = stft.STFT(nfft=1024, stride=256, win='hann').to(device)
+    my_istft = stft.ISTFT(nfft=1024, stride=256, win='hann').to(device)
+    bss_evaluate = bss_eval.BSSEvaluate(fs=8000).to(device)
+
+    def forward(model, dl, raw_dl=None, optimizer=None, weighted=False,
+        clip_weights=False):
+        running_loss = 0
+        for batch in dl:
+            if optimizer is not None:
+                optimizer.zero_grad()
+            bmag = batch['bmag'].to(device=device)
+            ibm = batch['ibm'].to(device=device)
+            bmag = bmag.to(device=device)
+            bmag_size = bmag.size()
+            bmag = 2*bmag - 1
+            bmag = bitwise_mlp.flatten(bmag)
+            estimate = model(bmag)
+            estimate = bitwise_mlp.unflatten(estimate, bmag_size[0], bmag_size[2])
+            # if weighted:
+            #     spec = batch['spec'].to(device=device)
+            #     spec = spec / torch.std(spec)
+            #     cost = loss(estimate, ibm, weight=spec)
+            # else:
+            #     cost = loss(estimate, ibm)
+            running_loss += cost.item() * bmag_size[0]
+            cost.backward()
+            if optimizer is not None:
+                optimizer.step()
+                if clip_weights:
+                    model.clip_weights()
+            bss_metrics = None
+            if raw_dl is not None:
+                bss_metrics = bss_eval.BSSMetricsList()
+                mix_mag, mix_phase = my_stft(mix)
+                mix = raw_batch['mix']
+                target = raw_batch['target']
+                interference = raw_batch['interference']
+                mask = binary_data.make_binary_mask(estimate)
+                mix_estimate = my_istft(mix_mag * mask, mix_phase)
+                sources = torch.stack([target, interference], dim=1)
+                metrics = bss_evaluate(mix_estimate, sources)
+                bss_metrics.extend(metrics)
+        if optimizer is not None:
+            optimizer.zero_grad()
+        return running_loss / len(dl.dataset), bss_metrics
+
     # Make model and dataset
-    train_dl, valset, rawset = binary_data.get_binary_data(args.batchsize, toy=args.toy)
+    train_dl, val_dl, raw_dl = binary_data.get_binary_data(args.batchsize, toy=args.toy)
     model = bitwise_mlp.BitwiseMLP(
         in_size=2052,
         out_size=513,
@@ -167,14 +149,14 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
-        train_loss = train(model, train_dl, optimizer, loss=loss,
-            device=device, weighted=args.weighted, clip_weights=args.clip_weights)
+        train_loss, _ = forward(model, train_dl, optimizer,
+            weighted=args.weighted, clip_weights=args.clip_weights)
 
         if (epoch+1) % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
-            val_loss, val_metrics = evaluate(model, valset, rawset, loss=loss,
-                weighted=args.weighted, device=device)
+            val_loss, val_metrics = forward(model, val_dl, raw_dl=raw_dl,
+                weighted=args.weighted)
             print('Val Cost: %f' % val_loss)
             sdr, sir, sar = val_metrics.mean()
             print('SDR: ', sdr)

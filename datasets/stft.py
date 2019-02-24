@@ -92,6 +92,7 @@ def main():
         torch_stft = STFT(nfft=nfft, stride=stride, win=win)
         torch_istft = ISTFT(nfft=nfft, stride=stride, win=win)
         mag, phase = torch_stft(x)
+        print(torch.min(mag), torch.max(mag))
         x_hat = torch_istft(mag, phase)
         print('{} mean-square error:'.format(win),
             torch.mean((x - x_hat)**2).item())

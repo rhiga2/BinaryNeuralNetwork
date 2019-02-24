@@ -66,9 +66,9 @@ class SISNRLoss(nn.Module):
         return -10 * torch.log10(torch.mean(s_target**2)/torch.mean(e_noise**2))
 
 class ShortTimeObjectiveIntelligibility(nn.Module):
-    def __init__(self):
+    def __init__(self, fs=8000, return_loss=True):
         super(ShortTimeObjectiveIntelligibility, self).__init__()
-        self.fs = 16000
+        self.fs = fs
         self.num_bands = 15
         self.center_freq = 150
         self.min_energy = 40
@@ -78,6 +78,7 @@ class ShortTimeObjectiveIntelligibility(nn.Module):
         self.num_frames = 30
         self.beta =  1 + 10**(15 / 20)
         self.fft_pad = (self.fft_size - self.fft_in_frame_size) // 2
+        self.return_loss = return_loss
 
         scale = self.fft_size / self.hop
         window = np.hanning(self.fft_in_frame_size)
@@ -120,7 +121,10 @@ class ShortTimeObjectiveIntelligibility(nn.Module):
             y_prime = torch.min(alpha * y_seg, self.beta * x_seg)
             corr += self._correlation(x_seg, y_prime)
 
-        return -corr / (i + 1)
+        if self.return_loss:
+            corr = -torch.mean(corr)
+
+        return corr / self.num_frames
 
     def _stft(self, seq):
         seq = seq.unsqueeze(1)
@@ -167,7 +171,7 @@ class ShortTimeObjectiveIntelligibility(nn.Module):
         xn /= torch.sqrt(torch.sum(xn**2, dim=2, keepdim=True))
         yn = y - torch.mean(y, dim=2, keepdim=True)
         yn /= torch.sqrt(torch.sum(yn**2, dim=2, keepdim=True))
-        r = torch.mean(torch.sum(xn * yn, dim=2))
+        r = torch.mean(torch.sum(xn * yn, dim=2), dim=1)
         return r
 
 class DiscreteWasserstein(nn.Module):
