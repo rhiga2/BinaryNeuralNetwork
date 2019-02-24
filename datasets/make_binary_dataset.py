@@ -19,9 +19,9 @@ def main():
     args = parser.parse_args()
 
     quantizer = quantized_data.Quantizer(min=-1, delta=2/2**(args.num_bits),
-        num_bits=args.num_bits, use_mu=False)
+        num_bits=args.num_bits)
     disperser = quantized_data.Disperser(args.num_bits)
-    trainset, valset, testset = make_data.make_mixture_set(max_duration=2,
+    trainset, valset, testset = make_data.make_mixture_set(hop=256, max_duration=2,
         toy=args.toy, transform=lambda x : signal.decimate(x, 2))
     print('Samples in Trainset: ', len(trainset))
     print('Samples in Valset: ', len(valset))

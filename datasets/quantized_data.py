@@ -116,9 +116,9 @@ class Quantizer(nn.Module):
         x has shape (batch, features)
         return has shape (batch, features)
         '''
-        if mode == 'mu_law':
+        if self.mode == 'mu_law':
             x = mu_law(x, 2**self.num_bits-1)
-        elif mode == 'log':
+        elif self.mode == 'log':
             x = torch.log(x)
             x = unit_cube_normalize(x)
         x = (x - self.min) / self.delta-1
@@ -127,8 +127,8 @@ class Quantizer(nn.Module):
 
     def inverse(self, x):
         x = self.delta * (x + 0.5) + self.min
-        if mode == 'mu_law':
+        if self.mode == 'mu_law':
             x = inverse_mu_law(x, 2**self.num_bits-1)
-        elif mode == 'log':
+        elif self.mode == 'log':
             x = torch.exp(x)
         return x

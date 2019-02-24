@@ -69,13 +69,15 @@ def main():
     in_binactiv = binary_layers.pick_activation(args.in_binactiv)
     w_binactiv = binary_layers.pick_activation(args.w_binactiv)
 
-    my_stft = stft.STFT(nfft=1024, stride=256, win='hann').to(device)
-    my_istft = stft.ISTFT(nfft=1024, stride=256, win='hann').to(device)
-    bss_evaluate = bss_eval.BSSEvaluate(fs=8000).to(device)
+    my_stft = stft.STFT(nfft=1024, stride=256, win='hann').to(device=device)
+    my_istft = stft.ISTFT(nfft=1024, stride=256, win='hann').to(device=device)
+    bss_evaluate = bss_eval.BSSEvaluate(fs=8000).to(device=device)
 
     def forward(model, dl, raw_dl=None, optimizer=None, weighted=False,
         clip_weights=False):
         running_loss = 0
+        if raw_dl is not None:
+            raw_dl = iter(raw_dl)
         for batch in dl:
             if optimizer is not None:
                 optimizer.zero_grad()
@@ -101,14 +103,15 @@ def main():
                     model.clip_weights()
             bss_metrics = None
             if raw_dl is not None:
+                raw_batch = next(raw_dl)
                 bss_metrics = bss_eval.BSSMetricsList()
-                mix_mag, mix_phase = my_stft(mix)
-                mix = raw_batch['mix']
+                mix = raw_batch['mix'].to(device=device)
+                mix_mag, mix_phase = my_stft(mix.unsqueeze(1))
                 target = raw_batch['target']
                 interference = raw_batch['interference']
-                mask = binary_data.make_binary_mask(estimate)
-                mix_estimate = my_istft(mix_mag * mask, mix_phase)
-                sources = torch.stack([target, interference], dim=1)
+                mask = binary_data.make_binary_mask(estimate).to(dtype=torch.float)
+                mix_estimate = my_istft(mix_mag * mask, mix_phase).squeeze(1)
+                sources = torch.stack([target, interference], dim=1).to(device=device)
                 metrics = bss_evaluate(mix_estimate, sources)
                 bss_metrics.extend(metrics)
         if optimizer is not None:
@@ -149,7 +152,7 @@ def main():
         total_cost = 0
         model.update_betas()
         model.train()
-        train_loss, _ = forward(model, train_dl, optimizer,
+        train_loss, _ = forward(model, train_dl, optimizer=optimizer,
             weighted=args.weighted, clip_weights=args.clip_weights)
 
         if (epoch+1) % args.period == 0:
@@ -158,12 +161,13 @@ def main():
             val_loss, val_metrics = forward(model, val_dl, raw_dl=raw_dl,
                 weighted=args.weighted)
             print('Val Cost: %f' % val_loss)
-            sdr, sir, sar = val_metrics.mean()
+            sdr, sir, sar, stoi = val_metrics.mean()
             print('SDR: ', sdr)
             print('SIR: ', sir)
             print('SAR: ', sar)
+            print('STOI: ', stoi)
             loss_metrics.update(train_loss, val_loss,
-                sdr, sir, sar, period=args.period)
+                sdr, sir, sar, stoi, period=args.period)
             bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['{} Loss'.format(args.exp),
                 '{} BSS Eval'.format(args.exp)])
             if sdr > max_sdr:

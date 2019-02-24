@@ -88,11 +88,11 @@ def bss_eval_batch(preds, source_tensor, target_idx=0):
     preds (batch, length)
     source_tensor (batch, sources, length)
     '''
-    metrics = BSSEvalMetricsList()
+    metrics = BSSMetricsList()
     for i in range(preds.size(0)):
         pred = preds[i]
         sources = source_tensor[i]
-        sdr, sir, sar = bss_eval(pred, sources, target_idx)
+        sdr, sir, sar = bss_eval(pred, sources)
         metrics.sdrs.append(sdr)
         metrics.sirs.append(sir)
         metrics.sars.append(sar)
@@ -107,7 +107,7 @@ class BSSEvaluate(nn.Module):
         )
 
     def forward(self, preds, source_tensor, target_idx=0):
-        metrics = bss_eval_batch(preds, source_tensor, target_idx).cpu()
+        metrics = bss_eval_batch(preds, source_tensor).cpu()
         metrics.stois = list(self.stoi(preds, source_tensor[:, 0],
                             source_tensor[:, 1]).cpu())
         return metrics
