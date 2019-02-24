@@ -106,11 +106,11 @@ def main():
                 raw_batch = next(raw_dl)
                 bss_metrics = bss_eval.BSSMetricsList()
                 mix = raw_batch['mix'].to(device=device)
-                mix_mag, mix_phase = my_stft(mix.unsqueeze(1))
+                mix_mag, mix_phase = my_stft(mix)
                 target = raw_batch['target']
                 interference = raw_batch['interference']
                 mask = binary_data.make_binary_mask(estimate).to(dtype=torch.float)
-                mix_estimate = my_istft(mix_mag * mask, mix_phase).squeeze(1)
+                mix_estimate = my_istft(mix_mag * mask, mix_phase)
                 sources = torch.stack([target, interference], dim=1).to(device=device)
                 metrics = bss_evaluate(mix_estimate, sources)
                 bss_metrics.extend(metrics)

@@ -48,9 +48,9 @@ def main():
             mix = torch.FloatTensor(np.ascontiguousarray(sample['mixture']))
             target = torch.FloatTensor(np.ascontiguousarray(sample['target']))
             inter = torch.FloatTensor(np.ascontiguousarray(sample['interference']))
-            mix_mag, mix_phase = my_stft(mix.unsqueeze(0).unsqueeze(0))
-            targ_mag, targ_phase = my_stft(target.unsqueeze(0).unsqueeze(0))
-            inter_mag, inter_phase = my_stft(inter.unsqueeze(0).unsqueeze(0))
+            mix_mag, mix_phase = my_stft(mix.unsqueeze(0))
+            targ_mag, targ_phase = my_stft(target.unsqueeze(0))
+            inter_mag, inter_phase = my_stft(inter.unsqueeze(0))
             ibm = binary_data.make_binary_mask(targ_mag.squeeze(0) - inter_mag.squeeze(0)).to(torch.uint8)
 
             # uint8 does not convert nicely to torch float tensor
