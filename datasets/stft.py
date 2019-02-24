@@ -42,7 +42,10 @@ class STFT(nn.Module):
         self.conv.weight = nn.Parameter(basis.unsqueeze(1), requires_grad=False)
 
     def forward(self, x):
-        spec = self.conv(x)
+        '''
+        input x is (batch size, length)
+        '''
+        spec = self.conv(x.unsqueeze(1))
         real = spec[:, :self.cutoff]
         imag = spec[:, self.cutoff:]
         mag = torch.sqrt(real**2 + imag**2)
@@ -76,8 +79,8 @@ class ISTFT(nn.Module):
         real = mag * torch.cos(angle)
         imag = mag * torch.sin(angle)
         spec = torch.cat([real, imag], dim=1)
-        x = self.conv_transpose(spec)
-        return x[:, :, self.nfft:x.size(2)-self.nfft]
+        x = self.conv_transpose(spec).squeeze(1)
+        return x[:, self.nfft:x.size(1)-self.nfft]
 
 def main():
     # Test multiple windows
@@ -87,7 +90,7 @@ def main():
     x, samplerate = sf.read('example.wav')
     x = torch.FloatTensor(x)
     x = x.mean(-1)[:(len(x)//stride * stride)]
-    x = x.unsqueeze(0).unsqueeze(0)
+    x = x.unsqueeze(0)
     for win in wins:
         torch_stft = STFT(nfft=nfft, stride=stride, win=win)
         torch_istft = ISTFT(nfft=nfft, stride=stride, win=win)
