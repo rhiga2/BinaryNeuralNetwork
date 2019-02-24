@@ -8,6 +8,10 @@ from sklearn.cluster import KMeans
 import argparse
 import math
 
+def unit_cube_normalize(x):
+    return 2*(x / torch.max(torch.abs(x))) - 1
+
+
 def quantize_and_disperse(mix_mag, quantizer, disperser):
     mix_mag = torch.FloatTensor(mix_mag / np.max(np.abs(mix_mag))).unsqueeze(0)
     qmag = quantizer(mix_mag)
@@ -100,26 +104,31 @@ def inverse_mu_law(x, mu):
     return torch.sign(x)/mu*((1 + mu)**torch.abs(x) - 1)
 
 class Quantizer(nn.Module):
-    def __init__(self, min=-1, delta=1/8, num_bits=4, use_mu=True):
+    def __init__(self, min=-1, delta=1/8, num_bits=4, mode='mu_law'):
         super(Quantizer, self).__init__()
         self.min = min
         self.delta = delta
         self.num_bits = num_bits
-        self.use_mu = use_mu
+        self.mode = mode
 
     def forward(self, x):
         '''
         x has shape (batch, features)
         return has shape (batch, features)
         '''
-        if self.use_mu:
+        if mode == 'mu_law':
             x = mu_law(x, 2**self.num_bits-1)
+        elif mode == 'log':
+            x = torch.log(x)
+            x = unit_cube_normalize(x)
         x = (x - self.min) / self.delta-1
         x = torch.ceil(x)
         return torch.clamp(x, 0, 2**self.num_bits-1)
 
     def inverse(self, x):
         x = self.delta * (x + 0.5) + self.min
-        if self.use_mu:
+        if mode == 'mu_law':
             x = inverse_mu_law(x, 2**self.num_bits-1)
+        elif mode == 'log':
+            x = torch.exp(x)
         return x
