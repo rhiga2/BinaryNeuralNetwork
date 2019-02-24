@@ -44,13 +44,13 @@ def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
             estimate = estimate.squeeze(1)
 
         reconst_loss = loss(estimate, target)
-        running_loss += reconst_loss * mix.size(0)
+        running_loss += reconst_loss.item() * mix.size(0)
         reconst_loss.backward()
         optimizer.step()
         if clip_weights:
             model.clip_weights()
     optimizer.zero_grad()
-    return running_loss.item() / len(dl.dataset)
+    return running_loss / len(dl.dataset)
 
 def val(model, dl, loss=F.mse_loss, autoencode=False,
     quantizer=None, device=torch.device('cpu'),
@@ -80,7 +80,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
                 estimate = estimate.squeeze(1)
 
             reconst_loss = loss(estimate, labels)
-            running_loss += reconst_loss * mix.size(0)
+            running_loss += reconst_loss.item() * mix.size(0)
 
             if classification:
                 estimate = estimate.view(estimate_size[0], estimate_size[2], 256).contiguous().permute(0, 2, 1)
@@ -92,7 +92,7 @@ def val(model, dl, loss=F.mse_loss, autoencode=False,
         sources = torch.stack([target, inter], dim=1).to(device=device)
         metrics = bss_eval.bss_eval_batch(estimate, sources)
         bss_metrics.extend(metrics)
-    return running_loss.item() / len(dl.dataset), bss_metrics
+    return running_loss / len(dl.dataset), bss_metrics
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
@@ -120,7 +120,6 @@ def main():
     parser.add_argument('--w_binactiv', '-wb', default='identity')
     parser.add_argument('--loss', '-l', default='mse')
     parser.add_argument('--use_gate', '-ug', action='store_true')
-    parser.add_argument('--adaptive_scaling', '-as', action='store_true')
     args = parser.parse_args()
 
     # Initialize device
@@ -144,7 +143,7 @@ def main():
             1, 256, kernel_size=2, filter_activation=torch.tanh,
             gate_activation=torch.sigmoid, in_binactiv=in_binactiv,
             w_binactiv=w_binactiv,
-            adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate,
+            use_gate=args.use_gate,
         )
     elif args.model == 'tasnet':
         stride=10
@@ -152,24 +151,20 @@ def main():
             1, 256, 512,
             blocks=4, front_kernel_size=20, front_stride=10,
             kernel_size=3, layers=8, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-            adaptive_scaling=args.adaptive_scaling, use_gate=args.use_gate
+            use_gate=args.use_gate
         )
     else:
-        stride=16
+        stride=32
         model = adaptive_transform.BitwiseAdaptiveTransform(
             1024, stride, fc_sizes=[2048, 2048, 2048],
             in_channels=1, out_channels=1,
             dropout=args.dropout, sparsity=args.sparsity,
             autoencode=args.autoencode, in_binactiv=in_binactiv,
-            w_binactiv=w_binactiv, adaptive_scaling=args.adaptive_scaling,
+            w_binactiv=w_binactiv,
             use_gate=args.use_gate, weight_init='fft'
         )
 
     # Make model and dataset
-    transform = None
-    if args.decimate:
-        transform = lambda x : signal.decimate(x, 2)
-
     train_dl, val_dl, _ = utils.get_data_from_directory(args.batchsize,
         '/media/data/wsj_mix/decimated2/', template='sample*.npz',
         return_dls=True)
@@ -215,7 +210,7 @@ def main():
                 dtype=dtype, classification=classification)
             sdr, sir, sar = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
-                output_period=args.period)
+                period=args.period)
             bss_eval.train_plot(vis, loss_metrics, eid='Ryley',
                 win=['{} Loss'.format(args.exp), '{} BSS Eval'.format(args.exp)])
             print('Validation Cost: ', val_loss)

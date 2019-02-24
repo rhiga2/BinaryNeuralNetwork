@@ -51,7 +51,7 @@ class BitwiseMLP(nn.Module):
                     self.dropout_list.append(nn.Dropout(dropout, inplace=True))
                 self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
             isize = osize
-        self.scale = binary_layers.ScaleLayer(osize)
+        self.out_bn = nn.BatchNorm1d(osize, momentum=bn_momentum)
         self.sparsity = sparsity
 
     def forward(self, x):
@@ -70,7 +70,7 @@ class BitwiseMLP(nn.Module):
                 if self.dropout > 0:
                     h = self.dropout_list[i](h)
                 h = self.bn_list[i](h)
-        return self.scale(h)
+        return self.out_bn(h)
 
     def clip_weights(self):
         for layer in self.filter_list:

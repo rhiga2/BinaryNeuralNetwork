@@ -2,9 +2,11 @@ import sys , os
 sys.path.append('../')
 
 import numpy as np
-import datasets.sepcosts as sepcosts
+import torch
+import torch.nn as nn
+import loss_and_metrics.sepcosts as sepcosts
 
-class BSSEvalMetricsList:
+class BSSMetricsList:
     def __init__(self):
         self.sdrs = []
         self.sirs = []
@@ -18,10 +20,10 @@ class BSSEvalMetricsList:
         self.stois.extend(metrics.stois)
 
     def mean(self):
-        mean_sdr = torch.mean(torch.FloatTensor(self.sdrs))
-        mean_sir = torch.mean(torch.FloatTensor(self.sirs))
-        mean_sar = torch.mean(torch.FloatTensor(self.sars))
-        mean_stoi = torch.mean(torch.FloatTensor(self.stois))
+        mean_sdr = torch.mean(torch.FloatTensor(self.sdrs)).item()
+        mean_sir = torch.mean(torch.FloatTensor(self.sirs)).item()
+        mean_sar = torch.mean(torch.FloatTensor(self.sars)).item()
+        mean_stoi = torch.mean(torch.FloatTensor(self.stois)).item()
         return mean_sdr, mean_sir, mean_sar, mean_stoi
 
 def compute_s_target(pred, target):
@@ -98,6 +100,7 @@ def bss_eval_batch(preds, source_tensor, target_idx=0):
 
 class BSSEvaluate(nn.Module):
     def __init__(self, fs=16000):
+        super().__init__()
         self.stoi = sepcosts.ShortTimeObjectiveIntelligibility(
             fs=fs,
             return_loss=False
