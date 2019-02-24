@@ -36,7 +36,7 @@ class BitwiseAdaptiveTransform(nn.Module):
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
         in_binactiv=None, w_binactiv=None,
-        use_gate=False, adaptive_scaling=True,
+        use_gate=False, num_binarizations=1,
         weight_init=None, autoencode=False):
         super(BitwiseAdaptiveTransform, self).__init__()
 
@@ -48,7 +48,7 @@ class BitwiseAdaptiveTransform(nn.Module):
         self.conv = binary_layers.BitwiseConv1d(
             1, kernel_size, kernel_size,
             stride=stride, padding=kernel_size, in_binactiv=None,
-            w_binactiv=None, adaptive_scaling=False,
+            w_binactiv=None, num_binarizations=1,
             use_gate=False, scale_weights=None, scale_activations=None
         )
 
@@ -57,10 +57,9 @@ class BitwiseAdaptiveTransform(nn.Module):
 
         if not autoencode:
             self.mlp = bitwise_mlp.BitwiseMLP(
-                kernel_size, kernel_size,
-                fc_sizes=fc_sizes, dropout=dropout,
+                kernel_size, kernel_size, num_binarizations=1,
+                fc_sizes=fc_sizes, dropout=dropout, bias=False,
                 in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-                adaptive_scaling=adaptive_scaling,
                 use_gate=use_gate, scale_weights=None, scale_activations=None
             )
 
@@ -68,7 +67,7 @@ class BitwiseAdaptiveTransform(nn.Module):
         self.conv_transpose = binary_layers.BitwiseConvTranspose1d(
             kernel_size, 1, kernel_size, stride=stride,
             in_binactiv=None, w_binactiv=None,
-            adaptive_scaling=False, use_gate=False,
+            use_gate=False,
             scale_weights=None, scale_activations=None
         )
 
@@ -104,21 +103,24 @@ class BitwiseAdaptiveTransform(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        if self.in_binfunc is not None:
-            spec = self.in_binfunc(self.batchnorm(self.conv(x)))
+        spec = F.relu(self.conv(x))
 
         if not self.autoencode:
-            h_size = h.size()
+            h = spec
+            if self.in_binfunc is not None:
+                h = self.in_binfunc(self.batchnorm(h))           
+
+            spec_size = spec.size()
             h = bitwise_mlp.flatten(h)
             h = self.mlp(h)
-            h = bitwise_mlp.unflatten(h, h_size[0], h_size[2])
+            h = bitwise_mlp.unflatten(h, spec_size[0], spec_size[2])
 
-        if self.in_binactiv:
-            h = (self.in_binfunc(h) + 1)/2
-        else:
-            h = torch.sigmoid(h)
+            if self.in_binactiv:
+                h = (self.in_binfunc(h) + 1)/2
+            else:
+                h = torch.sigmoid(h)
+            spec = h * spec
 
-        h = h * spec
         return self.conv_transpose(spec)[:, :, self.kernel_size:time+self.kernel_size]
 
     def clip_weights(self):

@@ -55,6 +55,7 @@ def collate_and_trim(batch, axis=0, hop=1, dtype=torch.float):
         start = (length - min_length) // 2
         for key in keys:
             indices = range(start, start+min_length)
+            print(key, sample[key].take(indices=indices, axis=axis).shape)
             outbatch[key].append(sample[key].take(indices=indices, axis=axis))
 
     outbatch = {key: torch.as_tensor(np.stack(values, axis=0), dtype=dtype) for key, values in outbatch.items()}

@@ -137,18 +137,17 @@ class BitwiseAbstractClass(ABC):
     def binarize_inputs(self, x):
         estimate = x
         if self.in_binactiv is not None:
+            estimate = torch.zeros_like(x)
             weight = self.drop_weights()
             residual = x
-            estimate = self.in_binactiv(residual)
             if self.num_binarizations > 0:
-                estimate = torch.zeros_like(x)
+                residual = residual - estimate
                 for _ in range(self.num_binarizations):
                     x_bin = self.in_binactiv(residual)
                     if self.scale_activations == 'average':
                         x_scale = torch.abs(residual).mean(1, keepdim=True)
                         x_bin = x_scale * x_bin
                     estimate += x_bin
-                    residual = residual - estimate
         return estimate
 
     def binarize_weights(self):
@@ -199,11 +198,11 @@ class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
             scale_activations=scale_activations,
             num_binarizations=num_binarizations)
 
-        self.scale_conv = nn.Conv1d(1, 1, kernel_size, stride=stride,
-            padding=padding, dilation=dilation)
-        weight = self.scale_conv.weight
-        weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
-        self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
+        # self.scale_conv = nn.Conv1d(1, 1, kernel_size, stride=stride,
+        #    padding=padding, dilation=dilation)
+        # weight = self.scale_conv.weight
+        # weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
+        # self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
 
     def forward(self, x):
         '''
@@ -232,11 +231,11 @@ class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
             scale_activations=scale_activations,
             num_binarizations=num_binarizations)
 
-        self.scale_conv = nn.Conv2d(1, 1, kernel_size, stride=stride,
-            padding=padding, dilation=dilation, bias=False)
-        weight = self.scale_conv.weight
-        weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
-        self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
+        # self.scale_conv = nn.Conv2d(1, 1, kernel_size, stride=stride,
+        #     padding=padding, dilation=dilation, bias=False)
+        # weight = self.scale_conv.weight
+        # weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
+        # self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
 
     def forward(self, x):
         '''
@@ -251,7 +250,7 @@ class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
 class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
     def __init__(self, in_channels, out_channels, kernel_size,
                 stride=1, padding=0, groups=1, bias=True, use_gate=False,
-                in_binactiv=None, w_binactiv=None,
+                in_binactiv=None, w_binactiv=None, dilation=1,
                 bn_momentum=0.1, scale_weights=None, scale_activations=None,
                 num_binarizations=1):
         super(BitwiseConvTranspose1d, self).__init__(
@@ -263,11 +262,11 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
             scale_weights=scale_weights,
             num_binarizations=num_binarizations)
 
-        self.scale_conv = nn.ConvTranspose1d(1, 1, kernel_size,
-            stride=stride, padding=padding, dilation=dilation, bias=False)
-        weight = self.scale_conv.weight
-        weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
-        self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
+        # self.scale_conv = nn.ConvTranspose1d(1, 1, kernel_size,
+        #     stride=stride, padding=padding, dilation=dilation, bias=False)
+        # weight = self.scale_conv.weight
+        # weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
+        # self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
 
     def forward(self, x):
         '''

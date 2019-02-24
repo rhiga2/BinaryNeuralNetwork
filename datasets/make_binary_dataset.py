@@ -9,6 +9,7 @@ import scipy.signal as signal
 import datasets.make_data as make_data
 import datasets.binary_data as binary_data
 import datasets.quantized_data as quantized_data
+import datasets.stft as stft
 import argparse
 
 def main():
@@ -37,30 +38,23 @@ def main():
 
     dirs = [train_dir, val_dir, test_dir]
     datasets = [trainset, valset, testset]
-    stft = stft.STFT(nfft=1024, stride=256, win='hann')
+    my_stft = stft.STFT(nfft=1024, stride=256, win='hann')
 
     for directory, dataset in zip(dirs, datasets):
         for i in range(len(dataset)):
             binary_fname = directory + 'binary_data%d.npz' % i
             raw_fname = directory + 'raw_data%d.npz' % i
             sample = dataset[i]
-            mix = torch.FloatTensor(sample['mixture'])
-            target = torch.FloatTesnor(sample['target'])
-            inter = torch.FloatTensor(sample['interference'])
-            mix_mag, mix_phase = stft(mix.unsqueeze(0))
-            mix_mag = mix_mag.squeeze(0)
-            mix_phase = mix_phase.squeeze(0)
-            targ_mag, targ_phase = stft(target.unsqueeze(0))
-            targ_mag = targ_mag.squeeze(0)
-            targ_phase = targ_phase.squeeze(0)
-            inter_mag, inter_phase = stft(inter.unsqueeze(0))
-            inter_mag = inter_mag.squeeze(0)
-            inter_phase = inter_phase.squeeze(0)
-            ibm = binary_data.make_binary_mask(targ_mag - inter_mag).to(torch.uint8)
+            mix = torch.FloatTensor(np.ascontiguousarray(sample['mixture']))
+            target = torch.FloatTensor(np.ascontiguousarray(sample['target']))
+            inter = torch.FloatTensor(np.ascontiguousarray(sample['interference']))
+            mix_mag, mix_phase = my_stft(mix.unsqueeze(0).unsqueeze(0))
+            targ_mag, targ_phase = my_stft(target.unsqueeze(0).unsqueeze(0))
+            inter_mag, inter_phase = my_stft(inter.unsqueeze(0).unsqueeze(0))
+            ibm = binary_data.make_binary_mask(targ_mag.squeeze(0) - inter_mag.squeeze(0)).to(torch.uint8)
 
             # uint8 does not convert nicely to torch float tensor
-            bmag = 2*(mix_mag / torch.max(torch.abs(mix_mag))) - 1
-            bmag = quantized_data.quantize_and_disperse(bmag, quantizer, disperser).to(torch.uint8)
+            bmag = quantized_data.quantize_and_disperse(mix_mag, quantizer, disperser).to(torch.uint8)
             np.savez(
                 binary_fname,
                 bmag=bmag.numpy(),

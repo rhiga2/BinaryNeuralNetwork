@@ -92,7 +92,7 @@ def main():
             #     spec = spec / torch.std(spec)
             #     cost = loss(estimate, ibm, weight=spec)
             # else:
-            #     cost = loss(estimate, ibm)
+            cost = loss(estimate, ibm)
             running_loss += cost.item() * bmag_size[0]
             cost.backward()
             if optimizer is not None:
