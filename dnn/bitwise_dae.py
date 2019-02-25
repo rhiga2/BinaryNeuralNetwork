@@ -21,79 +21,6 @@ import visdom
 import argparse
 import pickle as pkl
 
-def train(model, dl, optimizer, loss=F.mse_loss, device=torch.device('cpu'),
-    autoencode=False, quantizer=None, dtype=torch.float,
-    clip_weights=False, classification=False):
-    running_loss = 0
-    for batch in dl:
-        optimizer.zero_grad()
-        mix, target = batch['mixture'], batch['target']
-        if autoencode:
-            mix = target
-        if quantizer:
-            mix = quantizer(mix).to(device=device, dtype=dtype) / 255
-            target = quantizer(target).to(device=device, dtype=torch.long).view(-1)
-        mix = mix.unsqueeze(1)
-        mix = mix.to(device=device)
-        target = target.to(device=device)
-        estimate = model(mix)
-
-        if classification:
-            estimate = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
-        else:
-            estimate = estimate.squeeze(1)
-
-        reconst_loss = loss(estimate, target)
-        running_loss += reconst_loss.item() * mix.size(0)
-        reconst_loss.backward()
-        optimizer.step()
-        if clip_weights:
-            model.clip_weights()
-    optimizer.zero_grad()
-    return running_loss / len(dl.dataset)
-
-def val(model, dl, loss=F.mse_loss, autoencode=False,
-    quantizer=None, device=torch.device('cpu'),
-    dtype=torch.float, classification=False):
-    running_loss = 0
-    bss_metrics = bss_eval.BSSMetricsList()
-    for batch in dl:
-        mix, target, inter = batch['mixture'], batch['target'], batch['interference']
-        features = mix
-        labels = target
-        if autoencode:
-            features = target
-        if quantizer:
-            features = quantizer(features).to(device=device, dtype=dtype) / 255
-            labels = quantizer(labels).to(device=device, dtype=torch.long).view(-1)
-        features = features.unsqueeze(1)
-
-        with torch.no_grad():
-            features = features.to(device=device)
-            labels = labels.to(device=device)
-            estimate = model(features)
-            estimate_size = estimate.size()
-
-            if classification:
-                estimate = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
-            else:
-                estimate = estimate.squeeze(1)
-
-            reconst_loss = loss(estimate, labels)
-            running_loss += reconst_loss.item() * mix.size(0)
-
-            if classification:
-                estimate = estimate.view(estimate_size[0], estimate_size[2], 256).contiguous().permute(0, 2, 1)
-
-            if quantizer:
-                estimate = torch.argmax(estimate, dim=1).to(dtype=dtype)
-                estimate = quantizer.inverse(estimate)
-
-        sources = torch.stack([target, inter], dim=1).to(device=device)
-        metrics = bss_eval.bss_eval_batch(estimate, sources)
-        bss_metrics.extend(metrics)
-    return running_loss / len(dl.dataset), bss_metrics
-
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--exp', '-exp', default='temp')
@@ -192,23 +119,59 @@ def main():
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
+    def forward(model, dl, train=False, autoencode=False, clip_weights=False,
+        classification=False):
+        running_loss = 0
+        bss_metrics = bss_eval.BSSMetricsList()
+        for batch in dl:
+            if train:
+                optimizer.zero_grad()
+            mix, target = batch['mixture'], batch['target']
+            if autoencode:
+                mix = target
+            if quantizer:
+                mix = quantizer(mix).to(device=device, dtype=dtype) / 255
+                target = quantizer(target).to(device=device, dtype=torch.long).view(-1)
+            mix = mix.unsqueeze(1)
+            mix = mix.to(device=device)
+            target = target.to(device=device)
+            estimate = model(mix)
+
+            if classification:
+                estimate = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
+            else:
+                estimate = estimate.squeeze(1)
+
+            reconst_loss = loss(estimate, target)
+            running_loss += reconst_loss.item() * mix.size(0)
+            if train:
+                reconst_loss.backward()
+                optimizer.step()
+                if clip_weights:
+                    model.clip_weights()
+            else:
+                sources = torch.stack([target, inter], dim=1).to(device=device)
+                metrics = bss_evaluate(estimate, sources)
+                bss_metrics.extend(metrics)
+        if train:
+            optimizer.zero_grad()
+        return running_loss / len(dl.dataset), bss_metrics
+
     for epoch in range(args.epochs):
         total_cost = 0
         model.update_betas()
         model.train()
         train_loss = 0
-        train_loss = train(model, train_dl, optimizer, loss=loss, device=device,
-            autoencode=args.autoencode, quantizer=quantizer,
-            dtype=dtype, clip_weights=args.clip_weights,
+        train_loss, _ = forward(model, train_dl, train=True,
+            autoencode=args.autoencode, clip_weights=args.clip_weights,
             classification=classification)
 
         if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
-            val_loss, bss_metrics = val(model, val_dl, loss=loss, device=device,
-                autoencode=args.autoencode, quantizer=quantizer,
-                dtype=dtype, classification=classification)
-            sdr, sir, sar = bss_metrics.mean()
+            val_loss, bss_metrics = val(model, val_dl, train=False,
+                autoencode=args.autoencode, classification=classification)
+            sdr, sir, sar, stoi = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
                 period=args.period)
             bss_eval.train_plot(vis, loss_metrics, eid='Ryley',
@@ -217,6 +180,7 @@ def main():
             print('Val SDR: ', sdr)
             print('Val SIR: ', sir)
             print('Val SAR: ', sar)
+            print('Val SAR: ', stoi)
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
