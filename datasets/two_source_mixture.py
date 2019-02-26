@@ -49,7 +49,7 @@ class TwoSourceMixtureDataset(Dataset):
         inter = inter / (np.std(inter) + 1e-5)
         if random_snr:
             snr = 5 * np.random.random() - 2.5
-            snr = np.power(10, snr / 10)
+            snr = np.power(10, snr / 20)
             mix = snr * sig + inter
         else:
             mix = sig + inter
