@@ -81,7 +81,7 @@ def main():
             use_gate=args.use_gate
         )
     else:
-        stride=32
+        stride=16
         model = adaptive_transform.BitwiseAdaptiveTransform(
             1024, stride, fc_sizes=[2048, 2048, 2048],
             in_channels=1, out_channels=1,

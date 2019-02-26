@@ -47,7 +47,7 @@ class TwoSourceMixtureDataset(Dataset):
         # normalize and mix signals
         sig = sig / (np.std(sig) + 1e-5)
         inter = inter / (np.std(inter) + 1e-5)
-        if random_snr:
+        if self.random_snr:
             snr = 5 * np.random.random() - 2.5
             snr = np.power(10, snr / 10)
             mix = snr * sig + inter
