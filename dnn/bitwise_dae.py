@@ -150,11 +150,10 @@ def main():
                 optimizer.step()
                 if clip_weights:
                     model.clip_weights()
-            else:
-                inter = batch['interference'].to(device)
-                sources = torch.stack([target, inter], dim=1).to(device=device)
-                metrics = bss_evaluate(estimate, sources)
-                bss_metrics.extend(metrics)
+            inter = batch['interference'].to(device)
+            sources = torch.stack([target, inter], dim=1).to(device=device)
+            metrics = bss_evaluate(estimate, sources)
+            bss_metrics.extend(metrics)
         if train:
             optimizer.zero_grad()
         return running_loss / len(dl.dataset), bss_metrics

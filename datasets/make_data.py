@@ -10,7 +10,7 @@ import datasets.two_source_mixture as two_source_mixture
 import argparse
 
 def make_mixture_set(hop=256, toy=False, max_duration=None, transform=None,
-    timit=False):
+    timit=False, random_snr=False):
 
     if timit:
         directory = '/media/data/timit-wav/train'
@@ -36,11 +36,11 @@ def make_mixture_set(hop=256, toy=False, max_duration=None, transform=None,
                                                                              max_utterances=20)
 
     trainset = two_source_mixture.TwoSourceMixtureDataset(train_speech, train_inter, hop=hop,
-        max_duration=max_duration, transform=transform)
+        max_duration=max_duration, transform=transform, random_snr=random_snr)
     valset = two_source_mixture.TwoSourceMixtureDataset(val_speech, val_inter, hop=hop,
-        max_duration=max_duration, transform=transform)
+        max_duration=max_duration, transform=transform, random_snr=random_snr)
     testset = two_source_mixture.TwoSourceMixtureDataset(test_speech, test_inter, hop=hop,
-        max_duration=max_duration, transform=transform)
+        max_duration=max_duration, transform=transform, random_snr=random_snr)
 
     return trainset, valset, testset
 
@@ -61,7 +61,7 @@ def make_data(batchsize, hop=256, toy=False, max_duration=2, transform=None):
 if __name__=='__main__':
     decimate = lambda x : signal.decimate(x, 2)
     trainset, valset, testset = make_mixture_set(hop=160, max_duration=2,
-        transform=decimate)
+        transform=decimate, random_snr=True)
     print('Training Size: ', len(trainset))
     print('Validation Size: ', len(valset))
     print('Testing Size: ', len(testset))
