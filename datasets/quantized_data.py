@@ -12,13 +12,12 @@ def unit_cube_normalize(x):
     return 2*(x / torch.max(torch.abs(x))) - 1
 
 def quantize_and_disperse(mix_mag, quantizer, disperser):
-    mix_mag = torch.FloatTensor(mix_mag / np.max(np.abs(mix_mag))).unsqueeze(0)
+    mix_mag = (mix_mag / torch.max(torch.abs(mix_mag)))
     qmag = quantizer(mix_mag)
     _, channels, frames = qmag.size()
     bmag = disperser(qmag.view(1, -1))
     bmag = bmag.squeeze(0).contiguous()
     bmag = torch.cat(torch.chunk(bmag, channels, dim=1), dim=0)
-    bmag = bmag.numpy()
     return bmag
 
 def accumulate(x, quantizer, disperser):

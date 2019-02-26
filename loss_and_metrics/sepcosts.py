@@ -124,7 +124,7 @@ class ShortTimeObjectiveIntelligibility(nn.Module):
         if self.return_loss:
             corr = -torch.mean(corr)
 
-        return corr / self.num_frames
+        return corr / (i+1)
 
     def _stft(self, seq):
         seq = seq.unsqueeze(1)

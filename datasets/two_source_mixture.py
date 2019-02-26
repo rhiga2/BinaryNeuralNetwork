@@ -28,9 +28,6 @@ class TwoSourceMixtureDataset(Dataset):
         if len(sig.shape) != 1:
             sig = np.mean(sig, axis=1)
 
-        if self.hop:
-            sig = sig[:len(sig)//self.hop*self.hop]
-
         if len(sig) > self.max_length and self.max_length != 0:
             start = np.random.randint(len(sig) - self.max_length)
             sig = sig[start:self.max_length+start]
@@ -55,6 +52,9 @@ class TwoSourceMixtureDataset(Dataset):
 
         if self.transform:
             sample = {key: self.transform(value) for key, value in sample.items()}
+        
+        if self.hop:
+            sample = {key: value[:len(value)//self.hop * self.hop] for key, value in sample.items()}
 
         return sample
 

@@ -107,9 +107,10 @@ class BSSEvaluate(nn.Module):
         )
 
     def forward(self, preds, source_tensor, target_idx=0):
-        metrics = bss_eval_batch(preds, source_tensor).cpu()
-        metrics.stois = list(self.stoi(preds, source_tensor[:, 0],
-                            source_tensor[:, 1]).cpu())
+        metrics = bss_eval_batch(preds, source_tensor)
+        stois = self.stoi(preds, source_tensor[:, 0],
+                            source_tensor[:, 1])
+        metrics.stois = [stoi.item() for stoi in stois]
         return metrics
 
 class LossMetrics():

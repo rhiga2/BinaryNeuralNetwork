@@ -115,6 +115,7 @@ def main():
     loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer
+    bss_evaluate = bss_eval.BSSEvaluate(fs=8000).to(device=device)
     vis = visdom.Visdom(port=5801)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
@@ -150,6 +151,7 @@ def main():
                 if clip_weights:
                     model.clip_weights()
             else:
+                inter = batch['interference'].to(device)
                 sources = torch.stack([target, inter], dim=1).to(device=device)
                 metrics = bss_evaluate(estimate, sources)
                 bss_metrics.extend(metrics)
@@ -169,10 +171,10 @@ def main():
         if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
-            val_loss, bss_metrics = val(model, val_dl, train=False,
+            val_loss, bss_metrics = forward(model, val_dl, train=False,
                 autoencode=args.autoencode, classification=classification)
             sdr, sir, sar, stoi = bss_metrics.mean()
-            loss_metrics.update(train_loss, val_loss, sdr, sir, sar,
+            loss_metrics.update(train_loss, val_loss, sdr, sir, sar, stoi,
                 period=args.period)
             bss_eval.train_plot(vis, loss_metrics, eid='Ryley',
                 win=['{} Loss'.format(args.exp), '{} BSS Eval'.format(args.exp)])
@@ -180,7 +182,7 @@ def main():
             print('Val SDR: ', sdr)
             print('Val SIR: ', sir)
             print('Val SAR: ', sar)
-            print('Val SAR: ', stoi)
+            print('Val STOI: ', stoi)
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
