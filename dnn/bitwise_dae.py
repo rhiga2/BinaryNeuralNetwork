@@ -47,6 +47,7 @@ def main():
     parser.add_argument('--w_binactiv', '-wb', default='identity')
     parser.add_argument('--loss', '-l', default='mse')
     parser.add_argument('--use_gate', '-ug', action='store_true')
+    parser.add_argument('--bn_momentum', '-bnm', type=float, default=0.1)
     args = parser.parse_args()
 
     # Initialize device
@@ -77,8 +78,9 @@ def main():
         model = bitwise_tasnet.BitwiseTasNet(
             1, 256, 512,
             blocks=4, front_kernel_size=20, front_stride=10,
-            kernel_size=3, layers=8, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-            use_gate=args.use_gate
+            kernel_size=3, layers=8, in_binactiv=in_binactiv,
+            w_binactiv=w_binactiv, use_gate=args.use_gate,
+            bn_momentum=args.bn_momentum
         )
     else:
         stride=16
@@ -87,8 +89,8 @@ def main():
             in_channels=1, out_channels=1,
             dropout=args.dropout, sparsity=args.sparsity,
             autoencode=args.autoencode, in_binactiv=in_binactiv,
-            w_binactiv=w_binactiv,
-            use_gate=args.use_gate, weight_init='fft'
+            w_binactiv=w_binactiv, use_gate=args.use_gate,
+            weight_init='fft', bn_momentum=args.bn_momentum
         )
 
     # Make model and dataset
@@ -131,7 +133,7 @@ def main():
             if autoencode:
                 mix = target
             if quantizer:
-                mix = quantizer(mix).to(device=device, dtype=dtype) / 255
+                # mix = quantizer(mix).to(device=device, dtype=dtype) / 255
                 target = quantizer(target).to(device=device, dtype=torch.long).view(-1)
             mix = mix.unsqueeze(1)
             mix = mix.to(device=device)
