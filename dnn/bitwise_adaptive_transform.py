@@ -37,7 +37,7 @@ class BitwiseAdaptiveTransform(nn.Module):
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
         in_binactiv=None, w_binactiv=None,
         use_gate=False, num_binarizations=1,
-        weight_init=None, autoencode=False):
+        weight_init=None, autoencode=False, bn_momentum=0.1):
         super(BitwiseAdaptiveTransform, self).__init__()
 
         # Initialize adaptive front end
@@ -52,7 +52,7 @@ class BitwiseAdaptiveTransform(nn.Module):
             use_gate=False, scale_weights=None, scale_activations=None
         )
 
-        self.batchnorm = nn.BatchNorm1d(kernel_size)
+        self.batchnorm = nn.BatchNorm1d(kernel_size, momentum=bn_momentum)
         self.autoencode = autoencode
 
         if not autoencode:
@@ -60,7 +60,8 @@ class BitwiseAdaptiveTransform(nn.Module):
                 kernel_size, kernel_size, num_binarizations=1,
                 fc_sizes=fc_sizes, dropout=dropout, bias=False,
                 in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-                use_gate=use_gate, scale_weights=None, scale_activations=None
+                use_gate=use_gate, scale_weights=None, scale_activations=None,
+                bn_momentum=bn_momentum
             )
 
         # Initialize inverse of front end transform
@@ -108,7 +109,7 @@ class BitwiseAdaptiveTransform(nn.Module):
         if not self.autoencode:
             h = spec
             if self.in_binfunc is not None:
-                h = self.in_binfunc(self.batchnorm(h))           
+                h = self.in_binfunc(self.batchnorm(h))
 
             spec_size = spec.size()
             h = bitwise_mlp.flatten(h)

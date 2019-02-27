@@ -8,7 +8,7 @@ import dnn.binary_layers as binary_layers
 class BitwiseTasNetRepeat(nn.Module):
     def __init__(self, bottleneck_channels, dconv_size, kernel_size=3,
         blocks=8, in_binactiv=None, w_binactiv=None,
-        use_gate=False):
+        use_gate=False, bn_momentum=0.1):
         super().__init__()
         self.blocks = blocks
         self.first1x1_list = nn.ModuleList()
@@ -29,31 +29,34 @@ class BitwiseTasNetRepeat(nn.Module):
                 binary_layers.BitwiseConv1d(
                     bottleneck_channels, dconv_size, 1,
                     use_gate=use_gate, in_binactiv=in_binactiv,
-                    w_binactiv=w_binactiv
+                    w_binactiv=w_binactiv, bias=False
                 )
             )
 
             # self.first_activation.append(nn.PReLU())
-            self.first_normalization.append(nn.BatchNorm1d(dconv_size))
+            self.first_normalization.append(nn.BatchNorm1d(dconv_size,
+                momentum=bn_momentum))
             padding = dilation * (kernel_size - 1) // 2
             self.dconvs.append(
                 binary_layers.BitwiseConv1d(
                     dconv_size, dconv_size, kernel_size, groups=dconv_size,
                     use_gate=use_gate, padding=padding,
                     in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-                    dilation = dilation
+                    dilation = dilation, bias=False
                 )
             )
             # self.second_activation.append(nn.PReLU())
-            self.second_normalization.append(nn.BatchNorm1d(dconv_size))
+            self.second_normalization.append(nn.BatchNorm1d(dconv_size,
+                momentum=bn_momentum))
             self.last1x1_list.append(
                 binary_layers.BitwiseConv1d(
                     dconv_size, bottleneck_channels, 1,
                     use_gate=use_gate, in_binactiv=in_binactiv,
-                    w_binactiv=w_binactiv
+                    w_binactiv=w_binactiv, bias=False
                 )
             )
-            self.third_normalization.append(nn.BatchNorm1d(bottleneck_channels))
+            self.third_normalization.append(nn.BatchNorm1d(bottleneck_channels,
+                momentum=bn_momentum))
             dilation *= 2
 
     def forward(self, x):
@@ -74,16 +77,16 @@ class BitwiseTasNet(nn.Module):
     def __init__(self, in_channels, encoder_channels,
         dconv_size, repeats=4, front_kernel_size=20, front_stride=10,
         kernel_size=3, blocks=8, in_binactiv=None, w_binactiv=None,
-        use_gate=False):
+        use_gate=False, bn_momentum=0.1):
         super(BitwiseTasNet, self).__init__()
         self.in_binactiv = in_binactiv
         self.front_kernel_size = front_kernel_size
         self.encoder = binary_layers.BitwiseConv1d(in_channels, encoder_channels,
             front_kernel_size, stride=front_stride, padding=front_kernel_size,
             groups=1, dilation=1, use_gate=False,
-            in_binactiv=None, w_binactiv=None)
+            in_binactiv=None, w_binactiv=None, bias=False)
         self.block_list = nn.ModuleList()
-        self.batch_norm = nn.BatchNorm1d(encoder_channels)
+        self.batch_norm = nn.BatchNorm1d(encoder_channels, momentum=bn_momentum)
         self.repeats = repeats
         for i in range(repeats):
             self.block_list.append(
@@ -93,9 +96,10 @@ class BitwiseTasNet(nn.Module):
                     use_gate=use_gate
                 )
             )
-        self.decoder = binary_layers.BitwiseConvTranspose1d(encoder_channels, in_channels,
-            front_kernel_size, stride=front_stride, padding=0, groups=1,
-            dilation=1, use_gate=False, in_binactiv=None, w_binactiv=None
+        self.decoder = binary_layers.BitwiseConvTranspose1d(encoder_channels,
+            in_channels, front_kernel_size, stride=front_stride,
+            padding=0, groups=1, dilation=1, use_gate=False,
+            in_binactiv=None, w_binactiv=None, bias=False
         )
 
     def forward(self, x):
