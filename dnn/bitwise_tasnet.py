@@ -13,11 +13,11 @@ class BitwiseTasNetRepeat(nn.Module):
         super().__init__()
         self.blocks = blocks
         self.first1x1_list = nn.ModuleList()
-        # self.first_activation = nn.ModuleList()
+        self.first_activation = nn.ModuleList()
         self.first_normalization = nn.ModuleList()
         self.dconvs = nn.ModuleList()
         self.in_binactiv = in_binactiv
-        # self.second_activation = nn.ModuleList()
+        self.second_activation = nn.ModuleList()
         self.second_normalization = nn.ModuleList()
         self.third_normalization = nn.ModuleList()
         self.last1x1_list = nn.ModuleList()
@@ -32,7 +32,7 @@ class BitwiseTasNetRepeat(nn.Module):
                 )
             )
 
-            # self.first_activation.append(nn.PReLU())
+            self.first_activation.append(nn.PReLU())
             self.first_normalization.append(nn.BatchNorm1d(dconv_size,
                 momentum=bn_momentum))
             padding = dilation * (kernel_size - 1) // 2
@@ -44,7 +44,7 @@ class BitwiseTasNetRepeat(nn.Module):
                     dilation = dilation, bias=False
                 )
             )
-            # self.second_activation.append(nn.PReLU())
+            self.second_activation.append(nn.PReLU())
             self.second_normalization.append(nn.BatchNorm1d(dconv_size,
                 momentum=bn_momentum))
             self.last1x1_list.append(
