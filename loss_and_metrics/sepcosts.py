@@ -55,15 +55,15 @@ class SignalArtifactRatio(nn.Module):
         return sar
 
 class SISNRLoss(nn.Module):
-    def __init__(self, epsilon=1e-5):
+    def __init__(self, eps=1e-5):
         super(SISNRLoss, self).__init__()
-        self.epsilon = epsilon
+        self.eps = eps
 
     def forward(self, prediction, target, interference=None):
-        s_target = torch.mean(prediction * target) * target
-        s_target /= (torch.mean(target**2) + self.epsilon)
+        s_target = torch.sum(prediction*target)/(torch.sum(target**2)+self.eps)
+        s_target = s_target * target
         e_noise = prediction - s_target
-        return -10 * torch.log10(torch.mean(s_target**2)/torch.mean(e_noise**2))
+        return -10 * torch.log10(torch.sum(s_target**2)/torch.sum(e_noise**2))
 
 class ShortTimeObjectiveIntelligibility(nn.Module):
     def __init__(self, fs=8000, return_loss=True):

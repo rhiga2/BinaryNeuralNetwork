@@ -62,13 +62,13 @@ class BitwiseTasNetRepeat(nn.Module):
         resid = x
         for i in range(self.blocks):
             x = self.first1x1_list[i](x)
-            # x = self.first_activation[i](x)
+            x = self.first_activation[i](x)
             x = self.first_normalization[i](x)
             x = self.dconvs[i](x)
-            # x = self.second_activation[i](x)
+            x = self.second_activation[i](x)
             x = self.second_normalization[i](x)
             x = self.last1x1_list[i](x)
-            self.third_normalization[i](x)
+            x = self.third_normalization[i](x)
         x = x + resid
         return resid
 
@@ -78,7 +78,7 @@ class BitwiseTasNet(nn.Module):
         kernel_size=3, blocks=8, in_binactiv=None, w_binactiv=None,
         use_gate=False, bn_momentum=0.1):
         super().__init__()
-        self.in_binactiv = in_binactiv 
+        self.in_binactiv = in_binactiv
         if in_binactiv is not None:
             self.in_binfunc = in_binactiv()
         self.front_kernel_size = front_kernel_size
