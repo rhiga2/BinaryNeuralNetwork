@@ -77,8 +77,8 @@ def main():
         stride=10
         model = bitwise_tasnet.BitwiseTasNet(
             1, 256, 512,
-            blocks=4, front_kernel_size=20, front_stride=10,
-            kernel_size=3, layers=8, in_binactiv=in_binactiv,
+            blocks=8, front_kernel_size=20, front_stride=10,
+            kernel_size=3, repeats=4, in_binactiv=in_binactiv,
             w_binactiv=w_binactiv, use_gate=args.use_gate,
             bn_momentum=args.bn_momentum
         )

@@ -3,6 +3,7 @@ sys.path.append('../')
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import dnn.binary_layers as binary_layers
 
 class BitwiseTasNetRepeat(nn.Module):
@@ -16,8 +17,6 @@ class BitwiseTasNetRepeat(nn.Module):
         self.first_normalization = nn.ModuleList()
         self.dconvs = nn.ModuleList()
         self.in_binactiv = in_binactiv
-        if in_binactiv is not None:
-            self.in_binfunc = in_binactiv()
         # self.second_activation = nn.ModuleList()
         self.second_normalization = nn.ModuleList()
         self.third_normalization = nn.ModuleList()
@@ -78,8 +77,10 @@ class BitwiseTasNet(nn.Module):
         dconv_size, repeats=4, front_kernel_size=20, front_stride=10,
         kernel_size=3, blocks=8, in_binactiv=None, w_binactiv=None,
         use_gate=False, bn_momentum=0.1):
-        super(BitwiseTasNet, self).__init__()
-        self.in_binactiv = in_binactiv
+        super().__init__()
+        self.in_binactiv = in_binactiv 
+        if in_binactiv is not None:
+            self.in_binfunc = in_binactiv()
         self.front_kernel_size = front_kernel_size
         self.encoder = binary_layers.BitwiseConv1d(in_channels, encoder_channels,
             front_kernel_size, stride=front_stride, padding=front_kernel_size,
@@ -109,7 +110,7 @@ class BitwiseTasNet(nn.Module):
         for i in range(self.repeats):
             h = self.block_list[i](h)
         if self.in_binactiv is not None:
-            h = self.in_binfunc(h)
+            h = (self.in_binfunc(h) + 1)/2
         else:
             h = torch.sigmoid(h)
         x = x * h
