@@ -61,15 +61,15 @@ class BitwiseTasNetRepeat(nn.Module):
     def forward(self, x):
         resid = x
         for i in range(self.blocks):
-            x = self.first1x1_list[i](x)
+            h = self.first1x1_list[i](resid)
             # x = self.first_activation[i](x)
-            x = self.first_normalization[i](x)
-            x = self.dconvs[i](x)
+            h = self.first_normalization[i](h)
+            h = self.dconvs[i](h)
             # x = self.second_activation[i](x)
-            x = self.second_normalization[i](x)
-            x = self.last1x1_list[i](x)
-            x = self.third_normalization[i](x)
-        resid = x + resid
+            h = self.second_normalization[i](h)
+            h = self.last1x1_list[i](h)
+            h = self.third_normalization[i](h)
+            resid = resid + h
         return resid
 
 class BitwiseTasNet(nn.Module):
