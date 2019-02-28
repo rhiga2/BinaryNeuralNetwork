@@ -54,8 +54,8 @@ class BitwiseTasNetRepeat(nn.Module):
                     w_binactiv=w_binactiv, bias=False
                 )
             )
-            self.third_normalization.append(nn.BatchNorm1d(bottleneck_channels,
-                momentum=bn_momentum))
+            # self.third_normalization.append(nn.BatchNorm1d(bottleneck_channels,
+            #    momentum=bn_momentum))
             dilation *= 2
 
     def forward(self, x):
@@ -68,7 +68,7 @@ class BitwiseTasNetRepeat(nn.Module):
             # x = self.second_activation[i](x)
             x = self.second_normalization[i](x)
             x = self.last1x1_list[i](x)
-            x = self.third_normalization[i](x)
+            # x = self.third_normalization[i](x)
         resid = x + resid
         return resid
 

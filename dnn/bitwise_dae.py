@@ -172,8 +172,9 @@ def main():
         if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
-            val_loss, bss_metrics = forward(model, val_dl, train=False,
-                autoencode=args.autoencode, classification=classification)
+            with torch.no_grad():
+                val_loss, bss_metrics = forward(model, val_dl, train=False,
+                    autoencode=args.autoencode, classification=classification)
             sdr, sir, sar, stoi = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar, stoi,
                 period=args.period)

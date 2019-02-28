@@ -25,13 +25,17 @@ class TwoSourceMixtureDataset(Dataset):
 
     def _getmix(self, sigf, interf):
         # Read files
-        sig, _ = sf.read(sigf, channels=1)
+        sig, _ = sf.read(sigf)
+        if len(sig.shape) != 1:
+            sig = sig[:, 0]
 
         if len(sig) > self.max_length and self.max_length != 0:
             start = np.random.randint(len(sig) - self.max_length)
             sig = sig[start:self.max_length+start]
 
-        inter, _ = sf.read(interf, channels=1)
+        inter, _ = sf.read(interf)
+        if len(inter.shape) != 1:
+            inter = inter[:, 0]
 
         sig_len = len(sig)
         if len(inter) > sig_len:
