@@ -6,10 +6,56 @@ import torch.nn as nn
 import torch.nn.functional as F
 import dnn.binary_layers as binary_layers
 
+class GlobalLayerNormalization(nn.Module):
+    def __init__(self, channels, eps=1e-5, momentum=0.1,):
+        super().__init__()
+        self.eps = eps
+        self.momentum = momentum
+        self.weight = nn.Parameter(torch.Tensor(1, channels, 1))
+        self.bias = nn.Parameter(torch.Tensor(1, channels, 1))
+
+        # Initialized statistics as scalar since I don't know what the
+        # actual dim will be. I don't want to add batch size as input
+        self.running_mean = 0
+        self.running_var = 1
+        self.reset_parameters()
+
+    def reset_parameters():
+        self.weight.data.fill_(1)
+        self.bias.data.zero_()
+        self.running_mean = 0
+        self.running_var = 1
+
+    def forward(self, x):
+        '''
+        x has shape (batch, channels, time frames)
+        '''
+        # training should be defined by nn.Module superclass
+        if self.training:
+            mean = x.mean(1, keepdim=True).mean(2, keepdim=True)
+            var = x.var(1, keepdim=True).var(2, keepdim=True)
+            self.running_mean = (1 - self.momentum)*self.running_mean \
+                + self.momentum*mean
+            self.running_var = (1 - self.momentum)*self.running_var \
+                + self.momentum*var
+            return self.weight*(x - self.mean)/torch.sqrt(var + self.eps) \
+                + self.bias
+         return self.weight*(x - self.running_mean) \
+            / torch.sqrt(self.running_var + self.eps) + self.bias
+
+def get_normalization(normalization, channels, momentum=0.1):
+    if normalization == 'batch':
+        return nn.BatchNorm1d(channels, momentum=momentum)
+    elif normalization == 'global':
+        return GlobalLayerNormalization(channel, momentum=momentum)
+    else:
+        raise Exception('Normalization type is unknown')
+
+
 class BitwiseTasNetRepeat(nn.Module):
     def __init__(self, bottleneck_channels, dconv_size, kernel_size=3,
         blocks=8, in_binactiv=None, w_binactiv=None,
-        use_gate=False, bn_momentum=0.1):
+        use_gate=False, bn_momentum=0.1, normalization='batch'):
         super().__init__()
         self.blocks = blocks
         self.first1x1_list = nn.ModuleList()
@@ -33,8 +79,10 @@ class BitwiseTasNetRepeat(nn.Module):
             )
 
             # self.first_activation.append(nn.PReLU())
-            self.first_normalization.append(nn.BatchNorm1d(dconv_size,
-                momentum=bn_momentum))
+            self.first_normalization.append(
+                get_normalization(normalization, dconv_size,
+                    momentum=bn_momentum)
+            )
             padding = dilation * (kernel_size - 1) // 2
             self.dconvs.append(
                 binary_layers.BitwiseConv1d(
@@ -45,8 +93,10 @@ class BitwiseTasNetRepeat(nn.Module):
                 )
             )
             # self.second_activation.append(nn.PReLU())
-            self.second_normalization.append(nn.BatchNorm1d(dconv_size,
-                momentum=bn_momentum))
+            self.second_normalization.append(
+                get_normalization(normalization, dconv_size,
+                    momentum=bn_momentum)
+            )
             self.last1x1_list.append(
                 binary_layers.BitwiseConv1d(
                     dconv_size, bottleneck_channels, 1,
@@ -54,8 +104,10 @@ class BitwiseTasNetRepeat(nn.Module):
                     w_binactiv=w_binactiv, bias=False
                 )
             )
-            self.third_normalization.append(nn.BatchNorm1d(bottleneck_channels,
-                momentum=bn_momentum))
+            # self.third_normalization.append(
+            #     get_normalization(normalization, dconv_size,
+            #         momentum=bn_momentum)
+            # )
             dilation *= 2
 
     def forward(self, x):
@@ -68,7 +120,7 @@ class BitwiseTasNetRepeat(nn.Module):
             # x = self.second_activation[i](x)
             h = self.second_normalization[i](h)
             h = self.last1x1_list[i](h)
-            h = self.third_normalization[i](h)
+            # h = self.third_normalization[i](h)
             resid = resid + h
         return resid
 

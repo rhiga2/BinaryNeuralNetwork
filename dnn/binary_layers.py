@@ -41,17 +41,60 @@ class STE(Function):
         x = ctx.saved_tensors[0]
         return grad_output
 
-class SignSwiss(nn.Module):
-    def __init__(self, beta=1):
-        self.beta = nn.Parameter(torch.FloatTensor([beta]), requires_grad=True)
+class SignSwissSTE(Function):
+    @staticmethod
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        return torch.sign(x)
 
-    def forward(self, x):
-        sig_x = torch.sigmoid(self.beta*x)
-        return 2*sig_x*(1 + self.beta*x*(1 - sig_x)) - 1
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_tensors[0]
+        sign_swiss_deriv = (2 - x*torch.tanh(x/2))/(1 + torch.cosh(x))
+        return grad_output * sign_swiss_deriv
 
 clipped_ste = ClippedSTE.apply
 ste = STE.apply
 tanh_ste = TanhSTE.apply
+sign_swiss_ste = SignSwissSTE.apply
+
+class SignSwiss(nn.Module):
+    def __init__(self, beta=1, ste=True):
+        super().__init__()
+        self.beta = nn.Parameter(torch.FloatTensor([beta]),
+            requires_grad=True)
+        self.ste = ste
+
+    def forward(self, x):
+        if self.ste:
+            return sign_swiss_ste(self.beta*x)
+        sig_x = torch.sigmoid(self.beta*x)
+        return 2*sig_x*(1 + self.beta*x*(1 - sig_x)) - 1
+
+class ParameterizedTanh(nn.Module):
+    def __init__(self, beta=1, ste=False):
+        super().__init__()
+        self.beta = nn.Parameter(torch.FloatTensor([beta]),
+            requires_grad=True)
+        self.ste = ste
+
+    def forward(self, x):
+        if self.ste:
+            return tanh_ste(self.beta*x)
+        return torch.tanh(self.beta*x)
+
+class ParameterizedHardTanh(nn.Module):
+    def __init__(self, beta=1, ste=False):
+        super().__init__()
+        self.beta = nn.Parameter(torch.FloatTensor([beta]),
+            requires_grad=True)
+        self.hard_tanh = nn.Hardtanh
+        self.ste = ste
+
+    def forward(self, x):
+        if self.ste:
+            return clipped_ste(self.beta*x)
+        return self.hard_tanh(beta*x)
 
 def pick_activation(activation_name, **kwargs):
     if activation_name == 'ste':
@@ -64,12 +107,22 @@ def pick_activation(activation_name, **kwargs):
         activation = lambda : nn.PReLU(**kwargs)
     elif activation_name == 'tanh':
         activation = lambda : torch.tanh
+    elif activation_name == 'ptanh':
+        activation = lambda : ParameterizedTanh(**kwargs)
+    elif activation_name == 'ptanh':
+        activation = lambda : ParameterizedTanh(**kwargs, ste=True)
     elif activation_name == 'tanh_ste':
         activation = lambda : tanh_ste
     elif activation_name == 'hard_tanh':
         activation = lambda : nn.Hardtanh(**kwargs)
+    elif activation_name == 'phtanh':
+        activation = lambda : ParameterizedHardTanh(**kwargs)
+    elif activation_name == 'phtanh_ste':
+        activation = lambda : ParameterizedHardTanh(**kwargs, ste=True)
     elif activation_name == 'sign_swiss':
         activation = lambda : SignSwiss(**kwargs)
+    elif activation_name == 'sign_swiss_ste':
+        activation = lambda : SignSwiss(**kwargs, ste=True)
     elif activation_name == 'identity':
         activation = None
     return activation
