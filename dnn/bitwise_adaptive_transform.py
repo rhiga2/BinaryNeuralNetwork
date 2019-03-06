@@ -35,8 +35,7 @@ class BitwiseAdaptiveTransform(nn.Module):
     '''
     def __init__(self, kernel_size=256, stride=16, in_channels=1,
         out_channels=1, fc_sizes = [], dropout=0, sparsity=95,
-        in_binactiv=None, w_binactiv=None,
-        use_gate=False, num_binarizations=1,
+        in_binactiv=None, w_binactiv=None, use_gate=False,
         weight_init=None, autoencode=False, bn_momentum=0.1):
         super(BitwiseAdaptiveTransform, self).__init__()
 
@@ -48,8 +47,8 @@ class BitwiseAdaptiveTransform(nn.Module):
         self.conv = binary_layers.BitwiseConv1d(
             1, kernel_size, kernel_size,
             stride=stride, padding=kernel_size, in_binactiv=None,
-            w_binactiv=None, num_binarizations=1,
-            use_gate=False, scale_weights=None, scale_activations=None
+            w_binactiv=None, use_gate=False, scale_weights=None,
+            scale_activations=None
         )
 
         self.batchnorm = nn.BatchNorm1d(kernel_size, momentum=bn_momentum)
@@ -57,9 +56,8 @@ class BitwiseAdaptiveTransform(nn.Module):
 
         if not autoencode:
             self.mlp = bitwise_mlp.BitwiseMLP(
-                kernel_size, kernel_size, num_binarizations=1,
-                fc_sizes=fc_sizes, dropout=dropout, bias=False,
-                in_binactiv=in_binactiv, w_binactiv=w_binactiv,
+                kernel_size, kernel_size,  fc_sizes=fc_sizes, dropout=dropout,
+                bias=False, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
                 use_gate=use_gate, scale_weights=None, scale_activations=None,
                 bn_momentum=bn_momentum
             )

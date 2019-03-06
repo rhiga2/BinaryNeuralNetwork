@@ -87,7 +87,7 @@ def main():
         use_gate=args.use_gate, scale_weights=None,
         scale_activations=None, in_binactiv=in_binactiv,
         w_binactiv=w_binactiv, bn_momentum=args.bn_momentum,
-        bias=False, num_binarizations=1)
+        bias=False)
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
 

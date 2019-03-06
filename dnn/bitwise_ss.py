@@ -131,7 +131,6 @@ def main():
         w_binactiv=w_binactiv,
         bn_momentum=args.bn_momentum,
         bias=False,
-        num_binarizations=1,
         scale_weights=None,
         scale_activations=None
     )
