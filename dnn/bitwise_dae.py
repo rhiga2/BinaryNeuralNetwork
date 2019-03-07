@@ -17,6 +17,7 @@ import dnn.bitwise_tasnet as bitwise_tasnet
 import dnn.bitwise_wavenet as bitwise_wavenet
 import loss_and_metrics.bss_eval as bss_eval
 import loss_and_metrics.sepcosts as sepcosts
+from dnn.solver_ss import BinarySolver
 import visdom
 import argparse
 import pickle as pkl
@@ -100,7 +101,6 @@ def main():
 
     if args.load_file:
         model.load_partial_state_dict(torch.load('../models/' + args.load_file))
-    model.to(device=device, dtype=dtype)
     print(model)
 
     quantizer = None
@@ -109,7 +109,7 @@ def main():
     elif args.loss == 'sdr':
         loss = sepcosts.SignalDistortionRatio()
     elif args.loss == 'cel':
-        quantizer = quantized_data.Quantizer()
+        quantizer = quantized_data.Quantizer(delta=1/128, num_bits=256)
         loss = nn.CrossEntropyLoss()
         classification = True
     elif args.loss == 'sisnr':
@@ -117,63 +117,21 @@ def main():
     loss_metrics = bss_eval.LossMetrics()
 
     # Initialize optimizer
-    bss_evaluate = bss_eval.BSSEvaluate(fs=8000).to(device=device)
     vis = visdom.Visdom(port=5801)
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
-    def forward(model, dl, train=False, autoencode=False, clip_weights=False,
-        classification=False):
-        running_loss = 0
-        bss_metrics = bss_eval.BSSMetricsList()
-        for batch in dl:
-            if train:
-                optimizer.zero_grad()
-            mix, target = batch['mixture'], batch['target']
-            if autoencode:
-                mix = target
-            if quantizer:
-                # mix = quantizer(mix).to(device=device, dtype=dtype) / 255
-                target = quantizer(target).to(device=device, dtype=torch.long).view(-1)
-            mix = mix.unsqueeze(1)
-            mix = mix.to(device=device)
-            target = target.to(device=device)
-            estimate = model(mix)
-
-            if classification:
-                estimate = estimate.permute(0, 2, 1).contiguous().view(-1, 256)
-            else:
-                estimate = estimate.squeeze(1)
-
-            reconst_loss = loss(estimate, target)
-            running_loss += reconst_loss.item() * mix.size(0)
-            if train:
-                reconst_loss.backward()
-                optimizer.step()
-                if clip_weights:
-                    model.clip_weights()
-            inter = batch['interference'].to(device)
-            sources = torch.stack([target, inter], dim=1).to(device=device)
-            metrics = bss_evaluate(estimate, sources)
-            bss_metrics.extend(metrics)
-        if train:
-            optimizer.zero_grad()
-        return running_loss / len(dl.dataset), bss_metrics
+    solver = BinarySolver(model, loss, optimizer, quantizer=quantizer,
+        classification=classification, autoencode=autoencode, device=device)
 
     for epoch in range(args.epochs):
         total_cost = 0
         model.update_betas()
-        model.train()
-        train_loss = 0
-        train_loss, _ = forward(model, train_dl, train=True,
-            autoencode=args.autoencode, clip_weights=args.clip_weights,
-            classification=classification)
-
+        train_loss = solver.train(train_dl, clip_weights=args.clip_weights)
         if epoch % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
             model.eval()
-            val_loss, bss_metrics = forward(model, val_dl, train=False,
-                autoencode=args.autoencode, classification=classification)
+            val_loss, bss_metrics = solver.eval(val_dl)
             sdr, sir, sar, stoi = bss_metrics.mean()
             loss_metrics.update(train_loss, val_loss, sdr, sir, sar, stoi,
                 period=args.period)
@@ -191,7 +149,8 @@ def main():
 
         if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
             lr *= args.lr_decay
-            optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+            solver.optimizer = optim.Adam(model.parameters(), lr=lr,
+                weight_decay=args.weight_decay)
 
     with open('../results/' + args.exp + '.pkl', 'wb') as f:
         pkl.dump(loss_metrics, f)

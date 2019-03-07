@@ -153,7 +153,7 @@ class BitwiseAbstractClass(ABC):
         self.use_gate = use_gate
         self.scale_weights = scale_weights
         self.scale_activations = scale_activations
-
+        self.scale_conv = None
         self.gate = None
         if self.use_gate:
             self.gate = init_weight(self.weight, one_sided=True)
@@ -243,11 +243,12 @@ class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
             scale_weights=scale_weights,
             scale_activations=scale_activations)
 
-        # self.scale_conv = nn.Conv1d(1, 1, kernel_size, stride=stride,
-        #    padding=padding, dilation=dilation)
-        # weight = self.scale_conv.weight
-        # weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
-        # self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
+        if scale_activation == 'average':
+            self.scale_conv = nn.Conv1d(1, 1, kernel_size, stride=stride,
+                padding=padding, dilation=dilation)
+            weight = self.scale_conv.weight
+            weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
+            self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
 
     def forward(self, x):
         '''
@@ -275,11 +276,12 @@ class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
             scale_weights=scale_weights,
             scale_activations=scale_activations)
 
-        # self.scale_conv = nn.Conv2d(1, 1, kernel_size, stride=stride,
-        #     padding=padding, dilation=dilation, bias=False)
-        # weight = self.scale_conv.weight
-        # weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
-        # self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
+        if scale_activation == 'average':
+            self.scale_conv = nn.Conv2d(1, 1, kernel_size, stride=stride,
+                padding=padding, dilation=dilation, bias=False)
+            weight = self.scale_conv.weight
+            weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
+            self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
 
     def forward(self, x):
         '''
@@ -305,11 +307,12 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
             w_binactiv=w_binactiv, bn_momentum=bn_momentum,
             scale_weights=scale_weights)
 
-        # self.scale_conv = nn.ConvTranspose1d(1, 1, kernel_size,
-        #     stride=stride, padding=padding, dilation=dilation, bias=False)
-        # weight = self.scale_conv.weight
-        # weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
-        # self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
+        if scale_activation == 'average':
+            self.scale_conv = nn.ConvTranspose1d(1, 1, kernel_size,
+                stride=stride, padding=padding, dilation=dilation, bias=False)
+            weight = self.scale_conv.weight
+            weight = 1 / (np.prod(weight.size())) * torch.ones_like(weight)
+            self.scale_conv.weight = nn.Parameter(weight, requires_grad=False)
 
     def forward(self, x):
         '''

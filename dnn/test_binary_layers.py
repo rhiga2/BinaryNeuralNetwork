@@ -75,8 +75,7 @@ class TestBitwiseLinear(unittest.TestCase):
             [-1, 1, 1],
             [1, -1, 1]
         ])
-        y_hat = self.blinear.binarize_inputs(x) 
-        print(y - y_hat)
+        y_hat = self.blinear.binarize_inputs(x)
         self.assertTrue(torch.allclose(y, y_hat, rtol=0))
 
     def test_binarize_average_inputs(self):
@@ -92,7 +91,6 @@ class TestBitwiseLinear(unittest.TestCase):
             [0.77/3, -0.77/3, 0.77/3]
         ])
         y_hat = self.blinear.binarize_inputs(x)
-        print(y - y_hat)
         self.blinear.scale_activations = None
         self.assertTrue(torch.allclose(y, y_hat, rtol=0))
 
