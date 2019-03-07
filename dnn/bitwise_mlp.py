@@ -21,7 +21,7 @@ class BitwiseMLP(nn.Module):
     def __init__(self, in_size, out_size, fc_sizes=[], dropout=0,
         sparsity=0, bias=True, use_gate=False, in_binactiv=None,
         w_binactiv=None, bn_momentum=0.1, scale_weights=None,
-        scale_activations=None, num_binarizations=1):
+        scale_activations=None):
         super(BitwiseMLP, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
@@ -43,8 +43,7 @@ class BitwiseMLP(nn.Module):
                 binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
                 in_binactiv=in_binfunc, w_binactiv=w_binfunc,
                 scale_weights=scale_weights,
-                scale_activations=scale_activations, bias=bias,
-                num_binarizations=num_binarizations)
+                scale_activations=scale_activations, bias=bias)
             )
             if i < self.num_layers - 1:
                 if dropout > 0:

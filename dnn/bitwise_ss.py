@@ -13,6 +13,7 @@ import loss_and_metrics.bss_eval as bss_eval
 import dnn.binary_layers as binary_layers
 import dnn.bitwise_mlp as bitwise_mlp
 import soundfile as sf
+from dnn.solver_ss import BinarySTFTSolver
 import visdom
 import pickle as pkl
 import argparse
@@ -69,55 +70,6 @@ def main():
     in_binactiv = binary_layers.pick_activation(args.in_binactiv)
     w_binactiv = binary_layers.pick_activation(args.w_binactiv)
 
-    my_stft = stft.STFT(nfft=1024, stride=256, win='hann').to(device=device)
-    my_istft = stft.ISTFT(nfft=1024, stride=256, win='hann').to(device=device)
-    bss_evaluate = bss_eval.BSSEvaluate(fs=8000).to(device=device)
-
-    def forward(model, dl, raw_dl=None, optimizer=None, weighted=False,
-        clip_weights=False):
-        running_loss = 0
-        if raw_dl is not None:
-            raw_dl = iter(raw_dl)
-        for batch in dl:
-            if optimizer is not None:
-                optimizer.zero_grad()
-            bmag = batch['bmag'].to(device=device)
-            ibm = batch['ibm'].to(device=device)
-            bmag = bmag.to(device=device)
-            bmag_size = bmag.size()
-            bmag = 2*bmag - 1
-            bmag = bitwise_mlp.flatten(bmag)
-            estimate = model(bmag)
-            estimate = bitwise_mlp.unflatten(estimate, bmag_size[0], bmag_size[2])
-            # if weighted:
-            #     spec = batch['spec'].to(device=device)
-            #     spec = spec / torch.std(spec)
-            #     cost = loss(estimate, ibm, weight=spec)
-            # else:
-            cost = loss(estimate, ibm)
-            running_loss += cost.item() * bmag_size[0]
-            cost.backward()
-            if optimizer is not None:
-                optimizer.step()
-                if clip_weights:
-                    model.clip_weights()
-            bss_metrics = None
-            if raw_dl is not None:
-                raw_batch = next(raw_dl)
-                bss_metrics = bss_eval.BSSMetricsList()
-                mix = raw_batch['mix'].to(device=device)
-                mix_mag, mix_phase = my_stft(mix)
-                target = raw_batch['target']
-                interference = raw_batch['interference']
-                mask = binary_data.make_binary_mask(estimate).to(dtype=torch.float)
-                mix_estimate = my_istft(mix_mag * mask, mix_phase)
-                sources = torch.stack([target, interference], dim=1).to(device=device)
-                metrics = bss_evaluate(mix_estimate, sources)
-                bss_metrics.extend(metrics)
-        if optimizer is not None:
-            optimizer.zero_grad()
-        return running_loss / len(dl.dataset), bss_metrics
-
     # Make model and dataset
     train_dl, val_dl, raw_dl = binary_data.get_binary_data(args.batchsize, toy=args.toy)
     model = bitwise_mlp.BitwiseMLP(
@@ -131,7 +83,6 @@ def main():
         w_binactiv=w_binactiv,
         bn_momentum=args.bn_momentum,
         bias=False,
-        num_binarizations=1,
         scale_weights=None,
         scale_activations=None
     )
@@ -145,21 +96,19 @@ def main():
     # Initialize optimizer
     vis = visdom.Visdom(port=5801)
     lr = args.learning_rate
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=lr,
+        weight_decay=args.weight_decay)
+    solver = BinarySTFTSolver(model, loss, optimizer, args.weighted)
 
     max_sdr = 0
     for epoch in range(args.epochs):
         total_cost = 0
         model.update_betas()
-        model.train()
-        train_loss, _ = forward(model, train_dl, optimizer=optimizer,
-            weighted=args.weighted, clip_weights=args.clip_weights)
+        train_loss = solver.train(train_dl, clip_weights=args.clip_weights)
 
         if (epoch+1) % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss)
-            model.eval()
-            val_loss, val_metrics = forward(model, val_dl, raw_dl=raw_dl,
-                weighted=args.weighted)
+            val_loss, val_metrics = solver.eval(val_dl, raw_dl=raw_dl)
             print('Val Cost: %f' % val_loss)
             sdr, sir, sar, stoi = val_metrics.mean()
             print('SDR: ', sdr)
@@ -168,7 +117,8 @@ def main():
             print('STOI: ', stoi)
             loss_metrics.update(train_loss, val_loss,
                 sdr, sir, sar, stoi, period=args.period)
-            bss_eval.train_plot(vis, loss_metrics, eid='Ryley', win=['{} Loss'.format(args.exp),
+            bss_eval.train_plot(vis, loss_metrics, eid='Ryley',
+                win=['{} Loss'.format(args.exp),
                 '{} BSS Eval'.format(args.exp)])
             if sdr > max_sdr:
                 max_sdr = sdr
@@ -176,7 +126,8 @@ def main():
 
         if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
             lr *= args.lr_decay
-            optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+            solver.optimizer = optim.Adam(model.parameters(), lr=lr,
+                weight_decay=args.weight_decay)
 
     with open('../results/' + args.exp + '.pkl', 'wb') as f:
         pkl.dump(loss_metrics, f)
