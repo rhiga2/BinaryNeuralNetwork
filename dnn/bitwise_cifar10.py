@@ -27,7 +27,7 @@ class BitwiseBasicBlock(nn.Module):
             w_binactiv=w_binactiv, use_gate=use_gate,
             scale_weights=scale_weights, scale_activations=scale_activations,
             bias=False, num_binarizations=num_binarizations)
-        self.bn1 = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
+        self.bn1 = nn.BatchNorm2d(in_channels, momentum=bn_momentum)
         self.dropout1 = nn.Dropout(p=dropout)
 
         self.downsample = None
@@ -51,13 +51,14 @@ class BitwiseBasicBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
 
     def forward(self, x):
-        identity = x
-        out = self.bn1(self.dropout1(self.conv1(x)))
-        out = self.bn2(self.dropout2(self.conv2(out)))
+        out = self.bn1(x)
+        out = self.dropout1(self.conv1(out))
+        out = self.bn2(out)
+        out = self.dropout2(self.conv2(out))
 
         if self.downsample is not None:
-            identity = self.downsample(x)
-        out = out + identity
+            x = self.downsample(x)
+        out = out + x
         return out
 
     def clip_weights(self):

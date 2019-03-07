@@ -90,7 +90,7 @@ def main():
             dropout=args.dropout, sparsity=args.sparsity,
             autoencode=args.autoencode, in_binactiv=in_binactiv,
             w_binactiv=w_binactiv, use_gate=args.use_gate,
-            weight_init='fft', bn_momentum=args.bn_momentum
+            weight_init=None, bn_momentum=args.bn_momentum
         )
 
     # Make model and dataset

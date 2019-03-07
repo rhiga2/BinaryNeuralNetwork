@@ -13,11 +13,11 @@ class BitwiseTasNetRepeat(nn.Module):
         super().__init__()
         self.blocks = blocks
         self.first1x1_list = nn.ModuleList()
-        self.first_activation = nn.ModuleList()
+        # self.first_activation = nn.ModuleList()
         self.first_normalization = nn.ModuleList()
         self.dconvs = nn.ModuleList()
         self.in_binactiv = in_binactiv
-        self.second_activation = nn.ModuleList()
+        # self.second_activation = nn.ModuleList()
         self.second_normalization = nn.ModuleList()
         self.third_normalization = nn.ModuleList()
         self.last1x1_list = nn.ModuleList()
@@ -33,7 +33,7 @@ class BitwiseTasNetRepeat(nn.Module):
             )
 
             # self.first_activation.append(nn.PReLU())
-            self.first_normalization.append(nn.BatchNorm1d(dconv_size,
+            self.first_normalization.append(nn.BatchNorm1d(bottleneck_channels,
                 momentum=bn_momentum))
             padding = dilation * (kernel_size - 1) // 2
             self.dconvs.append(
@@ -54,22 +54,22 @@ class BitwiseTasNetRepeat(nn.Module):
                     w_binactiv=w_binactiv, bias=False
                 )
             )
-            # self.third_normalization.append(nn.BatchNorm1d(bottleneck_channels,
-            #    momentum=bn_momentum))
+            self.third_normalization.append(nn.BatchNorm1d(dconv_size,
+               momentum=bn_momentum))
             dilation *= 2
 
     def forward(self, x):
         resid = x
         for i in range(self.blocks):
-            x = self.first1x1_list[i](x)
+            h = self.first_normalization[i](resid)
+            h = self.first1x1_list[i](h)
             # x = self.first_activation[i](x)
-            x = self.first_normalization[i](x)
-            x = self.dconvs[i](x)
+            h = self.second_normalization[i](h)
+            h = self.dconvs[i](h)
             # x = self.second_activation[i](x)
-            x = self.second_normalization[i](x)
-            x = self.last1x1_list[i](x)
-            # x = self.third_normalization[i](x)
-        resid = x + resid
+            h = self.third_normalization[i](h)
+            h = self.last1x1_list[i](h)
+            resid = resid + h
         return resid
 
 class BitwiseTasNet(nn.Module):
@@ -87,7 +87,6 @@ class BitwiseTasNet(nn.Module):
             groups=1, dilation=1, use_gate=False,
             in_binactiv=None, w_binactiv=None, bias=False)
         self.block_list = nn.ModuleList()
-        self.batch_norm = nn.BatchNorm1d(encoder_channels, momentum=bn_momentum)
         self.repeats = repeats
         for i in range(repeats):
             self.block_list.append(
@@ -105,8 +104,8 @@ class BitwiseTasNet(nn.Module):
 
     def forward(self, x):
         time = x.size(2)
-        x = F.relu(self.encoder(x))
-        h = self.batch_norm(x)
+        x = self.encoder(x)
+        h = x
         for i in range(self.repeats):
             h = self.block_list[i](h)
         if self.in_binactiv is not None:
@@ -118,3 +117,9 @@ class BitwiseTasNet(nn.Module):
 
     def update_betas(self):
         return
+
+    def load_partial_state_dict(self, state_dict):
+        own_state_dict = self.state_dict()
+        for name, param in state_dict.items():
+            if name in own_state_dict:
+                own_state_dict[name].copy_(param)
