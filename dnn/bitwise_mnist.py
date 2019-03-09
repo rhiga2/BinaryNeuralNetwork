@@ -11,6 +11,7 @@ import math
 import numpy as np
 import dnn.bitwise_mlp as bitwise_mlp
 import dnn.binary_layers as binary_layers
+from dnn.solvers import ImageRecognitionSolver
 import loss_and_metrics.image_classification as image_classification
 import visdom
 import argparse
@@ -79,7 +80,9 @@ def main():
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
     loss_metrics = image_classification.LossMetrics()
-    scheduler = optim.lr_scheduler.StepLR(optimizer, args.decay_period,
+    solver = ImageRecognitionSolver(model, loss=loss,
+        optimizer=optimizer, device=device)
+    scheduler = optim.lr_scheduler.StepLR(solver.optimizer, args.decay_period,
         gamma=args.lr_decay)
 
     for epoch in range(args.epochs):

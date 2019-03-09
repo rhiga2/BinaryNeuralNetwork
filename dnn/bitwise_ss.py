@@ -13,7 +13,7 @@ import loss_and_metrics.bss_eval as bss_eval
 import dnn.binary_layers as binary_layers
 import dnn.bitwise_mlp as bitwise_mlp
 import soundfile as sf
-from dnn.solver_ss import BinarySTFTSolver
+from dnn.solvers import BinarySTFTSolver
 import visdom
 import pickle as pkl
 import argparse
@@ -98,9 +98,9 @@ def main():
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr,
         weight_decay=args.weight_decay)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, args.decay_period,
-        gamma=args.lr_decay)
     solver = BinarySTFTSolver(model, loss, optimizer, args.weighted)
+    scheduler = optim.lr_scheduler.StepLR(solver.optimizer, args.decay_period,
+        gamma=args.lr_decay)
 
     max_sdr = 0
     for epoch in range(args.epochs):

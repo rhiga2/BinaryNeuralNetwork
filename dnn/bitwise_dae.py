@@ -17,7 +17,7 @@ import dnn.bitwise_tasnet as bitwise_tasnet
 import dnn.bitwise_wavenet as bitwise_wavenet
 import loss_and_metrics.bss_eval as bss_eval
 import loss_and_metrics.sepcosts as sepcosts
-from dnn.solver_ss import BinarySolver
+from dnn.solvers import BinarySolver
 import visdom
 import argparse
 import pickle as pkl

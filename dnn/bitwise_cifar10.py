@@ -214,7 +214,9 @@ def main():
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr,
         weight_decay=args.weight_decay)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, args.decay_period,
+    solver = ImageRecognitionSolver(model, loss=loss,
+        optimizer=optimizer, device=device)
+    scheduler = optim.lr_scheduler.StepLR(solver.optimizer, args.decay_period,
         gamma=args.lr_decay)
     loss_metrics = image_classification.LossMetrics()
 
