@@ -15,29 +15,6 @@ import loss_and_metrics.image_classification as image_classification
 import visdom
 import argparse
 
-def forward(model, dl, optimizer=None, loss=F.mse_loss, device=torch.device('cpu'),
-    dtype=torch.float, clip_weights=False):
-    running_loss = 0
-    running_accuracy = 0
-    for batch_idx, (data, target) in enumerate(dl):
-        if optimizer:
-            optimizer.zero_grad()
-        data = data.to(device=device).view(data.size(0), -1)
-        target  = target.to(device=device)
-        estimate = model(data)
-        cost = loss(estimate, target)
-        if optimizer:
-            cost.backward()
-            optimizer.step()
-            if clip_weights:
-                model.clip_weights()
-        correct = torch.argmax(estimate, dim=1) == target
-        running_accuracy += torch.sum(correct.float()).item()
-        running_loss += cost.item() * data.size(0)
-    if optimizer:
-        optimizer.zero_grad()
-    return running_accuracy / len(dl.dataset), running_loss / len(dl.dataset)
-
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=32,
@@ -102,18 +79,20 @@ def main():
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
     loss_metrics = image_classification.LossMetrics()
+    scheduler = optim.lr_scheduler.StepLR(optimizer, args.decay_period,
+        gamma=args.lr_decay)
 
     for epoch in range(args.epochs):
+        scheduler.step()
         total_cost = 0
         model.update_betas()
         model.train()
-        train_accuracy, train_loss = forward(model, train_dl, optimizer,
-            loss=loss, device=device, clip_weights=args.clip_weights)
+        train_accuracy, train_loss = solver.train(train_dl,
+            clip_weights=args.clip_weights)
 
         if (epoch+1) % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss, train_accuracy)
-            model.eval()
-            val_accuracy, val_loss = forward(model, val_dl, loss=loss, device=device)
+            val_accuracy, val_loss = solver.eval(val_dl)
             print('Val Cost: ', val_loss, val_accuracy)
             loss_metrics.update(train_loss, train_accuracy, val_loss,
                 val_accuracy, period=args.period)
@@ -125,11 +104,6 @@ def main():
                 image_classification.plot_weights(vis,
                     model.filter_list[i].weight.data.view(-1),
                     numbins=30, title=title, win=title)
-
-        if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
-            lr *= args.lr_decay
-            optimizer = optim.Adam(model.parameters(), lr=lr,
-                weight_decay=args.weight_decay)
 
 if __name__ == '__main__':
     main()

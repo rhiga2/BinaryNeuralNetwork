@@ -147,3 +147,43 @@ class BinarySolver():
     def get_baseline(self, dl):
         self.model.eval()
         return self._forward(dl, get_baseline=True)
+
+class ImageRecognitionSolver():
+    def __init__(self, model, loss, optimizer=None,
+        device=torch.device('cpu')):
+        self.model = model.to(device)
+        self.loss = loss.to(device)
+        self.optimizer = optimizer
+        self.device = device
+
+    def _forward(dl, clip_weights=False, train=False):
+        running_loss = 0
+        running_accuracy = 0
+        for batch_idx, (data, target) in enumerate(dl):
+            if train:
+                self.optimizer.zero_grad()
+            data = data.to(self.device).view(data.size(0), -1)
+            target  = target.to(self.device)
+            estimate = self.model(data)
+            cost = self.loss(estimate, target)
+            if train:
+                cost.backward()
+                self.optimizer.step()
+                if clip_weights:
+                    self.model.clip_weights()
+            correct = torch.argmax(estimate, dim=1) == target
+            running_accuracy += torch.sum(correct.float()).item()
+            running_loss += cost.item() * data.size(0)
+        if train:
+            self.optimizer.zero_grad()
+        dataset_size = len(dl.dataset)
+        return running_accuracy / dataset_size, running_loss / dataset_size
+
+    def train(self, dl, clip_weights=False):
+        assert self.optimizer is not None
+        self.model.train()
+        return _forward(dl, clip_weights=clip_weights, train=True)
+
+    def eval(self, dl):
+        self.model.eval()
+        return _forward(dl, train=False)

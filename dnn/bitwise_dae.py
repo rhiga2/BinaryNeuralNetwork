@@ -119,12 +119,16 @@ def main():
     # Initialize optimizer
     vis = visdom.Visdom(port=5801)
     lr = args.learning_rate
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=lr,
+        weight_decay=args.weight_decay)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, args.decay_period,
+        gamma=args.lr_decay)
 
     solver = BinarySolver(model, loss, optimizer, quantizer=quantizer,
         classification=classification, autoencode=autoencode, device=device)
 
     for epoch in range(args.epochs):
+        scheduler.step()
         total_cost = 0
         model.update_betas()
         train_loss = solver.train(train_dl, clip_weights=args.clip_weights)
@@ -145,11 +149,6 @@ def main():
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
             lr *= args.lr_decay
             optimizer = optim.Adam(model.parameters(), lr=lr,
-                weight_decay=args.weight_decay)
-
-        if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
-            lr *= args.lr_decay
-            solver.optimizer = optim.Adam(model.parameters(), lr=lr,
                 weight_decay=args.weight_decay)
 
     with open('../results/' + args.exp + '.pkl', 'wb') as f:

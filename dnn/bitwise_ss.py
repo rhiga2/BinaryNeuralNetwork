@@ -98,10 +98,13 @@ def main():
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr,
         weight_decay=args.weight_decay)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, args.decay_period,
+        gamma=args.lr_decay)
     solver = BinarySTFTSolver(model, loss, optimizer, args.weighted)
 
     max_sdr = 0
     for epoch in range(args.epochs):
+        scheduler.step()
         total_cost = 0
         model.update_betas()
         train_loss = solver.train(train_dl, clip_weights=args.clip_weights)
@@ -123,11 +126,6 @@ def main():
             if sdr > max_sdr:
                 max_sdr = sdr
                 torch.save(model.state_dict(), '../models/' + args.exp + '.model')
-
-        if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
-            lr *= args.lr_decay
-            solver.optimizer = optim.Adam(model.parameters(), lr=lr,
-                weight_decay=args.weight_decay)
 
     with open('../results/' + args.exp + '.pkl', 'wb') as f:
         pkl.dump(loss_metrics, f)

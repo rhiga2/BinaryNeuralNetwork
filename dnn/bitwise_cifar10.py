@@ -140,29 +140,6 @@ class BitwiseResnet18(nn.Module):
         self.layer4[0].clip_weights()
         self.layer4[1].clip_weights()
 
-def forward(model, dl, optimizer=None, loss=F.mse_loss,
-    device=torch.device('cpu'), dtype=torch.float, clip_weights=False):
-    running_loss = 0
-    running_accuracy = 0
-    for batch_idx, (data, target) in enumerate(dl):
-        if optimizer:
-            optimizer.zero_grad()
-        data = data.to(device=device)
-        target = target.to(device=device)
-        estimate = model(data)
-        cost = loss(estimate, target)
-        correct = torch.argmax(estimate, dim=1) == target
-        running_accuracy += torch.sum(correct.float()).item()
-        running_loss += cost.item() * data.size(0)
-        if optimizer:
-            cost.backward()
-            optimizer.step()
-            if clip_weights:
-                model.clip_weights()
-    if optimizer:
-        optimizer.zero_grad()
-    return running_accuracy / len(dl.dataset), running_loss / len(dl.dataset)
-
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=32,
@@ -237,9 +214,12 @@ def main():
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr,
         weight_decay=args.weight_decay)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, args.decay_period,
+        gamma=args.lr_decay)
     loss_metrics = image_classification.LossMetrics()
 
     for epoch in range(args.epochs):
+        scheduler.step()
         total_cost = 0
         model.train()
         train_accuracy, train_loss = forward(model, train_dl, optimizer,
@@ -257,11 +237,6 @@ def main():
             image_classification.train_plot(vis, loss_metrics, eid=None,
                 win=['{} Loss'.format(args.exp), '{} Accuracy'.format(args.exp)])
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
-
-        if (epoch+1) % args.decay_period == 0 and args.lr_decay != 1:
-            lr *= args.lr_decay
-            optimizer = optim.Adam(model.parameters(), lr=lr,
-                weight_decay=args.weight_decay)
 
 if __name__ == '__main__':
     main()
