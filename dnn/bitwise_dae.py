@@ -122,7 +122,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
 
     solver = BinarySolver(model, loss, optimizer, quantizer=quantizer,
-        classification=classification, autoencode=autoencode, device=device)
+        classification=classification, autoencode=args.autoencode, device=device)
 
     for epoch in range(args.epochs):
         total_cost = 0

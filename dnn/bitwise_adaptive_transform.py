@@ -51,6 +51,7 @@ class BitwiseAdaptiveTransform(nn.Module):
             scale_activations=None
         )
 
+        self.activation = nn.PReLU()
         self.batchnorm = nn.BatchNorm1d(kernel_size, momentum=bn_momentum)
         self.autoencode = autoencode
 
@@ -102,7 +103,7 @@ class BitwiseAdaptiveTransform(nn.Module):
             - channels is the number of input channels = num bits in qad
         '''
         time = x.size(2)
-        spec = self.conv(x)
+        spec = self.activation(self.conv(x))
 
         if not self.autoencode:
             h = spec
@@ -114,10 +115,7 @@ class BitwiseAdaptiveTransform(nn.Module):
             h = self.mlp(h)
             h = bitwise_mlp.unflatten(h, spec_size[0], spec_size[2])
 
-            if self.in_binactiv:
-                h = (self.in_binfunc(h) + 1)/2
-            else:
-                h = torch.sigmoid(h)
+            h = torch.sigmoid(h)
             spec = h * spec
 
         return self.conv_transpose(spec)[:, :, self.kernel_size:time+self.kernel_size]

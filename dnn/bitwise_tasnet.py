@@ -40,8 +40,7 @@ class GlobalLayerNormalization(nn.Module):
                 + self.momentum*var
             return self.weight*(x - self.mean)/torch.sqrt(var + self.eps) \
                 + self.bias
-         return self.weight*(x - self.running_mean) \
-            / torch.sqrt(self.running_var + self.eps) + self.bias
+        return self.weight*(x - self.running_mean)/torch.sqrt(self.running_var+self.eps) + self.bias
 
 def get_normalization(normalization, channels, momentum=0.1):
     if normalization == 'batch':
@@ -130,6 +129,7 @@ class BitwiseTasNet(nn.Module):
         if in_binactiv is not None:
             self.in_binfunc = in_binactiv()
         self.front_kernel_size = front_kernel_size
+        self.activation = nn.PReLU()
         self.encoder = binary_layers.BitwiseConv1d(in_channels, encoder_channels,
             front_kernel_size, stride=front_stride, padding=front_kernel_size,
             groups=1, dilation=1, use_gate=False,
@@ -144,6 +144,7 @@ class BitwiseTasNet(nn.Module):
                     use_gate=use_gate
                 )
             )
+        self.out_batchnorm = nn.BatchNorm1d(encoder_channels, momentum=bn_momentum)
         self.decoder = binary_layers.BitwiseConvTranspose1d(encoder_channels,
             in_channels, front_kernel_size, stride=front_stride,
             padding=0, groups=1, dilation=1, use_gate=False,
@@ -152,14 +153,11 @@ class BitwiseTasNet(nn.Module):
 
     def forward(self, x):
         time = x.size(2)
-        x = self.encoder(x)
+        x = self.activation(self.encoder(x))
         h = x
         for i in range(self.repeats):
             h = self.block_list[i](h)
-        if self.in_binactiv is not None:
-            h = (self.in_binfunc(h) + 1)/2
-        else:
-            h = torch.sigmoid(h)
+        h = torch.sigmoid(self.out_batchnorm(h))
         x = x * h
         return self.decoder(x)[:,:,self.front_kernel_size:time+self.front_kernel_size]
 

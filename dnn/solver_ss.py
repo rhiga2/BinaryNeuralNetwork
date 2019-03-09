@@ -87,12 +87,13 @@ class BinarySTFTSolver():
 class BinarySolver():
     def __init__(self, model, loss, optimizer=None, quantizer=None,
         classification=False, autoencode=False, device=torch.device('cpu')):
-        self.model = model
+        self.model = model.to(device)
         self.loss = loss
         self.optimizer = optimizer
         self.quantizer = quantizer
         self.classification = classification
         self.autoencode = autoencode
+        self.device = device
         self.bss_evaluate = bss_eval.BSSEvaluate(fs=8000).to(device)
 
     def _forward(self, dl, clip_weights=False, train=False,

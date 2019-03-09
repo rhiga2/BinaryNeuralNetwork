@@ -243,7 +243,7 @@ class BitwiseConv1d(nn.Conv1d, BitwiseAbstractClass):
             scale_weights=scale_weights,
             scale_activations=scale_activations)
 
-        if scale_activation == 'average':
+        if scale_activations == 'average':
             self.scale_conv = nn.Conv1d(1, 1, kernel_size, stride=stride,
                 padding=padding, dilation=dilation)
             weight = self.scale_conv.weight
@@ -276,7 +276,7 @@ class BitwiseConv2d(nn.Conv2d, BitwiseAbstractClass):
             scale_weights=scale_weights,
             scale_activations=scale_activations)
 
-        if scale_activation == 'average':
+        if scale_activations == 'average':
             self.scale_conv = nn.Conv2d(1, 1, kernel_size, stride=stride,
                 padding=padding, dilation=dilation, bias=False)
             weight = self.scale_conv.weight
@@ -307,7 +307,7 @@ class BitwiseConvTranspose1d(nn.ConvTranspose1d, BitwiseAbstractClass):
             w_binactiv=w_binactiv, bn_momentum=bn_momentum,
             scale_weights=scale_weights)
 
-        if scale_activation == 'average':
+        if scale_activations == 'average':
             self.scale_conv = nn.ConvTranspose1d(1, 1, kernel_size,
                 stride=stride, padding=padding, dilation=dilation, bias=False)
             weight = self.scale_conv.weight
