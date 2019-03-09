@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 import math
 import numpy as np
 import dnn.binary_layers as binary_layers
+from dnn.solvers as ImageRecognitionSolver
 import datasets.quantized_data as quantized_data
 import loss_and_metrics.image_classification as image_classification
 import visdom
