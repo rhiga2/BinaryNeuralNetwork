@@ -8,6 +8,7 @@ import datasets.binary_data as binary_data
 import datasets.stft as stft
 import loss_and_metrics.bss_eval as bss_eval
 import dnn.binary_layers as binary_layers
+import dnn.bitwise_mlp as bitwise_mlp
 import visdom
 
 class BinarySTFTSolver():
