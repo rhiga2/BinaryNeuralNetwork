@@ -6,11 +6,11 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torchvision import datasets, transforms, models
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
 import math
 import numpy as np
 import dnn.binary_layers as binary_layers
-from dnn.solvers as ImageRecognitionSolver
+from dnn.solvers import ImageRecognitionSolver
 import datasets.quantized_data as quantized_data
 import loss_and_metrics.image_classification as image_classification
 import visdom
@@ -61,7 +61,8 @@ class BitwiseBasicBlock(nn.Module):
         return out
 
     def clip_weights(self):
-        self.downsample[0].clip_weights()
+        if self.downsample is not None:
+            self.downsample[0].clip_weights()
         self.conv1.clip_weights()
         self.conv2.clip_weights()
 
@@ -186,10 +187,21 @@ def main():
     ])
     train_data = datasets.CIFAR10('/media/data/CIFAR10', train=True,
         transform=train_transform, download=True)
-    val_data = datasets.CIFAR10('/media/data/CIFAR10', train=False,
+    # reintialize same data with different transform
+    val_data = datasets.CIFAR10('/media/data/CIFAR10', train=True,
         transform=test_transform, download=True)
-    train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
-    val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
+    train_size = len(train_data)
+    split = int(0.8*train_size)
+    indices = np.arange(train_size)
+    np.random.shuffle(indices)
+    train_indices = indices[:split]
+    val_indices = indices[split:]
+    print('Number of Training Examples: ', len(train_indices))
+    print('Number of Validation Examples: ', len(val_indices))
+    train_sampler = SubsetRandomSampler(train_indices) 
+    val_sampler = SubsetRandomSampler(val_indices)
+    train_dl = DataLoader(train_data, batch_size=args.batchsize, sampler=train_sampler)
+    val_dl = DataLoader(val_data, batch_size=args.batchsize, sampler=val_sampler)
 
     vis = visdom.Visdom(port=5801)
     in_binactiv = binary_layers.pick_activation(args.in_binactiv)
@@ -224,16 +236,12 @@ def main():
     for epoch in range(args.epochs):
         scheduler.step()
         total_cost = 0
-        model.train()
-        train_accuracy, train_loss = forward(model, train_dl, optimizer,
-            loss=loss, device=device)
+        train_accuracy, train_loss = solver.train(train_dl, clip_weights=args.clip_weights)
 
         if (epoch+1) % args.period == 0:
             print('Epoch %d Training Cost: ' % epoch, train_loss,
                 train_accuracy)
-            model.eval()
-            val_accuracy, val_loss = forward(model, val_dl, loss=loss,
-                device=device, clip_weights=args.clip_weights)
+            val_accuracy, val_loss = solver.eval(val_dl)
             print('Val Cost: ', val_loss, val_accuracy)
             loss_metrics.update(train_loss, train_accuracy, val_loss,
                 val_accuracy, period=args.period)
