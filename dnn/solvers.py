@@ -33,7 +33,6 @@ class BinarySTFTSolver():
                 self.optimizer.zero_grad()
             bmag = batch['bmag'].to(self.device)
             ibm = batch['ibm'].to(self.device)
-            bmag = bmag.to(self.device)
             bmag_size = bmag.size()
             bmag = 2*bmag - 1
             bmag = bitwise_mlp.flatten(bmag)
