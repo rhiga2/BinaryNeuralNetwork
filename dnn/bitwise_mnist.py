@@ -49,10 +49,19 @@ def main():
 
     # Make model and dataset
     vis = visdom.Visdom(port=5801)
-    trans = transforms.Compose([transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))])
+    train_trans = transforms.Compose([
+        transforms.RandomCrop(28, padding=4),
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,))
+    ])
+    val_trans = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,))        
+    ])
     train_data = datasets.MNIST('/media/data/MNIST', train=True,
-        transform=trans, download=True)
+        transform=train_trans, download=True)
+    val_data = datasets.MNIST('/media/data/MNIST', train=True,
+        transform=val_trans, download=True)
     train_size = len(train_data)
     split = int(0.8 * train_size)
     indices = np.arange(train_size)
@@ -64,7 +73,7 @@ def main():
     train_sampler = SubsetRandomSampler(train_indices)
     val_sampler = SubsetRandomSampler(val_indices)
     train_dl = DataLoader(train_data, batch_size=args.batchsize, sampler=train_sampler)
-    val_dl = DataLoader(train_data, batch_size=args.batchsize, sampler=val_sampler)
+    val_dl = DataLoader(val_data, batch_size=args.batchsize, sampler=val_sampler)
 
     in_binactiv = binary_layers.pick_activation(args.in_binactiv)
     w_binactiv = binary_layers.pick_activation(args.w_binactiv)

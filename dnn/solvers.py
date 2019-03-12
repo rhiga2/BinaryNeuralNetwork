@@ -36,9 +36,10 @@ class BinarySTFTSolver():
         for batch in binary_dl:
             if train:
                 self.optimizer.zero_grad()
-            bmag = batch['bmag'].to(self.device)
-            ibm = batch['ibm'].to(self.device)
+            bmag = batch['bmag'].to(torch.float32)
+            ibm = batch['ibm'].to(torch.float32)
             bmag = bmag.to(self.device)
+            ibm = ibm.to(self.device)
             bmag_size = bmag.size()
             bmag = 2*bmag - 1
             bmag = bitwise_mlp.flatten(bmag)
@@ -70,7 +71,7 @@ class BinarySTFTSolver():
                 mask = mask.to(dtype=torch.float)
                 mix_estimate = self.istft(mix_mag * mask, mix_phase)
                 sources = torch.stack([target, interference], dim=1)
-                sources = source.to(self.device)
+                sources = sources.to(self.device)
                 metrics = self.bss_evaluate(mix_estimate, sources)
                 bss_metrics.extend(metrics)
         if train:
