@@ -88,13 +88,13 @@ class ParameterizedHardTanh(nn.Module):
         super().__init__()
         self.beta = nn.Parameter(torch.FloatTensor([beta]),
             requires_grad=True)
-        self.hard_tanh = nn.Hardtanh
+        self.hard_tanh = nn.Hardtanh()
         self.ste = ste
 
     def forward(self, x):
         if self.ste:
             return clipped_ste(self.beta*x)
-        return self.hard_tanh(beta*x)
+        return self.hard_tanh(self.beta*x)
 
 def pick_activation(activation_name, **kwargs):
     if activation_name == 'ste':
@@ -109,7 +109,7 @@ def pick_activation(activation_name, **kwargs):
         activation = lambda : torch.tanh
     elif activation_name == 'ptanh':
         activation = lambda : ParameterizedTanh(**kwargs)
-    elif activation_name == 'ptanh':
+    elif activation_name == 'ptanh_ste':
         activation = lambda : ParameterizedTanh(**kwargs, ste=True)
     elif activation_name == 'tanh_ste':
         activation = lambda : tanh_ste

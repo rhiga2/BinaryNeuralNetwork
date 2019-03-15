@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torchvision import datasets, transforms
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
 import math
 import numpy as np
 import dnn.bitwise_mlp as bitwise_mlp
@@ -15,6 +15,7 @@ from dnn.solvers import ImageRecognitionSolver
 import loss_and_metrics.image_classification as image_classification
 import visdom
 import argparse
+import pickle as pkl
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
@@ -25,7 +26,7 @@ def main():
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr_decay', '-lrd', type=float, default=1.0)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0)
-    parser.add_argument('--dropout', '-dropout', type=float, default=0)
+    parser.add_argument('--dropout', '-do', type=float, default=0)
     parser.add_argument('--period', '-p', type=int, default=1)
     parser.add_argument('--decay_period', '-dp', type=int, default=10)
     parser.add_argument('--load_file', '-lf', type=str, default=None)
@@ -49,14 +50,31 @@ def main():
 
     # Make model and dataset
     vis = visdom.Visdom(port=5801)
-    trans = transforms.Compose([transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))])
+    train_trans = transforms.Compose([
+        transforms.RandomCrop(28, padding=4),
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,))
+    ])
+    val_trans = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,))        
+    ])
     train_data = datasets.MNIST('/media/data/MNIST', train=True,
-        transform=trans, download=True)
-    val_data = datasets.MNIST('/media/data/MNIST', train=False,
-        transform=trans, download=True)
-    train_dl = DataLoader(train_data, batch_size=args.batchsize, shuffle=True)
-    val_dl = DataLoader(val_data, batch_size=args.batchsize, shuffle=False)
+        transform=train_trans, download=True)
+    val_data = datasets.MNIST('/media/data/MNIST', train=True,
+        transform=val_trans, download=True)
+    train_size = len(train_data)
+    split = int(0.8 * train_size)
+    indices = np.arange(train_size)
+    np.random.shuffle(indices)
+    train_indices = indices[:split]
+    val_indices = indices[split:]
+    print('Number of Training Examples: ', len(train_indices))
+    print('Number of Validation Examples', len(val_indices))
+    train_sampler = SubsetRandomSampler(train_indices)
+    val_sampler = SubsetRandomSampler(val_indices)
+    train_dl = DataLoader(train_data, batch_size=args.batchsize, sampler=train_sampler)
+    val_dl = DataLoader(val_data, batch_size=args.batchsize, sampler=val_sampler)
 
     in_binactiv = binary_layers.pick_activation(args.in_binactiv)
     w_binactiv = binary_layers.pick_activation(args.w_binactiv)
@@ -80,7 +98,7 @@ def main():
     lr = args.learning_rate
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
     loss_metrics = image_classification.LossMetrics()
-    solver = ImageRecognitionSolver(model, loss=loss,
+    solver = ImageRecognitionSolver(model, loss=loss, flatten=True,
         optimizer=optimizer, device=device)
     scheduler = optim.lr_scheduler.StepLR(solver.optimizer, args.decay_period,
         gamma=args.lr_decay)
@@ -107,6 +125,8 @@ def main():
                 image_classification.plot_weights(vis,
                     model.filter_list[i].weight.data.view(-1),
                     numbins=30, title=title, win=title)
+    with open('../results/' + args.exp + '.pkl', 'wb') as f:
+        pkl.dump(loss_metrics, f)
 
 if __name__ == '__main__':
     main()

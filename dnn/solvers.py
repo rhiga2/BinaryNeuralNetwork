@@ -11,6 +11,11 @@ import dnn.binary_layers as binary_layers
 import dnn.bitwise_mlp as bitwise_mlp
 import visdom
 
+def get_dataloader_size(dl):
+    if dl.sampler is not None:
+        return len(dl.sampler)
+    return len(dl.dataset) 
+
 class BinarySTFTSolver():
     def __init__(self, model, loss, optimizer=None, weighted=False,
         device=torch.device('cpu')):
@@ -31,8 +36,10 @@ class BinarySTFTSolver():
         for batch in binary_dl:
             if train:
                 self.optimizer.zero_grad()
-            bmag = batch['bmag'].to(self.device)
-            ibm = batch['ibm'].to(self.device)
+            bmag = batch['bmag'].to(torch.float32)
+            ibm = batch['ibm'].to(torch.float32)
+            bmag = bmag.to(self.device)
+            ibm = ibm.to(self.device)
             bmag_size = bmag.size()
             bmag = 2*bmag - 1
             bmag = bitwise_mlp.flatten(bmag)
@@ -64,12 +71,13 @@ class BinarySTFTSolver():
                 mask = mask.to(dtype=torch.float)
                 mix_estimate = self.istft(mix_mag * mask, mix_phase)
                 sources = torch.stack([target, interference], dim=1)
-                sources = source.to(self.device)
+                sources = sources.to(self.device)
                 metrics = self.bss_evaluate(mix_estimate, sources)
                 bss_metrics.extend(metrics)
         if train:
             self.optimizer.zero_grad()
-        return running_loss / len(binary_dl.dataset), bss_metrics
+        dataset_size = get_dataloader_size(binary_dl)
+        return running_loss / dataset_size, bss_metrics
 
     def train(self, dl, clip_weights=False):
         assert self.optimizer is not None
@@ -134,7 +142,8 @@ class BinarySolver():
             bss_metrics.extend(metrics)
         if train:
             self.optimizer.zero_grad()
-        return running_loss / len(dl.dataset), bss_metrics
+        dataset_size = get_dataloader_size(dl.dataset)
+        return running_loss / dataset_size, bss_metrics
 
     def train(self, dl, clip_weights=False):
         assert self.optimizer is not None
@@ -150,20 +159,23 @@ class BinarySolver():
         return self._forward(dl, get_baseline=True)
 
 class ImageRecognitionSolver():
-    def __init__(self, model, loss, optimizer=None,
+    def __init__(self, model, loss, optimizer=None, flatten=False,
         device=torch.device('cpu')):
         self.model = model.to(device)
         self.loss = loss.to(device)
+        self.flatten = flatten
         self.optimizer = optimizer
         self.device = device
 
-    def _forward(dl, clip_weights=False, train=False):
+    def _forward(self, dl, clip_weights=False, train=False):
         running_loss = 0
         running_accuracy = 0
         for batch_idx, (data, target) in enumerate(dl):
             if train:
                 self.optimizer.zero_grad()
-            data = data.to(self.device).view(data.size(0), -1)
+            if self.flatten:
+                data = data.view(data.size(0), -1)
+            data = data.to(self.device)
             target  = target.to(self.device)
             estimate = self.model(data)
             cost = self.loss(estimate, target)
@@ -177,14 +189,14 @@ class ImageRecognitionSolver():
             running_loss += cost.item() * data.size(0)
         if train:
             self.optimizer.zero_grad()
-        dataset_size = len(dl.dataset)
+        dataset_size = get_dataloader_size(dl)
         return running_accuracy / dataset_size, running_loss / dataset_size
 
     def train(self, dl, clip_weights=False):
         assert self.optimizer is not None
         self.model.train()
-        return _forward(dl, clip_weights=clip_weights, train=True)
+        return self._forward(dl, clip_weights=clip_weights, train=True)
 
     def eval(self, dl):
         self.model.eval()
-        return _forward(dl, train=False)
+        return self._forward(dl, train=False)
