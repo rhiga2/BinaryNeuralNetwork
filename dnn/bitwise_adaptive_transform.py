@@ -60,7 +60,7 @@ class BitwiseAdaptiveTransform(nn.Module):
                 kernel_size, kernel_size,  fc_sizes=fc_sizes, dropout=dropout,
                 bias=False, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
                 use_gate=use_gate, scale_weights=None, scale_activations=None,
-                bn_momentum=bn_momentum
+                bn_momentum=bn_momentum, binarize_first_layers=True
             )
 
         # Initialize inverse of front end transform
@@ -108,7 +108,7 @@ class BitwiseAdaptiveTransform(nn.Module):
         if not self.autoencode:
             h = spec
             if self.in_binfunc is not None:
-                h = self.in_binfunc(self.batchnorm(h))
+                h = self.batchnorm(h)
 
             spec_size = spec.size()
             h = bitwise_mlp.flatten(h)

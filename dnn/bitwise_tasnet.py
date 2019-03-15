@@ -132,8 +132,7 @@ class BitwiseTasNet(nn.Module):
         self.activation = nn.PReLU()
         self.encoder = binary_layers.BitwiseConv1d(in_channels, encoder_channels,
             front_kernel_size, stride=front_stride, padding=front_kernel_size,
-            groups=1, dilation=1, use_gate=False,
-            in_binactiv=None, w_binactiv=None, bias=False)
+            groups=1, dilation=1, use_gate=False, bias=False)
         self.block_list = nn.ModuleList()
         self.repeats = repeats
         for i in range(repeats):
@@ -148,7 +147,7 @@ class BitwiseTasNet(nn.Module):
         self.decoder = binary_layers.BitwiseConvTranspose1d(encoder_channels,
             in_channels, front_kernel_size, stride=front_stride,
             padding=0, groups=1, dilation=1, use_gate=False,
-            in_binactiv=None, w_binactiv=None, bias=False
+            bias=False
         )
 
     def forward(self, x):

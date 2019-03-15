@@ -78,8 +78,8 @@ class BitwiseResnet18(nn.Module):
             self.in_binfunc = in_binactiv()
         self.w_binactiv = w_binactiv
         self.use_gate = use_gate
-        self.conv1 = binary_layers.BitwiseConv2d(3, 64, kernel_size=7, stride=1,
-            padding=3, bias=False)
+        self.conv1 = binary_layers.BitwiseConv2d(3, 64, kernel_size=7,
+            stride=1, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64, momentum=bn_momentum)
         self.bn_momentum = bn_momentum
         self.dropout = dropout
@@ -90,9 +90,7 @@ class BitwiseResnet18(nn.Module):
         self.layer4 = self._make_layer(256, 512, stride=2)
         self.dropout_layer = nn.Dropout(p=dropout)
         self.avgpool = nn.AvgPool2d(4) # convert to binary
-        self.fc = binary_layers.BitwiseLinear(512, num_classes,
-            use_gate=self.use_gate, scale_weights=scale_weights,
-            scale_activations=scale_activations, bias=True)
+        self.fc = nn.BitwiseLinear(512, num_classes, bias=True)
         self.scale = binary_layers.ScaleLayer(num_channels=num_classes)
 
     def forward(self, x):
@@ -141,6 +139,54 @@ class BitwiseResnet18(nn.Module):
         self.layer4[0].clip_weights()
         self.layer4[1].clip_weights()
 
+class BitwiseVGG(nn.Module):
+    def __init__(self, cfg, in_binactiv=None, w_binactiv=None,
+        num_classes=10, scale_weights=None, scale_activations=None,
+        use_gate=False, bn_momentum=0.1):
+        super().__init__()
+        self.in_binactiv = in_binactiv
+        self.w_binactiv = w_binactiv
+        self.scale_activations = scale_activations
+        self.scale_weights = scale_weights
+        self.bn_momentum = bn_momentum
+        self.use_gate = use_gate
+        self.features = self._make_layers(cfg)
+        self.classifier = nn.BitwiseLinear(512, num_classes, bias=True)
+        self.scale = binary_layers.ScaleLayer(num_channels=num_classes)
+
+    def forward(self, x):
+        out = self.features(x)
+
+    def _make_layers(self, cfg):
+        layers = []
+        channels = 3
+        for i, v in enumerate(cfg):
+            if v == 'M':
+                layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
+            else:
+                layers.append(nn.BatchNorm2d(v, momentum=self.bn_momentum))
+                if i == 0:
+                    layers.append(
+                        binary_layers.BitwiseConv2d(
+                            channels, v, kernel_size=3, padding=1, bias=False
+                        )
+                    )
+                else:
+                    layers.append(
+                        binary_layers.BitwiseConv2d(
+                            channels, v, kernel_size=3, padding=1,
+                            in_binactiv=self.in_binactiv,
+                            w_binactiv=self.w_binactiv,
+                            scale_activations=self.scale_activations,
+                            scale_weights=self.scale_weights,
+                            use_gate=self.use_gate, bias=False
+                        )
+                    )
+                channels = v
+        layers.append(nn.BatchNorm2d(channels, momentum=self.bn_momentum))
+        layers.append(nn.AvgPool2d(kernel_size=1, stride=1))
+        return nn.Sequential(*layers)
+
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
     parser.add_argument('--epochs', '-e', type=int, default=32,
@@ -163,6 +209,7 @@ def main():
     parser.add_argument('--decay_period', '-dp', type=int, default=10)
     parser.add_argument('--clip_weights', '-cw', action='store_true')
     parser.add_argument('--bn_momentum', '-bnm', type=float, default='0.1')
+    parser.add_argument('--model', '-model', default='resnet18')
     args = parser.parse_args()
 
     # Initialize device
@@ -194,16 +241,25 @@ def main():
     vis = visdom.Visdom(port=5801)
     in_binactiv = binary_layers.pick_activation(args.in_binactiv)
     w_binactiv = binary_layers.pick_activation(args.w_binactiv)
-    model = BitwiseResnet18(in_binactiv=in_binactiv, w_binactiv=w_binactiv,
-        num_classes=10, scale_weights=None, scale_activations=None,
-        bn_momentum=args.bn_momentum, dropout=args.dropout)
+    if model == 'resnet18':
+        model = BitwiseResnet18(in_binactiv=in_binactiv, w_binactiv=w_binactiv,
+            num_classes=10, scale_weights=None, scale_activations=None,
+            bn_momentum=args.bn_momentum, dropout=args.dropout,
+            use_gate=args.use_gate)
+        pretrained = models.resnet18(pretrained=True)
+    elif model == 'vgg16':
+        cfg = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512,
+            'M', 512, 512, 512, 'M']
+        model = BitwiseVGG(in_binactiv=in_binactiv, w_binactiv=w_binactiv,
+            num_classes=10, scale_weights=None, scale_activations=None,
+            bn_momentum=args.bn_momentum, use_gate=args.use_gate)
+        pretrained = models.vgg16(pretrained=True)
     print(model)
 
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
     elif args.pretrained:
-        resnet18 = models.resnet18(pretrained=True)
-        model.load_pretrained_state_dict(resnet18.state_dict())
+        model.load_pretrained_state_dict(pretrained.state_dict())
 
     model.to(device=device)
 
