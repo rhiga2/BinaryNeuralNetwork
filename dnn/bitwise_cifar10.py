@@ -15,6 +15,7 @@ import datasets.quantized_data as quantized_data
 import loss_and_metrics.image_classification as image_classification
 import visdom
 import argparse
+import pickle as pkl
 
 class BitwiseBasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, use_gate=False,
@@ -248,6 +249,9 @@ def main():
             image_classification.train_plot(vis, loss_metrics, eid=None,
                 win=['{} Loss'.format(args.exp), '{} Accuracy'.format(args.exp)])
             torch.save(model.state_dict(), '../models/' + args.exp + '.model')
+
+    with open('../results/' + args.exp + '.pkl', 'wb') as f:
+        pkl.dump(loss_metrics, f)
 
 if __name__ == '__main__':
     main()

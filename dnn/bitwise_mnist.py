@@ -15,6 +15,7 @@ from dnn.solvers import ImageRecognitionSolver
 import loss_and_metrics.image_classification as image_classification
 import visdom
 import argparse
+import pickle as pkl
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
@@ -124,6 +125,8 @@ def main():
                 image_classification.plot_weights(vis,
                     model.filter_list[i].weight.data.view(-1),
                     numbins=30, title=title, win=title)
+    with open('../results/' + args.exp + '.pkl', 'wb') as f:
+        pkl.dump(loss_metrics, f)
 
 if __name__ == '__main__':
     main()
