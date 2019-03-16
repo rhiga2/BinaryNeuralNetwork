@@ -85,3 +85,9 @@ class BitwiseMLP(nn.Module):
 
         for layer in self.filter_list:
             layer.update_beta(sparsity=self.sparsity)
+
+    def load_partial_state_dict(self, state_dict):
+        own_state_dict = self.state_dict()
+        for name, param in state_dict.items():
+            if name in own_state_dict:
+                own_state_dict[name].copy_(param)
