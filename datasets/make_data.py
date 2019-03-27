@@ -61,7 +61,7 @@ def make_data(batchsize, hop=256, toy=False, max_duration=2, transform=None):
 if __name__=='__main__':
     decimate = lambda x : signal.decimate(x, 2)
     trainset, valset, testset = make_mixture_set(hop=160, max_duration=2,
-        transform=decimate, random_snr=True)
+        transform=decimate, random_snr=False)
     print('Training Size: ', len(trainset))
     print('Validation Size: ', len(valset))
     print('Testing Size: ', len(testset))

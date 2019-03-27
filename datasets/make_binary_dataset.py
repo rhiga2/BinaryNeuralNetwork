@@ -23,7 +23,7 @@ def main():
     disperser = quantized_data.Disperser(args.num_bits)
     trainset, valset, testset = make_data.make_mixture_set(hop=256, max_duration=2,
         toy=args.toy, transform=lambda x : signal.decimate(x, 2),
-        random_snr=True)
+        random_snr=False)
     print('Samples in Trainset: ', len(trainset))
     print('Samples in Valset: ', len(valset))
     print('Samples in Testset: ', len(testset))

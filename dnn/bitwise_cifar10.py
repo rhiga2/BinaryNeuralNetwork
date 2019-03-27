@@ -92,7 +92,11 @@ class BitwiseResnet18(nn.Module):
         self.layer4 = self._make_layer(256, 512, stride=2)
         self.dropout_layer = nn.Dropout(p=dropout)
         self.avgpool = nn.AvgPool2d(4) # convert to binary
-        self.fc = nn.BitwiseLinear(512, num_classes, bias=True)
+        self.fc = binary_layers.BitwiseLinear(512, num_classes, 
+            use_gate=self.use_gate,
+            in_binactiv=self.in_binactiv, w_binactiv=self.w_binactiv,
+            scale_weights=self.scale_weights,
+            scale_activations=self.scale_activations)
         self.scale = binary_layers.ScaleLayer(num_channels=num_classes)
 
     def forward(self, x):
@@ -153,7 +157,11 @@ class BitwiseVGG(nn.Module):
         self.bn_momentum = bn_momentum
         self.use_gate = use_gate
         self.features = self._make_layers(cfg)
-        self.classifier = nn.BitwiseLinear(512, num_classes, bias=True)
+        self.classifier = binary_layers.BitwiseLinear(512, num_classes, 
+            use_gate=self.use_gate,
+            in_binactiv=self.in_binactiv, w_binactiv=self.w_binactiv,
+            scale_weights=self.scale_weights,
+            scale_activations=self.scale_activations)
         self.scale = binary_layers.ScaleLayer(num_channels=num_classes)
 
     def forward(self, x):
@@ -170,7 +178,6 @@ class BitwiseVGG(nn.Module):
             if v == 'M':
                 layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
             else:
-                layers.append(nn.BatchNorm2d(v, momentum=self.bn_momentum))
                 if i == 0:
                     layers.append(
                         binary_layers.BitwiseConv2d(
@@ -178,6 +185,7 @@ class BitwiseVGG(nn.Module):
                         )
                     )
                 else:
+                    layers.append(nn.BatchNorm2d(channels, momentum=self.bn_momentum))
                     layers.append(
                         binary_layers.BitwiseConv2d(
                             channels, v, kernel_size=3, padding=1,
@@ -192,6 +200,12 @@ class BitwiseVGG(nn.Module):
         layers.append(nn.BatchNorm2d(channels, momentum=self.bn_momentum))
         layers.append(nn.AvgPool2d(kernel_size=1, stride=1))
         return nn.Sequential(*layers)
+    
+    def clip_weights(self):
+        for i, layer in enumerate(self.features):
+            if i != 0 and hasattr(layer, 'bitwise'):
+                layer.clip_weights()
+            
 
 def main():
     parser = argparse.ArgumentParser(description='bitwise network')
@@ -258,31 +272,30 @@ def main():
     vis = visdom.Visdom(port=5801)
     in_binactiv = binary_layers.pick_activation(args.in_binactiv)
     w_binactiv = binary_layers.pick_activation(args.w_binactiv)
-    if model == 'resnet18':
+    if args.model == 'resnet18':
         model = BitwiseResnet18(in_binactiv=in_binactiv, w_binactiv=w_binactiv,
             num_classes=10, scale_weights=None, scale_activations=None,
             bn_momentum=args.bn_momentum, dropout=args.dropout,
             use_gate=args.use_gate)
-        pretrained = models.resnet18(pretrained=True)
-    elif model == 'vgg16':
+    elif args.model == 'vgg16':
         cfg = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512,
             'M', 512, 512, 512, 'M']
         model = BitwiseVGG(cfg, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
             num_classes=10, scale_weights=None, scale_activations=None,
             bn_momentum=args.bn_momentum, use_gate=args.use_gate)
-        pretrained = models.vgg16(pretrained=True)
     print(model)
 
     if args.load_file:
         model.load_state_dict(torch.load('../models/' + args.load_file))
     elif args.pretrained:
+        if args.model == 'resnet18':
+            pretrained = models.resnet18(pretrained=True)
+        elif args.model == 'vgg16':
+            pretrained = models.vgg16(pretrained=True)
         model.load_pretrained_state_dict(pretrained.state_dict())
-
-    model.to(device=device)
 
     # Initialize loss function
     loss = nn.CrossEntropyLoss()
-    loss = loss.to(device=device)
 
     # Initialize optimizer
     lr = args.learning_rate
@@ -293,6 +306,7 @@ def main():
     scheduler = optim.lr_scheduler.StepLR(solver.optimizer, args.decay_period,
         gamma=args.lr_decay)
     loss_metrics = image_classification.LossMetrics()
+    max_accuracy = 0
 
     for epoch in range(args.epochs):
         scheduler.step()
@@ -308,7 +322,9 @@ def main():
                 val_accuracy, period=args.period)
             image_classification.train_plot(vis, loss_metrics, eid=None,
                 win=['{} Loss'.format(args.exp), '{} Accuracy'.format(args.exp)])
-            torch.save(model.state_dict(), '../models/' + args.exp + '.model')
+            if val_accuracy > max_accuracy:
+                max_accuracy = val_accuracy
+                torch.save(model.state_dict(), '../models/' + args.exp + '.model')
 
     with open('../results/' + args.exp + '.pkl', 'wb') as f:
         pkl.dump(loss_metrics, f)

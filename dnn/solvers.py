@@ -31,6 +31,7 @@ class BinarySTFTSolver():
     def _forward(self, binary_dl, raw_dl=None, clip_weights=False, train=False,
         get_baseline=False):
         running_loss = 0
+        bss_metrics = bss_eval.BSSMetricsList()
         if raw_dl is not None:
             raw_dl = iter(raw_dl)
         for batch in binary_dl:
@@ -54,15 +55,14 @@ class BinarySTFTSolver():
             # else:
             cost = self.loss(estimate, ibm)
             running_loss += cost.item() * bmag_size[0]
-            cost.backward()
             if train:
+                cost.backward()
                 self.optimizer.step()
                 if clip_weights:
                     self.model.clip_weights()
-            bss_metrics = None
+
             if raw_dl is not None:
                 raw_batch = next(raw_dl)
-                bss_metrics = bss_eval.BSSMetricsList()
                 mix = raw_batch['mix'].to(self.device)
                 mix_mag, mix_phase = self.stft(mix)
                 target = raw_batch['target']
@@ -82,7 +82,7 @@ class BinarySTFTSolver():
     def train(self, dl, clip_weights=False):
         assert self.optimizer is not None
         self.model.train()
-        return self._forward(dl, clip_weights=clip_weights)[0]
+        return self._forward(dl, clip_weights=clip_weights, train=True)[0]
 
     def eval(self, dl, raw_dl):
         self.model.eval()
@@ -90,7 +90,7 @@ class BinarySTFTSolver():
 
     def get_baseline(self, dl, raw_dl):
         self.model.eval()
-        return self._forward(dl, get_baseline=True)
+        return self._forward(dl, raw_dl=raw_dl, get_baseline=True)
 
 class BinarySolver():
     def __init__(self, model, loss, optimizer=None, quantizer=None,
@@ -142,7 +142,7 @@ class BinarySolver():
             bss_metrics.extend(metrics)
         if train:
             self.optimizer.zero_grad()
-        dataset_size = get_dataloader_size(dl.dataset)
+        dataset_size = get_dataloader_size(dl)
         return running_loss / dataset_size, bss_metrics
 
     def train(self, dl, clip_weights=False):

@@ -102,6 +102,7 @@ def main():
         optimizer=optimizer, device=device)
     scheduler = optim.lr_scheduler.StepLR(solver.optimizer, args.decay_period,
         gamma=args.lr_decay)
+    max_accuracy = 0
 
     for epoch in range(args.epochs):
         scheduler.step()
@@ -119,7 +120,9 @@ def main():
                 val_accuracy, period=args.period)
             image_classification.train_plot(vis, loss_metrics, eid=None,
                 win=['{} Loss'.format(args.exp), '{} Accuracy'.format(args.exp)])
-            torch.save(model.state_dict(), '../models/' + args.exp + '.model')
+            if val_accuracy > max_accuracy:
+                max_accuracy = val_accuracy
+                torch.save(model.state_dict(), '../models/' + args.exp + '.model')
             for i in range(model.num_layers):
                 title = 'Weight {}'.format(i)
                 image_classification.plot_weights(vis,
