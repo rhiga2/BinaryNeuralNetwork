@@ -113,7 +113,7 @@ def pick_activation(activation_name, **kwargs):
         activation = lambda : ParameterizedTanh(**kwargs, ste=True)
     elif activation_name == 'tanh_ste':
         activation = lambda : tanh_ste
-    elif activation_name == 'hard_tanh':
+    elif activation_name == 'htanh':
         activation = lambda : nn.Hardtanh(**kwargs)
     elif activation_name == 'phtanh':
         activation = lambda : ParameterizedHardTanh(**kwargs)
@@ -156,7 +156,7 @@ class BitwiseAbstractClass(ABC):
         self.scale_conv = None
         self.gate = None
         if self.use_gate:
-            self.gate = init_weight(self.weight, one_sided=True)
+            self.gate = init_weight(self.weight.size(), one_sided=True)
         self.beta = nn.Parameter(torch.tensor(0, dtype=self.weight.dtype),
             requires_grad=False)
         if self.scale_weights == 'learnable':
@@ -169,7 +169,7 @@ class BitwiseAbstractClass(ABC):
             return
         w = self.weight.cpu().data.numpy()
         beta = torch.tensor(np.percentile(np.abs(w), sparsity),
-            dtype=weight.dtype, device=weight.device)
+            dtype=self.weight.dtype, device=self.weight.device)
         self.beta = nn.Parameter(beta, requires_grad=False)
 
     def clip_weights(self):

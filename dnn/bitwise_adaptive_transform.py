@@ -60,7 +60,7 @@ class BitwiseAdaptiveTransform(nn.Module):
                 kernel_size, kernel_size,  fc_sizes=fc_sizes, dropout=dropout,
                 bias=False, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
                 use_gate=use_gate, scale_weights=None, scale_activations=None,
-                bn_momentum=bn_momentum, binarize_first_layers=True
+                bn_momentum=bn_momentum, binarize_first_layer=True
             )
 
         # Initialize inverse of front end transform

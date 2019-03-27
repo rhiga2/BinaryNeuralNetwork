@@ -51,7 +51,7 @@ class BitwiseMLP(nn.Module):
                     self.dropout_list.append(nn.Dropout(dropout, inplace=True))
                 self.bn_list.append(nn.BatchNorm1d(osize, momentum=bn_momentum))
             isize = osize
-        self.out_bn = nn.BatchNorm1d(osize, momentum=bn_momentum)
+        self.out_bn = binary_layers.ScaleLayer(osize)
         self.sparsity = sparsity
 
     def forward(self, x):
