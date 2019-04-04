@@ -201,7 +201,7 @@ class BitwiseAbstractClass(ABC):
         weight = self.weight
         if self.w_binactiv is not None:
             weight = self.drop_weights()
-            weight = self.w_binactiv(self.weight)
+            weight = self.w_binactiv(weight)
             if self.scale_weights == 'average':
                 weight_scale = torch.abs(self.weight)
                 for i in range(len(self.weight.size()) - 1):

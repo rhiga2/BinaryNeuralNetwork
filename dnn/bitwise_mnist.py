@@ -85,7 +85,7 @@ def main():
         w_binactiv=w_binactiv, bn_momentum=args.bn_momentum,
         bias=False)
     if args.load_file:
-        model.load_state_dict(torch.load('../models/' + args.load_file))
+        model.load_partial_state_dict(torch.load('../models/' + args.load_file))
 
     model.to(device=device)
     print(model)

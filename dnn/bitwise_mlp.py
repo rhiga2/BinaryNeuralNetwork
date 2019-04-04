@@ -36,16 +36,14 @@ class BitwiseMLP(nn.Module):
         if dropout > 0:
             self.dropout_list = nn.ModuleList()
         for i, osize in enumerate(fc_sizes):
-            in_binfunc, w_binfunc = in_binactiv, w_binactiv
-            sw, sa = scale_weights, scale_activations
             if i == 0 and not binarize_first_layer:
-                in_binfunc, w_binfunc = None, None
-                sw, sa = None, None
-            self.filter_list.append(
-                binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
-                in_binactiv=in_binfunc, w_binactiv=w_binfunc,
-                scale_weights=sw, scale_activations=sa, bias=bias)
-            )
+                self.filter_list.append(nn.Linear(isize, osize, bias=bias))
+            else:
+                self.filter_list.append(
+                    binary_layers.BitwiseLinear(isize, osize, use_gate=use_gate,
+                    in_binactiv=in_binactiv, w_binactiv=w_binactiv,
+                    scale_weights=scale_weights, scale_activations=scale_activations, bias=bias)
+                )
             if i < self.num_layers - 1:
                 if dropout > 0:
                     self.dropout_list.append(nn.Dropout(dropout, inplace=True))
@@ -74,7 +72,8 @@ class BitwiseMLP(nn.Module):
 
     def clip_weights(self):
         for layer in self.filter_list:
-            layer.clip_weights()
+            if hasattr(layer, 'bitwise'):
+                layer.clip_weights()
 
     def update_betas(self):
         '''
@@ -83,7 +82,7 @@ class BitwiseMLP(nn.Module):
         if self.sparsity == 0:
             return
 
-        for layer in self.filter_list:
+        for layer in self.filter_list[1:]:
             layer.update_beta(sparsity=self.sparsity)
 
     def load_partial_state_dict(self, state_dict):
