@@ -148,7 +148,7 @@ class BitwiseResnet18(nn.Module):
 class BitwiseVGG(nn.Module):
     def __init__(self, cfg, in_binactiv=None, w_binactiv=None,
         num_classes=10, scale_weights=None, scale_activations=None,
-        use_gate=False, bn_momentum=0.1):
+        use_gate=False, bn_momentum=0.1, dropout=0):
         super().__init__()
         self.in_binactiv = in_binactiv
         self.w_binactiv = w_binactiv
@@ -157,11 +157,29 @@ class BitwiseVGG(nn.Module):
         self.bn_momentum = bn_momentum
         self.use_gate = use_gate
         self.features = self._make_layers(cfg)
-        self.classifier = binary_layers.BitwiseLinear(512, num_classes,
-            use_gate=self.use_gate,
+        # self.dropout = nn.Dropout(dropout, inplace=True)
+        self.bn = nn.BatchNorm1d(512)
+        self.classifier = []
+        self.classifier.append(binary_layers.BitwiseLinear(512, 512,
+            use_gate=self.use_gate, bias=False,
             in_binactiv=self.in_binactiv, w_binactiv=self.w_binactiv,
             scale_weights=self.scale_weights,
-            scale_activations=self.scale_activations)
+            scale_activations=self.scale_activations))
+        self.classifier.append(nn.Dropout(dropout))
+        self.classifier.append(nn.BatchNorm1d(512))
+        self.classifier.append(binary_layers.BitwiseLinear(512, 512,
+            use_gate=self.use_gate, bias=False,
+            in_binactiv=self.in_binactiv, w_binactiv=self.w_binactiv,
+            scale_weights=self.scale_weights,
+            scale_activations=self.scale_activations))
+        self.classifier.append(nn.Dropout(dropout))
+        self.classifier.append(nn.BatchNorm1d(512))
+        self.classifier.append(binary_layers.BitwiseLinear(512, num_classes,
+            use_gate=self.use_gate, bias=True,
+            in_binactiv=self.in_binactiv, w_binactiv=self.w_binactiv,
+            scale_weights=self.scale_weights,
+            scale_activations=self.scale_activations))
+        self.classifier = nn.Sequential(*self.classifier)
         self.scale = binary_layers.ScaleLayer(num_channels=num_classes)
 
     def forward(self, x):
@@ -195,7 +213,6 @@ class BitwiseVGG(nn.Module):
                         )
                     )
                 channels = v
-        layers.append(nn.BatchNorm2d(channels, momentum=self.bn_momentum))
         layers.append(nn.AvgPool2d(kernel_size=1, stride=1))
         return nn.Sequential(*layers)
 
@@ -243,11 +260,11 @@ def main():
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
     test_transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
     train_data = datasets.CIFAR10('/media/data/CIFAR10', train=True,
         transform=train_transform, download=True)
@@ -275,12 +292,11 @@ def main():
             num_classes=10, scale_weights=None, scale_activations=None,
             bn_momentum=args.bn_momentum, dropout=args.dropout,
             use_gate=args.use_gate)
-    elif args.model == 'vgg16':
-        cfg = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512,
-            'M', 512, 512, 512, 'M']
+    elif args.model == 'vgg':
+        cfg = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']
         model = BitwiseVGG(cfg, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
             num_classes=10, scale_weights=None, scale_activations=None,
-            bn_momentum=args.bn_momentum, use_gate=args.use_gate)
+            bn_momentum=args.bn_momentum, use_gate=args.use_gate, dropout=args.dropout)
     print(model)
 
     if args.load_file:
@@ -288,7 +304,7 @@ def main():
     elif args.pretrained:
         if args.model == 'resnet18':
             pretrained = models.resnet18(pretrained=True)
-        elif args.model == 'vgg16':
+        elif args.model == 'vgg':
             pretrained = models.vgg16(pretrained=True)
         model.load_pretrained_state_dict(pretrained.state_dict())
 
