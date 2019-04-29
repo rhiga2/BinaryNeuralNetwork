@@ -35,12 +35,12 @@ class BitwiseBasicBlock(nn.Module):
         self.downsample = None
         if stride != 1 or in_channels != out_channels:
             self.downsample = nn.Sequential(
+                nn.BatchNorm2d(in_channels, momentum=bn_momentum),
                 binary_layers.BitwiseConv2d(in_channels, out_channels, 1,
                     stride=stride, in_binactiv=in_binactiv,
                     w_binactiv=w_binactiv, use_gate=use_gate,
                     scale_weights=scale_weights,
-                    scale_activations=scale_activations, bias=False),
-                nn.BatchNorm2d(out_channels, momentum=bn_momentum)
+                    scale_activations=scale_activations, bias=False)
             )
 
         self.conv2 = binary_layers.BitwiseConv2d(out_channels, out_channels, 3,
@@ -63,7 +63,7 @@ class BitwiseBasicBlock(nn.Module):
 
     def clip_weights(self):
         if self.downsample is not None:
-            self.downsample[0].clip_weights()
+            self.downsample[1].clip_weights()
         self.conv1.clip_weights()
         self.conv2.clip_weights()
 
@@ -157,9 +157,7 @@ class BitwiseVGG(nn.Module):
         self.bn_momentum = bn_momentum
         self.use_gate = use_gate
         self.features = self._make_layers(cfg)
-        # self.dropout = nn.Dropout(dropout, inplace=True)
-        self.bn = nn.BatchNorm1d(512)
-        self.classifier = []
+        self.classifier = [nn.BatchNorm1d(512)]
         self.classifier.append(binary_layers.BitwiseLinear(512, 512,
             use_gate=self.use_gate, bias=False,
             in_binactiv=self.in_binactiv, w_binactiv=self.w_binactiv,
@@ -213,7 +211,6 @@ class BitwiseVGG(nn.Module):
                         )
                     )
                 channels = v
-        layers.append(nn.AvgPool2d(kernel_size=1, stride=1))
         return nn.Sequential(*layers)
 
     def clip_weights(self):
@@ -260,20 +257,20 @@ def main():
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     ])
     test_transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     ])
     train_data = datasets.CIFAR10('/media/data/CIFAR10', train=True,
         transform=train_transform, download=True)
     # reintialize same data with different transform
     val_data = datasets.CIFAR10('/media/data/CIFAR10', train=True,
         transform=test_transform, download=True)
-    train_size = len(train_data)
-    split = int(0.8*train_size)
-    indices = np.arange(train_size)
+    data_size = len(train_data)
+    split = int(0.9*data_size)
+    indices = np.arange(data_size)
     np.random.shuffle(indices)
     train_indices = indices[:split]
     val_indices = indices[split:]
@@ -292,7 +289,7 @@ def main():
             num_classes=10, scale_weights=None, scale_activations=None,
             bn_momentum=args.bn_momentum, dropout=args.dropout,
             use_gate=args.use_gate)
-    elif args.model == 'vgg':
+    elif args.model == 'vgg': 
         cfg = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']
         model = BitwiseVGG(cfg, in_binactiv=in_binactiv, w_binactiv=w_binactiv,
             num_classes=10, scale_weights=None, scale_activations=None,
