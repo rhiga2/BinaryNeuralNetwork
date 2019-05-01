@@ -14,7 +14,7 @@ import visdom
 def get_dataloader_size(dl):
     if dl.sampler is not None:
         return len(dl.sampler)
-    return len(dl.dataset) 
+    return len(dl.dataset)
 
 class BinarySTFTSolver():
     def __init__(self, model, loss, optimizer=None, weighted=False,
@@ -24,8 +24,6 @@ class BinarySTFTSolver():
         self.weighted = weighted
         self.loss = loss
         self.device = device
-        self.stft = stft.STFT(nfft=1024, stride=256, win='hann').to(device)
-        self.istft = stft.ISTFT(nfft=1024, stride=256, win='hann').to(device)
         self.bss_evaluate = bss_eval.BSSEvaluate(fs=8000).to(device)
 
     def _forward(self, binary_dl, raw_dl=None, clip_weights=False, train=False,
@@ -63,15 +61,16 @@ class BinarySTFTSolver():
 
             if raw_dl is not None:
                 raw_batch = next(raw_dl)
-                mix = raw_batch['mix'].to(self.device)
-                mix_mag, mix_phase = self.stft(mix)
+                mix = raw_batch['mix']
+                mix_mag, mix_phase = stft(mix.numpy())
                 target = raw_batch['target']
                 interference = raw_batch['interference']
-                mask = binary_data.make_binary_mask(estimate)
-                mask = mask.to(dtype=torch.float)
-                mix_estimate = self.istft(mix_mag * mask, mix_phase)
+                mask = binary_data.make_binary_mask(estimate).detach()
+                mask = mask.numpy().astype(dtype=np.float)
+                mix_estimate = istft(mix_mag * mask, mix_phase)
                 sources = torch.stack([target, interference], dim=1)
                 sources = sources.to(self.device)
+                mix_estimate = torch.FloatTensor(mix_estimate).to(self.device)
                 metrics = self.bss_evaluate(mix_estimate, sources)
                 bss_metrics.extend(metrics)
         if train:

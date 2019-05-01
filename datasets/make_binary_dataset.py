@@ -39,35 +39,36 @@ def main():
 
     dirs = [train_dir, val_dir, test_dir]
     datasets = [trainset, valset, testset]
-    my_stft = stft.STFT(nfft=1024, stride=256, win='hann')
 
     for directory, dataset in zip(dirs, datasets):
         for i in range(len(dataset)):
             binary_fname = directory + 'binary_data%d.npz' % i
             raw_fname = directory + 'raw_data%d.npz' % i
             sample = dataset[i]
-            mix = torch.FloatTensor(np.ascontiguousarray(sample['mixture']))
-            target = torch.FloatTensor(np.ascontiguousarray(sample['target']))
-            inter = torch.FloatTensor(np.ascontiguousarray(sample['interference']))
-            mix_mag, mix_phase = my_stft(mix.unsqueeze(0))
-            targ_mag, targ_phase = my_stft(target.unsqueeze(0))
-            inter_mag, inter_phase = my_stft(inter.unsqueeze(0))
-            ibm = binary_data.make_binary_mask(targ_mag.squeeze(0) - inter_mag.squeeze(0)).to(torch.uint8)
+            mix = sample['mixture']
+            target = sample['target']
+            inter = sample['interference']
+            mix_mag, mix_phase = stft(mix)
+            targ_mag, targ_phase = stft(target)
+            inter_mag, inter_phase = stft(inter)
+            ibm = binary_data.make_binary_mask(targ_mag - inter_mag).astype(np.int8)
 
             # uint8 does not convert nicely to torch float tensor
-            bmag = quantized_data.quantize_and_disperse(mix_mag, quantizer, disperser).to(torch.uint8)
+            mix_mag = torch.FloatTensor(mix_mag).unsqueeze(0)
+            bmag = quantized_data.quantize_and_disperse(mix_mag,
+                quantizer, disperser).to(torch.int8)
             np.savez(
                 binary_fname,
                 bmag=bmag.numpy(),
-                ibm=ibm.numpy()
+                ibm=ibm
             )
 
             if directory != train_dir:
                 np.savez(
                     raw_fname,
-                    mix=mix.numpy(),
-                    target=target.numpy(),
-                    interference=inter.numpy()
+                    mix=mix,
+                    target=target,
+                    interference=inter
                 )
 
 if __name__ == '__main__':

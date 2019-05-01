@@ -13,7 +13,6 @@ def stft(x, window='hann', nperseg=1024, noverlap=768):
     real, imag = np.real(stft_x), np.imag(stft_x)
     mag = np.sqrt(real**2 + imag**2)
     phase = np.angle(stft_x)
-    # phase = stft_x / (mag + 1e-6)
     return mag, phase
 
 def istft(mag, phase, window='hann', nperseg=1024, noverlap=768):
